@@ -9,17 +9,17 @@ const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,
 const MOODS={
   chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
             sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
-  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
+  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor','lydDom'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
             sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
   driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
             sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
-  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
+  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen','phrygDom','hungMinor'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
             sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
   retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
             sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
   uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
             sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
-  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
+  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen','dorb2','neapMinor'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
             sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
 // how the arp walks the chord it is playing, in the order the Sound panel offers them, and what each one
@@ -76,7 +76,18 @@ function defaultSections(){return DEFAULT_FORM.map(newSection)}
 
 /* ---------- populate controls ---------- */
 Z.NOTE_NAMES.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;$('root').appendChild(o)});
-for(const k in Z.SCALES){const o=document.createElement('option');o.value=k;o.textContent=Z.SCALES[k].name;$('scale').appendChild(o)}
+// The scale menu is grouped — the modes you know, the exotic ones, the five-note ones — so a longer list
+// stays a menu you can read. Every scale carries a one-line hint, and it becomes that option's tooltip.
+{
+  const bySel={};
+  for(const k in Z.SCALES){const g=Z.SCALES[k].group||'Modes';(bySel[g]=bySel[g]||[]).push(k)}
+  const groups=Z.SCALE_GROUPS.filter(g=>bySel[g]).concat(Object.keys(bySel).filter(g=>!Z.SCALE_GROUPS.includes(g)));
+  for(const g of groups){
+    const og=document.createElement('optgroup');og.label=g;
+    for(const k of bySel[g]){const o=document.createElement('option');o.value=k;o.textContent=Z.SCALES[k].name;if(Z.SCALES[k].hint)o.title=Z.SCALES[k].hint;og.appendChild(o)}
+    $('scale').appendChild(og);
+  }
+}
 for(const k in MOODS){const b=document.createElement('button');b.className='chip';b.textContent=MOODS[k].label;b.dataset.mood=k;b.addEventListener('click',()=>{state.mood=k;newTrack(true)});$('moods').appendChild(b)}
 for(const k in SEC_TYPES){const o=document.createElement('option');o.value=k;o.textContent=k;$('secType').appendChild(o)}
 for(const k in PATCHES){const o=document.createElement('option');o.value=k;o.textContent=k;$('patch').appendChild(o)}
@@ -197,6 +208,8 @@ E.onSection=si=>{viewSection=si;renderArr();renderProg();buildRoll();if(state.la
 function renderKey(){
   const sc=Z.SCALES[state.scale];
   $('keyName').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+sc.name+'</em>';
+  $('keyName').title=sc.hint||sc.name;
+  $('scale').title='The scale everything is locked to'+(sc.hint?' · '+sc.name+': '+sc.hint:'');
   $('scaleNotes').innerHTML=sc.steps.map((s,i)=>'<span class="note'+(i===0?' root':'')+'">'+Z.NOTE_NAMES[(state.root+s)%12]+'</span>').join('');
   $('kbHint').textContent='Everything below is locked to '+Z.NOTE_NAMES[state.root]+' '+sc.name+': the chord pads and the letter-key notes all fit the track. Mute the Chords lane to play your own progression over it.';
 }

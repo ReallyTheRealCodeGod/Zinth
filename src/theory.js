@@ -14,21 +14,51 @@ class Rng{
 /* ================= theory ================= */
 const NOTE_NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const ROMAN=['I','II','III','IV','V','VI','VII'];
+/* Every scale carries the steps it is made of, the pool of progressions the generator rolls from, a
+   `group` so the scale menu stays readable, and a `hint`: one line of plain language about what the
+   scale sounds like, shown as its tooltip. A pool is curated, never generated: no degree in a pool may
+   build a diminished triad, because a diminished chord under a rolled melody is the one thing in this
+   app that can sound like a mistake. The check proves that of every pool, so a new scale cannot smuggle
+   one in. Scales without their own pool name a `chord` scale whose harmony they borrow. */
 const SCALES={
-  major:     {name:'Major',            steps:[0,2,4,5,7,9,11], progs:[[0,4,5,3],[0,5,3,4],[5,3,0,4],[0,3,4,3],[0,3,5,4],[1,4,0,0],[0,2,5,3],[3,4,5,0]]},
-  minor:     {name:'Natural minor',    steps:[0,2,3,5,7,8,10], progs:[[0,5,2,6],[0,6,5,6],[0,3,5,4],[0,5,3,4],[5,6,0,0],[0,2,6,5],[3,0,5,6],[0,5,0,6]]},
-  dorian:    {name:'Dorian',           steps:[0,2,3,5,7,9,10], progs:[[0,3,0,3],[0,3,6,3],[0,1,3,0],[0,6,3,0],[0,3,1,0],[0,1,0,3]]},
-  phrygian:  {name:'Phrygian',         steps:[0,1,3,5,7,8,10], progs:[[0,1,0,1],[0,1,5,1],[0,6,5,1],[0,2,1,0]]},
-  lydian:    {name:'Lydian',           steps:[0,2,4,6,7,9,11], progs:[[0,1,0,1],[0,1,4,1],[0,4,1,0],[0,1,2,1]]},
-  mixolydian:{name:'Mixolydian',       steps:[0,2,4,5,7,9,10], progs:[[0,6,3,0],[0,6,0,6],[0,3,6,0],[4,6,0,0],[0,4,6,3]]},
-  harmMinor: {name:'Harmonic minor',   steps:[0,2,3,5,7,8,11], progs:[[0,3,4,0],[0,5,4,0],[0,4,0,4],[3,0,4,0],[0,5,3,4]]},
-  pentMajor: {name:'Major pentatonic', steps:[0,2,4,7,9],      chord:'major'},
-  pentMinor: {name:'Minor pentatonic', steps:[0,3,5,7,10],     chord:'minor'},
-  blues:     {name:'Blues',            steps:[0,3,5,6,7,10],   chord:'minor', passing:[6]},
-  hirajoshi: {name:'Hirajoshi',        steps:[0,2,3,7,8],      chord:'minor'},
-  insen:     {name:'In-sen',           steps:[0,1,5,7,10],     chord:'phrygian'},
-  wholeTone: {name:'Whole tone',       steps:[0,2,4,6,8,10],   progs:[[0,1,2,1],[0,2,4,2],[0,1,0,2]]},
+  major:     {name:'Major',            group:'Modes', hint:'Bright and familiar — the sound of most pop songs',
+              steps:[0,2,4,5,7,9,11], progs:[[0,4,5,3],[0,5,3,4],[5,3,0,4],[0,3,4,3],[0,3,5,4],[1,4,0,0],[0,2,5,3],[3,4,5,0]]},
+  minor:     {name:'Natural minor',    group:'Modes', hint:'Sad and strong — the everyday minor key',
+              steps:[0,2,3,5,7,8,10], progs:[[0,5,2,6],[0,6,5,6],[0,3,5,4],[0,5,3,4],[5,6,0,0],[0,2,6,5],[3,0,5,6],[0,5,0,6]]},
+  dorian:    {name:'Dorian',           group:'Modes', hint:'Minor with a lift in it — funk, house, folk',
+              steps:[0,2,3,5,7,9,10], progs:[[0,3,0,3],[0,3,6,3],[0,1,3,0],[0,6,3,0],[0,3,1,0],[0,1,0,3]]},
+  phrygian:  {name:'Phrygian',         group:'Modes', hint:'Dark and Spanish — a flat second right at the bottom',
+              steps:[0,1,3,5,7,8,10], progs:[[0,1,0,1],[0,1,5,1],[0,6,5,1],[0,2,1,0]]},
+  lydian:    {name:'Lydian',           group:'Modes', hint:'Floating and filmic — major with a raised fourth',
+              steps:[0,2,4,6,7,9,11], progs:[[0,1,0,1],[0,1,4,1],[0,4,1,0],[0,1,2,1]]},
+  mixolydian:{name:'Mixolydian',       group:'Modes', hint:'Major with a flat seventh — rock and blues',
+              steps:[0,2,4,5,7,9,10], progs:[[0,6,3,0],[0,6,0,6],[0,3,6,0],[4,6,0,0],[0,4,6,3]]},
+  harmMinor: {name:'Harmonic minor',   group:'Modes', hint:'Minor with a leading note — dramatic, classical',
+              steps:[0,2,3,5,7,8,11], progs:[[0,3,4,0],[0,5,4,0],[0,4,0,4],[3,0,4,0],[0,5,3,4]]},
+  lydDom:    {name:'Lydian dominant',  group:'Exotic', hint:'Sunlit and slippery — raised fourth over a flat seventh',
+              steps:[0,2,4,6,7,9,10], progs:[[0,1,0,1],[0,1,5,1],[0,5,1,0],[0,1,4,1],[5,1,0,0],[0,4,1,0]]},
+  dorb2:     {name:'Dorian ♭2',        group:'Exotic', hint:'Smoky minor — a flat second with a bright sixth above it',
+              steps:[0,1,3,5,7,9,10], progs:[[0,2,0,3],[0,3,2,0],[0,2,3,2],[0,6,3,0],[0,3,0,2],[2,3,0,0]]},
+  hungMinor: {name:'Hungarian minor',  group:'Exotic', hint:'Two big leaps — gypsy minor, all drama',
+              steps:[0,2,3,6,7,8,11], progs:[[0,4,0,4],[0,5,4,0],[0,4,5,4],[0,6,4,0],[5,4,0,0],[0,5,0,4]]},
+  phrygDom:  {name:'Phrygian dominant',group:'Exotic', hint:'Major chord, Phrygian second — flamenco and desert',
+              steps:[0,1,4,5,7,8,10], progs:[[0,1,0,1],[0,6,1,0],[0,3,1,0],[0,1,6,0],[0,3,0,1],[3,1,0,0]]},
+  neapMinor: {name:'Neapolitan minor', group:'Exotic', hint:'Minor under a flat second — solemn and cinematic',
+              steps:[0,1,3,5,7,8,11], progs:[[0,5,1,0],[0,1,0,5],[0,3,5,0],[0,5,3,1],[0,1,3,0],[3,1,0,0]]},
+  wholeTone: {name:'Whole tone',       group:'Exotic', hint:'No home and no gravity — every step the same size',
+              steps:[0,2,4,6,8,10],   progs:[[0,1,2,1],[0,2,4,2],[0,1,0,2]]},
+  pentMajor: {name:'Major pentatonic', group:'Five-note', hint:'Five notes that never clash — open and singable',
+              steps:[0,2,4,7,9],      chord:'major'},
+  pentMinor: {name:'Minor pentatonic', group:'Five-note', hint:'The riff scale — minor, five notes, no bad ones',
+              steps:[0,3,5,7,10],     chord:'minor'},
+  blues:     {name:'Blues',            group:'Five-note', hint:'Minor pentatonic with the blue note passing through',
+              steps:[0,3,5,6,7,10],   chord:'minor', passing:[6]},
+  hirajoshi: {name:'Hirajoshi',        group:'Five-note', hint:'Japanese and spare — wide gaps, lots of air',
+              steps:[0,2,3,7,8],      chord:'minor'},
+  insen:     {name:'In-sen',           group:'Five-note', hint:'Japanese and shadowy — a flat second, no third',
+              steps:[0,1,5,7,10],     chord:'phrygian'},
 };
+const SCALE_GROUPS=['Modes','Exotic','Five-note'];
 const chordScaleOf=k=>SCALES[SCALES[k].chord||k];
 function buildChord(steps,degree,size,rootMidi){
   const n=steps.length,out=[];
@@ -46,13 +76,21 @@ function chordInfo(notes){
   if(third===4&&fifth===7){q='maj'}else if(third===3&&fifth===7){q='min';suffix='m'}
   else if(third===3&&fifth===6){q='dim';suffix='dim'}else if(third===4&&fifth===8){q='aug';suffix='+'}
   else{q='sus';suffix='sus'}
-  if(sev!==undefined){ if(q==='maj'&&sev===11)suffix='maj7'; else if(q==='maj'&&sev===10)suffix='7'; else if(q==='min'&&sev===10)suffix='m7'; else suffix+='7'; }
-  return {quality:q,name:NOTE_NAMES[((notes[0]%12)+12)%12]+suffix};
+  // stacking scale thirds on a scale with a big leap in it (Hungarian minor, Neapolitan minor) lands a
+  // sixth where the seventh would be: it is a real chord, so call it one rather than a wrong seventh.
+  const sixth=sev===9;
+  if(sev!==undefined){
+    if(sixth)suffix=(q==='min'?'m':q==='maj'?'':suffix)+'6';
+    else if(q==='maj'&&sev===11)suffix='maj7'; else if(q==='maj'&&sev===10)suffix='7'; else if(q==='min'&&sev===10)suffix='m7';
+    else if(q==='min'&&sev===11)suffix='mM7';   // a minor chord under a leading note: harmonic minor's home chord
+    else suffix+='7';
+  }
+  return {quality:q,sixth:!!(sev!==undefined&&sixth),name:NOTE_NAMES[((notes[0]%12)+12)%12]+suffix};
 }
-function romanFor(degree,quality,size){
+function romanFor(degree,quality,size,sixth){
   let r=ROMAN[degree]||String(degree+1);
   if(quality==='min'||quality==='dim')r=r.toLowerCase();
-  if(quality==='dim')r+='°'; if(quality==='aug')r+='+'; if(size>3)r+='⁷';
+  if(quality==='dim')r+='°'; if(quality==='aug')r+='+'; if(size>3)r+=sixth?'⁶':'⁷';
   return r;
 }
 
@@ -157,7 +195,7 @@ function generateChords(cfg,rng){
     const inv=Math.max(0,base.map(m=>((m%12)+12)%12).indexOf(((notes[0]%12)+12)%12));
     return {degree:e.d,notes,rootPc,fifthPc,seventh:size>3,inv,
       name:info.name+(inv?'/'+NOTE_NAMES[((notes[0]%12)+12)%12]:''),
-      roman:romanFor(e.d,info.quality,size),bar0,bars,pcs:new Set(notes.map(m=>m%12))};
+      roman:romanFor(e.d,info.quality,size,info.sixth),bar0,bars,pcs:new Set(notes.map(m=>m%12))};
   });
 }
 const chordAt=(chords,step)=>{const bar=Math.floor(step/STEPS);for(const c of chords)if(bar<c.bar0+c.bars)return c;return chords[chords.length-1]};
@@ -508,7 +546,7 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});

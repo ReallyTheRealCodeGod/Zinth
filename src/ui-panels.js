@@ -379,7 +379,7 @@ function padChords(){
   return cs.steps.map((_,d)=>{
     const base=Z.buildChord(cs.steps,d,size,rootMidi),info=Z.chordInfo(base);
     const notes=base.map(m=>{let x=m;while(x>=rootMidi+12)x-=12;while(x<rootMidi)x+=12;return x}).sort((a,b)=>a-b);
-    return {deg:d,notes,bass:36+base[0]%12,name:info.name,quality:info.quality,roman:Z.romanFor(d,info.quality,size)};
+    return {deg:d,notes,bass:36+base[0]%12,name:info.name,quality:info.quality,roman:Z.romanFor(d,info.quality,size,info.sixth)};
   });
 }
 function renderPads(){
