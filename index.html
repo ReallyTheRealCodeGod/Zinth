@@ -228,6 +228,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .wave.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .wave svg{width:26px;height:14px}
 .snd .field{--accent:var(--c)}
+/* a segmented choice in the Sound panel wears the colour of the layer it belongs to, like everything else there */
+.snd .seg button{height:28px}
+.snd .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
 .patch{display:flex;gap:6px}
 .patch select{flex:1;min-width:0}
 .meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}
@@ -408,6 +411,11 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
           <div class="field"><label for="p-vibrato">Vibrato <output id="o-vibrato"></output></label><input type="range" id="p-vibrato" min="0" max="100" value="30" title="Vibrato: a held lead note waits a moment and then comes alive, the way a singer leans into a long note. Short notes stay perfectly straight, and the swing is measured in cents — never wide enough to change the note."></div>
           <div class="field"><label for="p-vibRate">Vibrato rate <output id="o-vibRate"></output></label><input type="range" id="p-vibRate" min="0" max="100" value="45" title="How fast the lead's vibrato swings, from a slow lean to a fast shimmer."></div>
         </div>
+        <div class="field" data-synth data-layer="arp"><label for="arpMode">Arp pattern</label><select id="arpMode" title="How the arp walks the chord under it: Up runs up, Down runs down, Up-down turns around at the top, Random picks a tone each step, Chord plays the whole chord as block stabs, Pattern repeats a little figure — and Auto lets each roll of the arp deal one. Every note is a tone of the chord playing at that moment, whichever you pick, so the arp can never leave the key."></select></div>
+        <div class="row2" data-synth data-layer="arp">
+          <div class="field"><label>Arp octaves</label><div class="seg" id="arpOct" role="group" aria-label="Arp octave range" title="How far up the arp reaches: one octave stays put, three sweep up the chord. It never climbs out of its own lane."><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
+          <div class="field"><label for="arpGate">Arp gate <output id="o-arpGate"></output></label><input type="range" id="arpGate" min="15" max="100" value="70" title="How much of its step each arp note holds: right down is a staccato tick, right up is a legato run straight into the next note."></div>
+        </div>
         <div class="field" data-drums><label for="kit">Kit</label><select id="kit" title="The drum machine: 808 deep and boomy, 909 punchy, Lo-fi soft and dusty, Trap long-tailed, House punchy with open bright hats, Breaks dusty with a room-y snare. The kit also decides what the perc row plays — a rim, a shaker or a cowbell."></select></div>
         <div class="field" data-drums>
           <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
@@ -476,6 +484,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
       <li><b>Let it slide and sing.</b> Pick the <b>bass</b> tab in the Sound panel and there is a <b>Glide</b> amount: the bass slides up or down into each note from the one before, the way a finger slides along a string, whenever the two notes are close enough together to belong to one phrase. Pick the <b>lead</b> tab and there is <b>Vibrato</b> and a rate beside it: a note you hold waits a moment and then comes alive, the way a singer leans into a long note, while short notes stay dead straight. Both come set gently, both are in the WAV export, and both are locked to the key — a slide always lands exactly on the note it was heading for, and vibrato is measured in cents, never a semitone.</li>
+      <li><b>Tell the arp what to play.</b> Pick the <b>arp</b> tab in the Sound panel and there are three choices that change the notes rather than the tone. <b>Arp pattern</b> is the order it walks the chord in: up, down, up-down, random, <b>Chord</b> for block stabs of the whole chord, or <b>Pattern</b> for a little figure repeating the way an old arpeggiator does — and <b>Auto</b> lets every roll of the arp's 🎲 deal a new one. <b>Arp octaves</b> is how far up it reaches, from one octave sitting still to three sweeping up the chord, and <b>Arp gate</b> how much of its step each note holds: right down is a staccato tick, right up is a legato run straight into the next note. Every mood already deals a figure that suits it — Retro a one-octave chip pattern, Dreamy a long three-octave run — and whatever you choose, every note is a tone of the chord playing underneath, so the arp cannot leave the key.</li>
       <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
       <li><b>Pick a kit and add some perc.</b> The Sound panel's drums tab has six kits — <b>808</b> deep and boomy, <b>909</b> punchy, <b>Lo-fi</b> soft and dusty, <b>Trap</b> long-tailed, <b>House</b> punchy with open bright hats, <b>Breaks</b> dusty with a room-y snare. Under the kit, the step grid's last row is <b>perc</b>, and the kit decides what it plays: a cowbell, a rim or a shaker. Busy sections come with a perc figure already, off the backbeat and behind it in level; click the row to write your own. It follows the kit into the WAV export and reaches your DAW as the matching GM percussion note.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
@@ -719,29 +728,75 @@ function generateLead(cfg,chords,rngA,rngB){
     ...realise(rngA,A,cA,chords,pitches,96,true),
   ];
 }
+// the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
+const BASS_LO=36,BASS_HI=59;
+function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
+// the arp sings above the chords: this is the window its generator writes in and its roll lane draws.
+// It is three octaves and a fifth wide, so the widest octave range still fits inside it.
+const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+43]};
+
+/* The arp, and the three things that decide what it plays. A mode says the order it walks the chord in, an
+   octave range how far up it reaches, and a gate how much of each step a note holds — from a staccato tick
+   to a legato run. None of the three can take the arp out of the key: whatever they say, every note it
+   plays is a tone of the chord sounding at that step, folded into the arp's own lane. The mode only ever
+   chooses which of those tones comes next. 'auto' is not a mode of its own — it means the roll picks one,
+   so the arp's dice deals a new figure, and it is what a project saved before any of this opens with. */
+const ARP={modes:['up','down','updown','random','chord','pattern'],octaves:[1,2,3],
+  minGate:15,maxGate:100,minDur:0.25,maxBlock:6,dflt:{mode:'auto',octaves:2,gate:70}};
+const ARP_MODES=['auto'].concat(ARP.modes);
+// what 'auto' rolls: a straight run twice as often as anything else, and never block chords by accident
+const AUTO_MODES=['up','up','down','updown','random','pattern'];
+// the little repeating shapes 'pattern' mode plays, as indices into the chord tones it has to hand
+const ARP_FIGURES=[[0,1,2,1],[0,2,1,2],[0,1,0,2],[0,2,3,1],[0,0,1,2],[2,0,1,0],[0,1,2,3]];
+const arpOctaves=v=>{const n=Math.round(+v);return isNaN(n)?ARP.dflt.octaves:Math.max(1,Math.min(3,n))};
+const arpGate=v=>{const g=Math.round(+v);return isNaN(g)?ARP.dflt.gate:Math.max(ARP.minGate,Math.min(ARP.maxGate,g))};
+// the arp's settings, from anywhere: a project, a mood or nothing at all. Anything unreadable is the default.
+function normArp(a){
+  const o=(a&&typeof a==='object')?a:{};
+  return {mode:ARP_MODES.indexOf(o.mode)>=0?o.mode:ARP.dflt.mode,octaves:arpOctaves(o.octaves),gate:arpGate(o.gate)};
+}
+// how long an arp note holds, in steps: the gate's share of the step it starts on. Never longer than that
+// step, so one note never runs into the next, and never shorter than ARP.minDur, so a tick is still a note.
+function arpDur(rate,gate){return Math.max(ARP.minDur,Math.min(rate,rate*arpGate(gate)/100))}
+// the notes the arp has to choose from: every tone of the chord playing now, folded into the octave at the
+// bottom of its lane and then stacked as far up as the octave range asks, never past the top of the lane
+function arpNotes(chord,root,octaves){
+  const r=arpRange(root),oct=arpOctaves(octaves),base=[];
+  for(const m of chord.notes){let x=m;while(x<r[0])x+=12;while(x>=r[0]+12)x-=12;if(base.indexOf(x)<0)base.push(x)}
+  base.sort((a,b)=>a-b);
+  const out=[];
+  for(let k=0;k<oct;k++)for(const m of base){const x=m+12*k;if(x<=r[1])out.push(x)}
+  return out.length?out:base;
+}
+// which of those notes comes next: always an index inside the set, so the arp cannot reach a note that is
+// not a chord tone however the mode is set
+function arpIndex(mode,k,n,rng,fig){
+  if(!(n>=1))return 0;
+  const j=Math.max(0,Math.round(k));
+  if(mode==='down')return n-1-(j%n);
+  if(mode==='updown'){const c=Math.max(1,2*n-2),i=j%c;return i<n?i:c-i}
+  if(mode==='random')return rng.int(n);
+  if(mode==='pattern'){const f=(fig&&fig.length?fig:ARP_FIGURES[0]);return f[j%f.length]%n}
+  return j%n; // up
+}
 function generateArp(cfg,chords,rng){
-  const energy=cfg.energy/100;
-  const mode=rng.pick(['up','up','down','updown','random']);
-  const rate=energy>0.62?1:2,wide=rng.chance(0.5),rest=energy<0.35?rng.pick([0,4]):0;
+  const energy=cfg.energy/100,A=normArp(cfg.arp);
+  const mode=A.mode==='auto'?rng.pick(AUTO_MODES):A.mode,block=mode==='chord';
+  // block chords come at half the speed of a run, and a stab never holds more than ARP.maxBlock notes
+  // however wide the octave range is set, so it stays a stab rather than a wall of sound
+  const rate=(energy>0.62?1:2)*(block?2:1);
+  const dur=arpDur(rate,A.gate),fig=rng.pick(ARP_FIGURES),rest=energy<0.35?rng.pick([0,4]):0;
   const out=[];let k=0;
   for(let s=0;s<TOTAL;s+=rate){
-    const ch=chordAt(chords,s);
-    let notes=ch.notes.map(m=>m+12);if(wide)notes=notes.concat(ch.notes.map(m=>m+24));
+    const notes=arpNotes(chordAt(chords,s),cfg.root,A.octaves);
     if(rest&&(k%rest)===rest-1){k++;continue}
-    let i;const L=notes.length;
-    if(mode==='up')i=k%L;else if(mode==='down')i=L-1-(k%L);
-    else if(mode==='updown'){const c=2*L-2;const j=k%c;i=j<L?j:c-j}
-    else i=rng.int(L);
-    out.push({step:s,dur:Math.max(1,Math.round(rate*0.7)),midi:notes[i],vel:(s%4===0?0.8:0.55)+rng.next()*0.1});
+    const vel=(s%4===0?0.8:0.55)+rng.next()*0.1;
+    if(block)notes.slice(0,ARP.maxBlock).forEach(m=>out.push({step:s,dur,midi:m,vel}));
+    else out.push({step:s,dur,midi:notes[arpIndex(mode,k,notes.length,rng,fig)],vel});
     k++;
   }
   return out;
 }
-// the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
-const BASS_LO=36,BASS_HI=59;
-function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
-// the arp sings above the chords: this is the window its generator writes in and its roll lane draws
-const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+41]};
 // where a letter key lands when you record it into a layer: the lead as played, the arp an octave up,
 // the bass folded into its own register. The pitch class never changes, so the key stays locked.
 function recordPitch(L,midi,root){
@@ -955,7 +1010,8 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
+  ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();
@@ -1419,21 +1475,30 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
-  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',
+  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
             sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
-  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',
+  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
             sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
-  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',
+  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
             sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
-  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',
+  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
             sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
-  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',
+  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
             sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
-  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',
+  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
             sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
-  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',
+  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
             sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
+// how the arp walks the chord it is playing, in the order the Sound panel offers them, and what each one
+// does in a sentence — the select shows the name, the status line says the rest
+const ARP_MODE_NAMES=[['auto','Auto · let the roll pick'],['up','Up'],['down','Down'],['updown','Up-down'],
+  ['random','Random'],['chord','Chord · block stabs'],['pattern','Pattern · a repeating figure']];
+const ARP_SAYS={auto:'every roll of the arp deals it a new figure',up:'runs up the chord and starts again at the bottom',
+  down:'runs down the chord and starts again at the top',updown:'runs up the chord and turns around at the top',
+  random:'picks a tone of the chord each step, never the same figure twice',
+  chord:'plays the whole chord at once, as block stabs at half the speed of a run',
+  pattern:'repeats one little figure over the chord, the way an old arpeggiator does'};
 const WAVES=[['sine','M2 7q3-7 6 0t6 0 6 0'],['triangle','M2 12l3-10 3 10 3-10 3 10 3-10 3 10'],['saw','M2 12l6-10v10l6-10v10l6-10v10'],['square','M2 12v-10h6v10h6v-10h6v10'],['super','M2 12l4-10v10l4-10v10l4-10v10l4-10v10l4-10v10']];
 const PATCHES={
   Init:{wave:'saw',cutoff:60,reso:20,attack:5,release:30,spread:20},Pluck:{wave:'saw',cutoff:55,reso:35,attack:0,release:22,spread:10},
@@ -1469,7 +1534,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,arp:Z.normArp(null),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -1483,6 +1548,7 @@ for(const k in Z.SCALES){const o=document.createElement('option');o.value=k;o.te
 for(const k in MOODS){const b=document.createElement('button');b.className='chip';b.textContent=MOODS[k].label;b.dataset.mood=k;b.addEventListener('click',()=>{state.mood=k;newTrack(true)});$('moods').appendChild(b)}
 for(const k in SEC_TYPES){const o=document.createElement('option');o.value=k;o.textContent=k;$('secType').appendChild(o)}
 for(const k in PATCHES){const o=document.createElement('option');o.value=k;o.textContent=k;$('patch').appendChild(o)}
+ARP_MODE_NAMES.forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;$('arpMode').appendChild(o)});
 {const o=document.createElement('option');o.value='';o.textContent='custom';$('patch').appendChild(o)}
 for(const k in Z.KITS){const o=document.createElement('option');o.value=k;o.textContent=k;$('kit').appendChild(o)}
 Z.LAYERS.forEach(L=>{
@@ -1507,7 +1573,7 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,arp:Z.normArp(s.arp),
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
@@ -1540,11 +1606,14 @@ function parseCode(str){
 }
 
 /* ---------- generation ---------- */
-function cfg(){return {root:state.root,scale:state.scale,energy:state.energy,evolve:state.evolve,sevenths:state.sevenths,gate:state.gate}}
+function cfg(){return {root:state.root,scale:state.scale,energy:state.energy,evolve:state.evolve,sevenths:state.sevenths,gate:state.gate,arp:state.arp}}
 function applyMood(seed){
   const m=MOODS[state.mood],r=new Z.Rng(seed+':mood:'+state.mood);
   state.root=r.int(12);state.scale=r.pick(m.scales);state.bpm=Math.round(r.range(m.bpm[0],m.bpm[1]));
   state.energy=m.energy;state.swing=m.swing;state.sevenths=m.sevenths;state.gate=m.gate;state.kit=m.kit;E.kit=m.kit;
+  // a mood deals the arp a figure that suits it — the same roll that picks the key and the tempo picks
+  // this one — unless the arp is locked, in which case what you kept stays exactly as it is
+  if(m.arp&&!state.locks.arp)state.arp=Z.normArp({mode:r.pick(m.arp.modes),octaves:m.arp.octaves,gate:m.arp.gate});
   for(const L in m.sound)for(const k in m.sound[L])E.setParam(L,k,m.sound[L][k]);
 }
 function syncControls(){
@@ -1840,7 +1909,9 @@ canvas.addEventListener('pointerdown',e=>{
     if(idx<0)return;
     if(onEdge(hit,p.x)){
       e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(err){}
-      drag={L,sec,list,idx,tr,startX:p.x,step:hit.step,dur:list[idx].dur,newDur:list[idx].dur};
+      // a generated arp note can be a fraction of a step long, from its gate: dragging it makes it whole steps
+      const was=Math.max(1,Math.round(list[idx].dur));
+      drag={L,sec,list,idx,tr,startX:p.x,step:hit.step,dur:was,newDur:was};
       return;
     }
     list.splice(idx,1);commitEdits(L,sec,list,'Note removed from the '+L);return;
@@ -1878,7 +1949,7 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();
 </script>
 <script>
@@ -1983,6 +2054,9 @@ function renderSound(){
   document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
   // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
   document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
+  // and one that belongs to a single layer — the arp's own figure — shows only on that layer's tab
+  document.querySelectorAll('[data-layer]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.layer!==L});
+  renderArpFields();
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
@@ -2001,13 +2075,39 @@ $('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
     :'Lead vibrato off: every note is held dead straight');});
 $('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
+/* the arp's own figure: the order it walks the chord in, how far up it reaches and how much of each step a
+   note holds. These three make notes rather than shape a sound, so changing one rebuilds the song — and
+   every one of them lives in state.arp, so it autosaves, undoes and goes out in the WAV and the MIDI. */
+const ARP_SAYS=U.ARP_SAYS,ARP_NAME=v=>{const m=U.ARP_MODE_NAMES.find(x=>x[0]===v);return m?m[1].split(' · ')[0]:v};
+function renderArpFields(){
+  const A=state.arp;
+  $('arpMode').value=A.mode;
+  $('arpOct').querySelectorAll('button').forEach(b=>{const on=+b.dataset.v===A.octaves;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('arpGate').value=A.gate;U.fill($('arpGate'));$('o-arpGate').textContent=A.gate+' %';
+}
+const arpOctSays=n=>n===1?'stays inside one octave':'reaches '+n+' octaves up the chord';
+function setArp(fn,msg){fn(state.arp);state.arp=Z.normArp(state.arp);U.regenerate();if(msg)U.setStatus(msg)}
+$('arpMode').addEventListener('change',e=>{const v=e.target.value;
+  setArp(A=>A.mode=v,'Arp '+ARP_NAME(v)+': it '+(ARP_SAYS[v]||'')+' · every note is a tone of the chord under it, so it stays in key')});
+$('arpOct').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const n=+b.dataset.v;
+  setArp(A=>A.octaves=n,'The arp '+arpOctSays(n)+' · however wide it reaches, a block stab holds at most '+Z.ARP.maxBlock+' notes at once')});
+$('arpGate').addEventListener('input',e=>{const v=+e.target.value;state.arp.gate=v;$('o-arpGate').textContent=v+' %';U.fill(e.target);U.regenerate()});
+$('arpGate').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus('Arp gate '+v+' %: each note holds '+v+' % of its step, so the line is '+(v>85?'legato, one note running into the next':v<40?'a staccato tick':'in between, plucked but singing')+'. The WAV and the MIDI hold the notes the same.')});
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   if(L==='bass')P.glide=r(0,55);
   if(L==='lead'){P.vibrato=r(0,70);P.vibRate=r(20,80)}
-  for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
+  for(const k in P)E.setParam(L,k,P[k]);
+  // the arp's dice deals it a new figure as well as a new sound, so one press really is a new arp
+  if(L==='arp'){
+    state.arp=Z.normArp({mode:Z.ARP.modes[r(0,Z.ARP.modes.length-1)],octaves:r(1,3),gate:r(25,100)});
+    U.regenerate();U.setStatus('Random arp: '+ARP_NAME(state.arp.mode)+', '+arpOctSays(state.arp.octaves)+', gate '+state.arp.gate+' %');
+    return;
+  }
+  renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
   U.setStatus('Kit: '+state.kit+' · its perc row plays a '+percVoice()+', and the WAV and MIDI exports follow the kit')});
@@ -2148,7 +2248,8 @@ function midiFile(){
         for(const e of list){const tick=offset+st*T16;
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
             evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(e.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
-          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(1,Math.min(e.dur,steps-st))*T16-2;
+          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick
+          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-2);
             notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(e.vel*127)});evs.push({tick:tick+len,on:false,note:n,vel:0})});
             if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
         }}

@@ -99,6 +99,9 @@ function renderSound(){
   document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
   // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
   document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
+  // and one that belongs to a single layer — the arp's own figure — shows only on that layer's tab
+  document.querySelectorAll('[data-layer]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.layer!==L});
+  renderArpFields();
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
@@ -117,13 +120,39 @@ $('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
     :'Lead vibrato off: every note is held dead straight');});
 $('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
+/* the arp's own figure: the order it walks the chord in, how far up it reaches and how much of each step a
+   note holds. These three make notes rather than shape a sound, so changing one rebuilds the song — and
+   every one of them lives in state.arp, so it autosaves, undoes and goes out in the WAV and the MIDI. */
+const ARP_SAYS=U.ARP_SAYS,ARP_NAME=v=>{const m=U.ARP_MODE_NAMES.find(x=>x[0]===v);return m?m[1].split(' · ')[0]:v};
+function renderArpFields(){
+  const A=state.arp;
+  $('arpMode').value=A.mode;
+  $('arpOct').querySelectorAll('button').forEach(b=>{const on=+b.dataset.v===A.octaves;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('arpGate').value=A.gate;U.fill($('arpGate'));$('o-arpGate').textContent=A.gate+' %';
+}
+const arpOctSays=n=>n===1?'stays inside one octave':'reaches '+n+' octaves up the chord';
+function setArp(fn,msg){fn(state.arp);state.arp=Z.normArp(state.arp);U.regenerate();if(msg)U.setStatus(msg)}
+$('arpMode').addEventListener('change',e=>{const v=e.target.value;
+  setArp(A=>A.mode=v,'Arp '+ARP_NAME(v)+': it '+(ARP_SAYS[v]||'')+' · every note is a tone of the chord under it, so it stays in key')});
+$('arpOct').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const n=+b.dataset.v;
+  setArp(A=>A.octaves=n,'The arp '+arpOctSays(n)+' · however wide it reaches, a block stab holds at most '+Z.ARP.maxBlock+' notes at once')});
+$('arpGate').addEventListener('input',e=>{const v=+e.target.value;state.arp.gate=v;$('o-arpGate').textContent=v+' %';U.fill(e.target);U.regenerate()});
+$('arpGate').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus('Arp gate '+v+' %: each note holds '+v+' % of its step, so the line is '+(v>85?'legato, one note running into the next':v<40?'a staccato tick':'in between, plucked but singing')+'. The WAV and the MIDI hold the notes the same.')});
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   if(L==='bass')P.glide=r(0,55);
   if(L==='lead'){P.vibrato=r(0,70);P.vibRate=r(20,80)}
-  for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
+  for(const k in P)E.setParam(L,k,P[k]);
+  // the arp's dice deals it a new figure as well as a new sound, so one press really is a new arp
+  if(L==='arp'){
+    state.arp=Z.normArp({mode:Z.ARP.modes[r(0,Z.ARP.modes.length-1)],octaves:r(1,3),gate:r(25,100)});
+    U.regenerate();U.setStatus('Random arp: '+ARP_NAME(state.arp.mode)+', '+arpOctSays(state.arp.octaves)+', gate '+state.arp.gate+' %');
+    return;
+  }
+  renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
   U.setStatus('Kit: '+state.kit+' · its perc row plays a '+percVoice()+', and the WAV and MIDI exports follow the kit')});
@@ -264,7 +293,8 @@ function midiFile(){
         for(const e of list){const tick=offset+st*T16;
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
             evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(e.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
-          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(1,Math.min(e.dur,steps-st))*T16-2;
+          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick
+          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-2);
             notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(e.vel*127)});evs.push({tick:tick+len,on:false,note:n,vel:0})});
             if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
         }}

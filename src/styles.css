@@ -225,6 +225,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .wave.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .wave svg{width:26px;height:14px}
 .snd .field{--accent:var(--c)}
+/* a segmented choice in the Sound panel wears the colour of the layer it belongs to, like everything else there */
+.snd .seg button{height:28px}
+.snd .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
 .patch{display:flex;gap:6px}
 .patch select{flex:1;min-width:0}
 .meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}

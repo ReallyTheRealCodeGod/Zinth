@@ -226,29 +226,75 @@ function generateLead(cfg,chords,rngA,rngB){
     ...realise(rngA,A,cA,chords,pitches,96,true),
   ];
 }
+// the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
+const BASS_LO=36,BASS_HI=59;
+function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
+// the arp sings above the chords: this is the window its generator writes in and its roll lane draws.
+// It is three octaves and a fifth wide, so the widest octave range still fits inside it.
+const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+43]};
+
+/* The arp, and the three things that decide what it plays. A mode says the order it walks the chord in, an
+   octave range how far up it reaches, and a gate how much of each step a note holds — from a staccato tick
+   to a legato run. None of the three can take the arp out of the key: whatever they say, every note it
+   plays is a tone of the chord sounding at that step, folded into the arp's own lane. The mode only ever
+   chooses which of those tones comes next. 'auto' is not a mode of its own — it means the roll picks one,
+   so the arp's dice deals a new figure, and it is what a project saved before any of this opens with. */
+const ARP={modes:['up','down','updown','random','chord','pattern'],octaves:[1,2,3],
+  minGate:15,maxGate:100,minDur:0.25,maxBlock:6,dflt:{mode:'auto',octaves:2,gate:70}};
+const ARP_MODES=['auto'].concat(ARP.modes);
+// what 'auto' rolls: a straight run twice as often as anything else, and never block chords by accident
+const AUTO_MODES=['up','up','down','updown','random','pattern'];
+// the little repeating shapes 'pattern' mode plays, as indices into the chord tones it has to hand
+const ARP_FIGURES=[[0,1,2,1],[0,2,1,2],[0,1,0,2],[0,2,3,1],[0,0,1,2],[2,0,1,0],[0,1,2,3]];
+const arpOctaves=v=>{const n=Math.round(+v);return isNaN(n)?ARP.dflt.octaves:Math.max(1,Math.min(3,n))};
+const arpGate=v=>{const g=Math.round(+v);return isNaN(g)?ARP.dflt.gate:Math.max(ARP.minGate,Math.min(ARP.maxGate,g))};
+// the arp's settings, from anywhere: a project, a mood or nothing at all. Anything unreadable is the default.
+function normArp(a){
+  const o=(a&&typeof a==='object')?a:{};
+  return {mode:ARP_MODES.indexOf(o.mode)>=0?o.mode:ARP.dflt.mode,octaves:arpOctaves(o.octaves),gate:arpGate(o.gate)};
+}
+// how long an arp note holds, in steps: the gate's share of the step it starts on. Never longer than that
+// step, so one note never runs into the next, and never shorter than ARP.minDur, so a tick is still a note.
+function arpDur(rate,gate){return Math.max(ARP.minDur,Math.min(rate,rate*arpGate(gate)/100))}
+// the notes the arp has to choose from: every tone of the chord playing now, folded into the octave at the
+// bottom of its lane and then stacked as far up as the octave range asks, never past the top of the lane
+function arpNotes(chord,root,octaves){
+  const r=arpRange(root),oct=arpOctaves(octaves),base=[];
+  for(const m of chord.notes){let x=m;while(x<r[0])x+=12;while(x>=r[0]+12)x-=12;if(base.indexOf(x)<0)base.push(x)}
+  base.sort((a,b)=>a-b);
+  const out=[];
+  for(let k=0;k<oct;k++)for(const m of base){const x=m+12*k;if(x<=r[1])out.push(x)}
+  return out.length?out:base;
+}
+// which of those notes comes next: always an index inside the set, so the arp cannot reach a note that is
+// not a chord tone however the mode is set
+function arpIndex(mode,k,n,rng,fig){
+  if(!(n>=1))return 0;
+  const j=Math.max(0,Math.round(k));
+  if(mode==='down')return n-1-(j%n);
+  if(mode==='updown'){const c=Math.max(1,2*n-2),i=j%c;return i<n?i:c-i}
+  if(mode==='random')return rng.int(n);
+  if(mode==='pattern'){const f=(fig&&fig.length?fig:ARP_FIGURES[0]);return f[j%f.length]%n}
+  return j%n; // up
+}
 function generateArp(cfg,chords,rng){
-  const energy=cfg.energy/100;
-  const mode=rng.pick(['up','up','down','updown','random']);
-  const rate=energy>0.62?1:2,wide=rng.chance(0.5),rest=energy<0.35?rng.pick([0,4]):0;
+  const energy=cfg.energy/100,A=normArp(cfg.arp);
+  const mode=A.mode==='auto'?rng.pick(AUTO_MODES):A.mode,block=mode==='chord';
+  // block chords come at half the speed of a run, and a stab never holds more than ARP.maxBlock notes
+  // however wide the octave range is set, so it stays a stab rather than a wall of sound
+  const rate=(energy>0.62?1:2)*(block?2:1);
+  const dur=arpDur(rate,A.gate),fig=rng.pick(ARP_FIGURES),rest=energy<0.35?rng.pick([0,4]):0;
   const out=[];let k=0;
   for(let s=0;s<TOTAL;s+=rate){
-    const ch=chordAt(chords,s);
-    let notes=ch.notes.map(m=>m+12);if(wide)notes=notes.concat(ch.notes.map(m=>m+24));
+    const notes=arpNotes(chordAt(chords,s),cfg.root,A.octaves);
     if(rest&&(k%rest)===rest-1){k++;continue}
-    let i;const L=notes.length;
-    if(mode==='up')i=k%L;else if(mode==='down')i=L-1-(k%L);
-    else if(mode==='updown'){const c=2*L-2;const j=k%c;i=j<L?j:c-j}
-    else i=rng.int(L);
-    out.push({step:s,dur:Math.max(1,Math.round(rate*0.7)),midi:notes[i],vel:(s%4===0?0.8:0.55)+rng.next()*0.1});
+    const vel=(s%4===0?0.8:0.55)+rng.next()*0.1;
+    if(block)notes.slice(0,ARP.maxBlock).forEach(m=>out.push({step:s,dur,midi:m,vel}));
+    else out.push({step:s,dur,midi:notes[arpIndex(mode,k,notes.length,rng,fig)],vel});
     k++;
   }
   return out;
 }
-// the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
-const BASS_LO=36,BASS_HI=59;
-function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
-// the arp sings above the chords: this is the window its generator writes in and its roll lane draws
-const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+41]};
 // where a letter key lands when you record it into a layer: the lead as played, the arp an octave up,
 // the bass folded into its own register. The pitch class never changes, so the key stays locked.
 function recordPitch(L,midi,root){
@@ -462,7 +508,8 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
+  ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();

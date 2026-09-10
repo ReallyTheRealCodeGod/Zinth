@@ -473,6 +473,131 @@ for(const bars of [1,2,4,8,16]){
   assert(Z.vibCents(Z.DEFAULTS.lead.vibrato)<Z.VIB.cents,'the default vibrato should be gentle, not the widest there is');
 }
 
+// the arp's figure: the mode it walks the chord in, how many octaves it reaches over and how much of each
+// step a note holds. All three are free to shape the line and none of them may take it out of the key —
+// whatever they are set to, every note the arp plays is a tone of the chord sounding under it, inside the
+// arp's own lane, one note at a time (or a whole chord at once in block mode), and never long enough to run
+// into the note after it.
+{
+  const S={chords:'ARP001',lead:'ARP001',arp:'ARP001',bass:'ARP001',drums:'ARP001'};
+  const modes=Z.ARP.modes;
+  ['up','down','updown','random','chord','pattern'].forEach(m=>assert(modes.indexOf(m)>=0,'the arp cannot play '+m));
+  assert(modes.length===6,'the arp has '+modes.length+' modes, expected 6');
+  assert(Z.ARP_MODES[0]==='auto'&&Z.ARP_MODES.length===modes.length+1,'auto must be offered beside the modes, and only once');
+  assert(modes.indexOf('auto')<0,'auto is not a mode of its own: it means the roll picks one');
+  assert(Z.ARP.minDur>0&&Z.ARP.minDur<1,'an arp note floor of '+Z.ARP.minDur+' steps is not a note you could hear');
+  assert(Z.ARP.minGate>0&&Z.ARP.minGate<Z.ARP.maxGate&&Z.ARP.maxGate===100,'the arp gate knob does not run from something to a full step');
+  assert(Z.ARP.maxBlock>=3&&Z.ARP.maxBlock<=8,'a block stab of up to '+Z.ARP.maxBlock+' notes is either not a chord or a wall of sound');
+  assert(Z.ARP.octaves.join()==='1,2,3','the arp octave range is not 1 to 3');
+  // the settings themselves: anything unreadable falls back to the default, anything past an end clamps to it
+  const dflt=Z.normArp(null);
+  assert(dflt.mode===Z.ARP.dflt.mode&&dflt.octaves===Z.ARP.dflt.octaves&&dflt.gate===Z.ARP.dflt.gate,'the arp defaults are not the ones ARP.dflt names');
+  assert(Z.normArp(undefined).mode==='auto','a project saved before the arp had a mode must open on auto, the way it always played');
+  [{},{mode:'sideways'},{mode:5},{mode:null},'x',7,[]].forEach(a=>assert(Z.normArp(a).mode===Z.ARP.dflt.mode,'an arp mode of '+JSON.stringify(a)+' should fall back to the default'));
+  Z.ARP_MODES.forEach(m=>assert(Z.normArp({mode:m}).mode===m,'the arp cannot be set to '+m));
+  assert(Z.normArp({octaves:9}).octaves===3&&Z.normArp({octaves:0}).octaves===1,'an octave range past either end should clamp to it');
+  assert(Z.normArp({octaves:'x'}).octaves===Z.ARP.dflt.octaves,'an unreadable octave range should fall back to the default');
+  assert(Z.normArp({gate:400}).gate===Z.ARP.maxGate&&Z.normArp({gate:-4}).gate===Z.ARP.minGate,'a gate past either end should clamp to it');
+  assert(Z.normArp({gate:'x'}).gate===Z.ARP.dflt.gate,'an unreadable gate should fall back to the default');
+  // the gate: a note holds part of the step it starts on, never more of it and never nothing at all
+  for(const rate of [1,2,4])for(const g of [0,Z.ARP.minGate,40,70,100,140,NaN,undefined,null,'x']){
+    const d=Z.arpDur(rate,g),tag=' [arp gate '+g+' · rate '+rate+']';
+    assert(d>=Z.ARP.minDur-1e-12,'an arp note of '+d+' steps is too short to hear'+tag);
+    assert(d<=rate+1e-12,'an arp note of '+d+' steps runs into the note after it'+tag);
+  }
+  assert(Z.arpDur(2,100)===2&&Z.arpDur(2,50)===1,'the arp gate does not scale evenly');
+  assert(Z.arpDur(2,100)>Z.arpDur(2,40),'more gate must mean a longer note');
+  assert(Z.arpDur(1,Z.ARP.minGate)>=Z.ARP.minDur,'the shortest gate at the fastest rate must still be a note');
+  // which note comes next: whatever the mode, an index inside the chord tones it was handed
+  const rng=new Z.Rng('ARPIDX');
+  for(const mode of Z.ARP_MODES)for(const n of [1,2,3,4,6,9,12])for(let k=0;k<40;k++){
+    const i=Z.arpIndex(mode,k,n,rng,Z.ARP_FIGURES[k%Z.ARP_FIGURES.length]);
+    assert(i>=0&&i<n&&i===Math.round(i),'the '+mode+' arp reached index '+i+' of '+n+' chord tones');
+  }
+  Z.ARP_FIGURES.forEach((f,i)=>{
+    assert(Array.isArray(f)&&f.length>=2,'arp figure '+(i+1)+' is not a figure');
+    f.forEach(v=>assert(v>=0&&v===Math.round(v),'arp figure '+(i+1)+' steps to '+v+', which is not a chord tone'));
+  });
+  // and the shapes are the shapes their names promise
+  for(const n of [2,3,4,5]){
+    const up=[],dn=[],ud=[];
+    for(let k=0;k<n;k++){up.push(Z.arpIndex('up',k,n,rng));dn.push(Z.arpIndex('down',k,n,rng))}
+    for(let k=0;k<2*n-2;k++)ud.push(Z.arpIndex('updown',k,n,rng));
+    const tag=' ['+n+' chord tones]';
+    assert(up.join()===up.slice().sort((a,b)=>a-b).join()&&up[0]===0&&up[n-1]===n-1,'an up arp does not run up the chord'+tag);
+    assert(dn[0]===n-1&&dn[n-1]===0,'a down arp does not run down the chord'+tag);
+    assert(Z.arpIndex('up',n,n,rng)===0&&Z.arpIndex('down',n,n,rng)===n-1,'an arp does not start its run again'+tag);
+    assert(ud[n-1]===n-1&&Z.arpIndex('updown',2*n-2,n,rng)===0,'an up-down arp does not turn around at the top and come back'+tag);
+  }
+  // the notes the arp has to choose from: tones of the chord, in its lane, one rising run, wider with range
+  for(const scale in Z.SCALES){
+    const cs=Z.chordScaleOf(scale);
+    for(const root of [0,5,11]){
+      const r=Z.arpRange(root),chPcs=pcsOf(root,cs.steps),tag=' [arp notes · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+      const chords=Z.generateTrack({root,scale,energy:60,evolve:true,sevenths:true,gate:0.7},S,'v',0).chords;
+      chords.forEach(ch=>{
+        let last=0;
+        for(const oct of [1,2,3]){
+          const ns=Z.arpNotes(ch,root,oct);
+          assert(ns.length>=3,'the arp was handed '+ns.length+' notes of '+ch.name+', not a chord'+tag);
+          ns.forEach((m,i)=>{
+            assert(ch.pcs.has(((m%12)+12)%12),Z.NOTE_NAMES[m%12]+' is not a tone of '+ch.name+tag);
+            assert(chPcs.has(((m%12)+12)%12),'an arp note left the chord scale'+tag);
+            assert(m>=r[0]&&m<=r[1],'an arp note '+m+' is outside its lane '+r.join('–')+tag);
+            if(i)assert(m>ns[i-1],'the notes the arp walks are not one rising run'+tag);
+          });
+          assert(ns.length>=last,'a wider octave range gave the arp fewer notes'+tag);
+          last=ns.length;
+        }
+        assert(Z.arpNotes(ch,root,3).length>Z.arpNotes(ch,root,1).length,'three octaves is no wider than one'+tag);
+        assert(Z.arpNotes(ch,root,9).length===Z.arpNotes(ch,root,3).length,'an octave range past 3 should clamp to 3'+tag);
+        assert(Z.arpNotes(ch,root,'x').length===Z.arpNotes(ch,root,Z.ARP.dflt.octaves).length,'an unreadable octave range should fall back to the default'+tag);
+      });
+    }
+  }
+  // and the line the generator writes with them, in every scale, for every mode, range and gate
+  let si=0;
+  for(const scale in Z.SCALES){
+    const root=(si++*5)%12,cs=Z.chordScaleOf(scale),chPcs=pcsOf(root,cs.steps),r=Z.arpRange(root);
+    for(const mode of Z.ARP_MODES)for(const oct of [1,3])for(const gate of [Z.ARP.minGate,100]){
+      const cfg={root,scale,energy:70,evolve:true,sevenths:true,gate:0.7,arp:{mode,octaves:oct,gate}};
+      const t=Z.generateTrack(cfg,S,'v',0);tracks++;
+      const tag=' [arp '+mode+' · '+oct+' oct · gate '+gate+' · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+      assert(t.arp.length>0,'the arp played nothing at all'+tag);
+      const byStep={};
+      t.arp.forEach(e=>{
+        assert(e.step>=0&&e.step<Z.TOTAL,'an arp note left the loop'+tag);
+        assert(e.dur>=Z.ARP.minDur-1e-12,'an arp note of '+e.dur+' steps is too short to hear'+tag);
+        assert(e.vel>0&&e.vel<=1,'an arp note came out at velocity '+e.vel+tag);
+        assert(chPcs.has(((e.midi%12)+12)%12),'an arp note '+Z.NOTE_NAMES[e.midi%12]+' left the chord scale'+tag);
+        assert(Z.chordAt(t.chords,e.step).pcs.has(((e.midi%12)+12)%12),'an arp note is not a tone of the chord playing under it'+tag);
+        assert(e.midi>=r[0]&&e.midi<=r[1],'an arp note '+e.midi+' is outside its lane '+r.join('–')+tag);
+        assert(t.byStep.arp[e.step].includes(e),'an arp note is missing from the playback index'+tag);
+        (byStep[e.step]=byStep[e.step]||[]).push(e);
+      });
+      const steps=Object.keys(byStep).map(Number).sort((a,b)=>a-b);
+      steps.forEach(s=>{
+        const n=byStep[s].length;
+        if(mode==='chord')assert(n>=3&&n<=Z.ARP.maxBlock,'a block stab of '+n+' note'+(n===1?'':'s')+' is not a chord, or is too many at once'+tag);
+        else assert(n===1,'the arp played '+n+' notes at once in '+mode+' mode'+tag);
+        assert(new Set(byStep[s].map(e=>e.midi)).size===n,'the arp played one note twice at the same step'+tag);
+      });
+      // a note never runs into the one after it, however wide the gate is opened
+      for(let i=1;i<steps.length;i++)byStep[steps[i-1]].forEach(e=>
+        assert(e.step+e.dur<=steps[i]+1e-9,'an arp note runs '+(e.step+e.dur-steps[i])+' steps into the note after it'+tag));
+      // the same settings write the same line twice, so an export sounds like what you heard
+      assert(JSON.stringify(Z.generateTrack(cfg,S,'v',0).arp)===JSON.stringify(t.arp),'the arp is not deterministic'+tag);
+    }
+    // a wider range really does reach higher, and a shorter gate really does play shorter notes
+    const wide=Z.generateTrack({root,scale,energy:70,evolve:true,sevenths:true,gate:0.7,arp:{mode:'up',octaves:3,gate:100}},S,'v',0).arp;
+    const tight=Z.generateTrack({root,scale,energy:70,evolve:true,sevenths:true,gate:0.7,arp:{mode:'up',octaves:1,gate:100}},S,'v',0).arp;
+    const short=Z.generateTrack({root,scale,energy:70,evolve:true,sevenths:true,gate:0.7,arp:{mode:'up',octaves:3,gate:Z.ARP.minGate}},S,'v',0).arp;
+    const top=a=>Math.max.apply(null,a.map(e=>e.midi)),tag=' [arp range · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+    assert(top(wide)>top(tight),'three octaves of arp reach no higher than one'+tag);
+    assert(short.every((e,i)=>e.dur<wide[i].dur+1e-12)&&short[0].dur<wide[0].dur,'a shorter gate did not shorten the notes'+tag);
+  }
+}
+
 // warmth: the master soft clip and its high shelf. It may colour a mix and lift its quiet half, but it must
 // never push the signal past full scale, never invert it, never boost the top end, and at 0 it must be a
 // true bypass — one knob you can leave anywhere without the mix falling apart.
@@ -607,7 +732,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
