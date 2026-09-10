@@ -79,6 +79,45 @@ for(const scale in Z.SCALES){
     }
   }
 }
+// notes drawn into the arp and bass lanes of the roll: stored without the section's key shift, they come
+// back verbatim, follow the shift, stay in the chord scale, and the bass stays inside its own register
+for(const scale in Z.SCALES){
+  const cs=Z.chordScaleOf(scale),csKey=Z.SCALES[scale].chord||scale;
+  for(const root of [0,5,11]){
+    for(const transpose of [-2,0,3]){
+      const secRoot=((root+transpose)%12+12)%12,chPcs=pcsOf(secRoot,cs.steps);
+      const seeds2={chords:'EDIT02',lead:'EDIT02',arp:'EDIT02',bass:'EDIT02',drums:'EDIT02'};
+      const base={root:secRoot,scale,energy:60,evolve:true,sevenths:false,gate:0.7,transpose};
+      const tag=' [drawn arp and bass · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+' · '+transpose+' st]';
+      // arp: the roll offers the chord scale two octaves above the chord register
+      const ap=Z.scalePitches({root,scale:csKey},72,96);
+      const arpEdits=[{step:0,dur:2,midi:ap[0].midi,vel:0.8},{step:17,dur:1,midi:ap[2].midi,vel:0.6},
+        {step:Z.TOTAL-2,dur:4,midi:ap[1].midi,vel:0.5},{step:Z.TOTAL+3,dur:2,midi:ap[0].midi,vel:0.8}];
+      const ta=Z.generateTrack(Object.assign({},base,{arpEvents:arpEdits}),seeds2,'v',0);
+      assert(ta.arp.length===3,'drawn arp kept '+ta.arp.length+' notes, expected the 3 inside the loop'+tag);
+      ta.arp.forEach((e,i)=>{
+        assert(e.step===arpEdits[i].step&&e.dur===arpEdits[i].dur&&e.vel===arpEdits[i].vel,'drawn arp note changed'+tag);
+        assert(e.midi===arpEdits[i].midi+transpose,'drawn arp note did not follow the section key shift'+tag);
+        assert(chPcs.has(((e.midi%12)+12)%12),'drawn arp note '+Z.NOTE_NAMES[e.midi%12]+' outside the chord scale'+tag);
+        assert(ta.byStep.arp[e.step].includes(e),'drawn arp note missing from the playback index'+tag);
+      });
+      assert(JSON.stringify(ta.lead)===JSON.stringify(Z.generateTrack(base,seeds2,'v',0).lead),'drawing the arp changed the lead'+tag);
+      // bass: the roll offers the chord scale inside the bass register, and the key shift folds back into it
+      const bp=Z.scalePitches({root,scale:csKey},Z.BASS_LO,Z.BASS_HI);
+      const bassEdits=[{step:0,dur:8,midi:bp[0].midi,vel:0.9},{step:12,dur:4,midi:bp[bp.length-1].midi,vel:0.7},
+        {step:Z.TOTAL-5,dur:6,midi:bp[1].midi,vel:0.8},{step:Z.TOTAL+9,dur:2,midi:bp[0].midi,vel:0.9}];
+      const tb=Z.generateTrack(Object.assign({},base,{bassEvents:bassEdits}),seeds2,'v',0);
+      assert(tb.bass.length===3,'drawn bass kept '+tb.bass.length+' notes, expected the 3 inside the loop'+tag);
+      tb.bass.forEach((e,i)=>{
+        assert(e.step===bassEdits[i].step&&e.dur===bassEdits[i].dur&&e.vel===bassEdits[i].vel,'drawn bass note changed'+tag);
+        assert(((e.midi-(bassEdits[i].midi+transpose))%12+12)%12===0,'drawn bass note lost its pitch class'+tag);
+        assert(e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'drawn bass note '+e.midi+' out of register'+tag);
+        assert(chPcs.has(((e.midi%12)+12)%12),'drawn bass note '+Z.NOTE_NAMES[e.midi%12]+' outside the chord scale'+tag);
+        assert(tb.byStep.bass[e.step].includes(e),'drawn bass note missing from the playback index'+tag);
+      });
+    }
+  }
+}
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -92,7 +131,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

@@ -174,6 +174,9 @@ function generateArp(cfg,chords,rng){
   }
   return out;
 }
+// the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
+const BASS_LO=36,BASS_HI=59;
+function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
 function generateBass(cfg,chords,rng){
   const energy=cfg.energy/100;
   const pattern=rng.weighted(['roots','pulse','octave','synco','walk'],[1.2-energy,0.4+energy,0.3+energy,0.5+energy*0.6,0.6]);
@@ -219,10 +222,12 @@ function generateTrack(cfg,seeds,part,loop){
   const leadCfg=Object.assign({},cfg,{energy:clamp(cfg.leadEnergy!==undefined?cfg.leadEnergy:cfg.energy)});
   const chords=generateChords(cfg,new Rng(seeds.chords+':c:'+part));
   const rngA=new Rng(seeds.lead+':'+part),rngB=new Rng(seeds.lead+':'+part+':b'+(cfg.evolve?loop:0));
-  // a melody recorded from the keys replaces the generated one (shifted with the section's key)
-  const lead=cfg.leadEvents?cfg.leadEvents.map(e=>({step:e.step,dur:e.dur,midi:e.midi+(cfg.transpose||0),vel:e.vel||0.85})).filter(e=>e.step>=0&&e.step<TOTAL):generateLead(leadCfg,chords,rngA,rngB);
-  const arp=generateArp(cfg,chords,new Rng(seeds.arp+':'+part));
-  const bass=generateBass(cfg,chords,new Rng(seeds.bass+':'+part));
+  // notes drawn in the roll or recorded from the keys replace a generated layer (shifted with the section's key)
+  const shift=cfg.transpose||0;
+  const edited=(list,fold)=>list.map(e=>{const m=e.midi+shift;return {step:e.step,dur:e.dur,midi:fold?fold(m):m,vel:e.vel||0.85}}).filter(e=>e.step>=0&&e.step<TOTAL);
+  const lead=cfg.leadEvents?edited(cfg.leadEvents):generateLead(leadCfg,chords,rngA,rngB);
+  const arp=cfg.arpEvents?edited(cfg.arpEvents):generateArp(cfg,chords,new Rng(seeds.arp+':'+part));
+  const bass=cfg.bassEvents?edited(cfg.bassEvents,bassRegister):generateBass(cfg,chords,new Rng(seeds.bass+':'+part));
   const drumPattern=cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part));
   const drums=expandDrums(drumPattern,BARS);
   const chordEvs=chords.map(c=>({step:c.bar0*STEPS,dur:c.bars*STEPS,notes:c.notes,vel:0.8}));
@@ -233,5 +238,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister});
 })();

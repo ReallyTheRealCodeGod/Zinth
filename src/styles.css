@@ -172,6 +172,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .lane button{font:600 10px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--c);padding:4px 6px;border-radius:4px;background:rgba(14,16,23,.8);border:1px solid transparent;transition:opacity .12s}
 .lane button.muted{opacity:.35;text-decoration:line-through}
 .lane button:hover{border-color:var(--c)}
+.lane .rev{margin-left:3px;padding:3px 4px;font:500 11px var(--mono);letter-spacing:0;color:var(--ink-dim);border-color:var(--line-2)}
+.lane .rev:hover{color:var(--c)}
 
 /* mixer */
 .mixer{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}

@@ -40,7 +40,8 @@ const partLabel=p=>p==='v'?'A verse':'B chorus';
 function partOfSel(){const s=song()[state.sel];return s?s.part:'v'}
 function renderRecInfo(){
   const part=partOfSel(),list=state.leadEdits[part];
-  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated melody');
+  const drawn=['arp','bass'].filter(L=>state[U.EDITS[L]][part]);
+  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated melody')+(drawn.length?' · your own '+drawn.join(' and '):'');
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
 }
 function setRec(on){
@@ -101,7 +102,7 @@ function renderMixer(){
   $('mixer').innerHTML=Z.LAYERS.map(L=>{const p=E.params[L];return '<div class="ch'+(E.audible(L)?'':' dim')+'" style="--c:'+COLORS[L]+'"><div class="nm"><b>'+L+'</b><output>'+p.level+'</output></div><input type="range" min="0" max="100" value="'+p.level+'" data-l="'+L+'" aria-label="'+L+' level"><div class="bt"><button class="m'+(p.mute?' on':'')+'" data-l="'+L+'" data-a="mute" title="Mute">M</button><button class="s'+(p.solo?' on':'')+'" data-l="'+L+'" data-a="solo" title="Solo">S</button><button class="l'+(state.locks[L]?' on':'')+'" data-l="'+L+'" data-a="lock" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-l="'+L+'" data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
   $('mixer').querySelectorAll('input').forEach(r=>{U.fill(r);r.addEventListener('input',e=>{const L=e.target.dataset.l,v=+e.target.value;E.setParam(L,'level',v);U.fill(e.target);e.target.parentElement.querySelector('output').textContent=v;
     if(state.layer===L){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()})});
-  $('lanes').querySelectorAll('button').forEach(b=>b.classList.toggle('muted',!E.audible(b.textContent)));
+  $('lanes').querySelectorAll('button[data-l]').forEach(b=>b.classList.toggle('muted',!E.audible(b.dataset.l)));
 }
 $('mixer').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const L=b.dataset.l,a=b.dataset.a;
   if(a==='mute')E.setParam(L,'mute',!E.params[L].mute);

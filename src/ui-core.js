@@ -4,6 +4,8 @@ const Z=window.Z,E=Z.engine,$=id=>document.getElementById(id),ZUI=window.ZUI=win
 // these live in the second UI script; delegate through the shared ZUI namespace
 const renderKeys=()=>ZUI.renderKeys(),renderPads=()=>ZUI.renderPads(),renderMixer=()=>ZUI.renderMixer(),renderFavs=()=>ZUI.renderFavs(),renderSound=()=>ZUI.renderSound(),renderGrid=()=>ZUI.renderGrid(),syncLabels=()=>ZUI.syncLabels();
 const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3'};
+// the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
+const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
   chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Lo-fi',
             sound:{lead:{wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
@@ -47,10 +49,10 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,
-  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',
+  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',
 };
 const rec={armed:false};
-let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,leadHit=null,drag=null,dragPreview=null;
+let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
 function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double}}
 function defaultSections(){return DEFAULT_FORM.map(newSection)}
 
@@ -64,8 +66,12 @@ for(const k in PATCHES){const o=document.createElement('option');o.value=k;o.tex
 for(const k in Z.KITS){const o=document.createElement('option');o.value=k;o.textContent=k;$('kit').appendChild(o)}
 Z.LAYERS.forEach(L=>{
   const t=document.createElement('button');t.className='tab';t.setAttribute('role','tab');t.textContent=L;t.style.setProperty('--c',COLORS[L]);t.addEventListener('click',()=>{state.layer=L;renderSound()});$('tabs').appendChild(t);
-  const ln=document.createElement('div');ln.className='lane';const b=document.createElement('button');b.textContent=L;b.style.setProperty('--c',COLORS[L]);b.title='Mute / unmute '+L;
-  b.addEventListener('click',()=>{E.setParam(L,'mute',!E.params[L].mute);renderMixer();persist()});ln.appendChild(b);$('lanes').appendChild(ln);
+  const ln=document.createElement('div');ln.className='lane';const b=document.createElement('button');b.dataset.l=L;b.textContent=L;b.style.setProperty('--c',COLORS[L]);b.title='Mute / unmute '+L;
+  b.addEventListener('click',()=>{E.setParam(L,'mute',!E.params[L].mute);renderMixer();persist()});ln.appendChild(b);
+  if(EDITS[L]){const rv=document.createElement('button');rv.className='rev';rv.id='rev-'+L;rv.textContent='↺';rv.hidden=true;rv.style.setProperty('--c',COLORS[L]);
+    rv.title='These '+L+' notes are yours. Bring the generated '+L+' back for this part.';rv.setAttribute('aria-label','Revert the '+L+' to the generated one');
+    rv.addEventListener('click',()=>clearEdits(L));ln.appendChild(rv)}
+  $('lanes').appendChild(ln);
   const lb=document.createElement('button');lb.dataset.l=L;lb.textContent=L;lb.style.setProperty('--c',COLORS[L]);$('secLayers').appendChild(lb);
 });
 WAVES.forEach(([w,d])=>{const b=document.createElement('button');b.className='wave';b.dataset.wave=w;b.title=w;b.innerHTML='<svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="'+d+'"/></svg>';
@@ -80,7 +86,7 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead'});
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse'});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
@@ -130,12 +136,12 @@ function newTrack(fromMood){
   unlocked.forEach(L=>state.seeds[L]=Z.randomSeed());
   if(!state.locks.chords){state.prog={v:null,c:null};applyMood(state.seeds.chords)}
   if(!state.locks.drums)state.drumEdits={v:null,c:null};
-  if(!state.locks.lead)state.leadEdits={v:null,c:null};
+  for(const L in EDITS)if(!state.locks[L])state[EDITS[L]]={v:null,c:null};
   if(!state.sections.length)state.sections=defaultSections();
   state.loop=0;syncControls();regenerate();
   setStatus(unlocked.length===5?'New track':'Rerolled '+unlocked.join(', '));
 }
-function dice(L){state.seeds[L]=Z.randomSeed();if(L==='chords')state.prog={v:null,c:null};if(L==='drums')state.drumEdits={v:null,c:null};if(L==='lead')state.leadEdits={v:null,c:null};state.locks[L]=false;regenerate();setStatus('New '+L)}
+function dice(L){state.seeds[L]=Z.randomSeed();if(L==='chords')state.prog={v:null,c:null};if(L==='drums')state.drumEdits={v:null,c:null};if(EDITS[L])state[EDITS[L]]={v:null,c:null};state.locks[L]=false;regenerate();setStatus('New '+L)}
 function loadCode(){
   const c=parseCode($('seed').value);if(!c){setStatus('Paste a track code first');return}
   state.seeds=c.seeds;state.loop=0;state.prog={v:null,c:null};state.drumEdits={v:null,c:null};
@@ -146,7 +152,7 @@ function loadCode(){
 function sectionCfg(sec){
   // while recording is armed, parts without a recording fall silent so you record over a clean backing
   const leadEvents=state.leadEdits[sec.part]||(rec.armed?[]:null);
-  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents});
+  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents,arpEvents:state.arpEdits[sec.part],bassEvents:state.bassEdits[sec.part]});
 }
 function buildSong(){return state.sections.map(sec=>Object.assign({},sec,{track:Z.generateTrack(sectionCfg(sec),state.seeds,sec.part,sec.part==='v'?state.loop:0)}))}
 // light rebuild for live edits (recording): keeps the keyboard and pads untouched
@@ -208,14 +214,23 @@ $('addSec').addEventListener('click',()=>{const s=newSection('Verse');state.sect
 
 const canvas=$('rollCanvas'),ctx2=canvas.getContext('2d');
 let rollBars=8;
-// the lead lane is one row per scale pitch, in the register the lead generator writes in
-function leadPitches(sec){
-  const root=(state.root+(sec.transpose||0)+120)%12,lo=64+(root>=6?-6:0);
-  return Z.scalePitches({root,scale:state.scale},lo,lo+22);
+// an editable lane is one row per pitch of the key, in the register that layer's generator writes in
+function lanePitches(L,sec){
+  const root=(state.root+(sec.transpose||0)+120)%12;
+  if(L==='lead'){const lo=64+(root>=6?-6:0);return Z.scalePitches({root,scale:state.scale},lo,lo+22)}
+  const scale=Z.SCALES[state.scale].chord||state.scale; // arp and bass follow the chord scale, as their generators do
+  if(L==='bass')return Z.scalePitches({root,scale},Z.BASS_LO,Z.BASS_HI);
+  const lo=(root>=6?48:60)+root;return Z.scalePitches({root,scale},lo+7,lo+41);
+}
+// what a stored note sounds like in this section: the key shift, and the bass folded into its register
+const soundOf=(L,midi,tr)=>{const m=midi+tr;return L==='bass'?Z.bassRegister(m):m};
+function syncLanes(){
+  const sec=song[viewSection];
+  for(const L in EDITS){const b=$('rev-'+L);if(b)b.hidden=!(sec&&state[EDITS[L]][sec.part])}
 }
 function buildRoll(){
-  const sec=song[viewSection];leadHit=null;if(!sec)return;const track=sec.track,lay=sec.layers;rollBars=Math.min(8,sec.bars);
-  const W=$('roll').clientWidth||1000,H=340,dpr=Math.min(2,window.devicePixelRatio||1);
+  const sec=song[viewSection];hits={};if(!sec)return;const track=sec.track,lay=sec.layers;rollBars=Math.min(8,sec.bars);
+  const W=$('roll').clientWidth||1000,H=420,dpr=Math.min(2,window.devicePixelRatio||1);
   canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.height=H+'px';
   rollCache=document.createElement('canvas');rollCache.width=W*dpr;rollCache.height=H*dpr;
   const c=rollCache.getContext('2d');c.scale(dpr,dpr);
@@ -235,26 +250,28 @@ function buildRoll(){
     const nh=Math.max(3,Math.min(9,h/(hi-lo+1)));
     evs.forEach(e=>{const notes=[].concat(getMidi(e));notes.forEach(m=>{const y=y0+h-((m-lo)/(hi-lo))*(h-nh);c.globalAlpha=0.45+e.vel*0.55;c.fillStyle=COLORS[L];c.fillRect(gx+e.step*sw+0.5,y,Math.max(2,Math.min(e.dur,steps-e.step)*sw-1.2),nh)})});c.globalAlpha=1;
   };
-  const leadY=14,leadH=laneH-22,pitches=leadPitches(sec),rowH=leadH/pitches.length,rects=[];
-  if(!lay.lead)rest(leadY+leadH/2+4);
-  else{
-    track.lead.filter(e=>e.step<steps).forEach(e=>{
+  // the editable lanes: every note sits on its own pitch row, so a click means a pitch
+  const noteRows=(L,evs)=>{
+    const y0=LANE_ROW[L]*laneH+14,h=laneH-22,pitches=lanePitches(L,sec),rowH=h/pitches.length,rects=[];
+    hits[L]={gx,sw,steps,y0,h,pitches,rowH,rects};
+    if(!lay[L]){rest(y0+h/2+4);return}
+    evs.filter(e=>e.step<steps).forEach(e=>{
       let idx=0,bd=1e9;pitches.forEach((p,i)=>{const d=Math.abs(p.midi-e.midi);if(d<bd){bd=d;idx=i}});
-      const x=gx+e.step*sw+0.5,y=leadY+leadH-(idx+1)*rowH,w=Math.max(2,Math.min(e.dur,steps-e.step)*sw-1.2),h=Math.max(2,rowH-1.4);
-      c.globalAlpha=0.5+e.vel*0.5;c.fillStyle=COLORS.lead;c.fillRect(x,y,w,h);
-      rects.push({step:e.step,midi:e.midi,x,y,w,h});
+      const x=gx+e.step*sw+0.5,y=y0+h-(idx+1)*rowH,w=Math.max(2,Math.min(e.dur,steps-e.step)*sw-1.2),nh=Math.max(2,rowH-1.4);
+      c.globalAlpha=0.5+e.vel*0.5;c.fillStyle=COLORS[L];c.fillRect(x,y,w,nh);
+      rects.push({step:e.step,midi:e.midi,x,y,w,h:nh});
     });
     c.globalAlpha=1;
-  }
-  leadHit={gx,sw,steps,y0:leadY,h:leadH,pitches,rowH,rects};
-  lane(1,track.arp,e=>e.midi);lane(2,track.chordEvs,e=>e.notes);lane(3,track.bass,e=>e.midi);
+  };
+  noteRows('lead',track.lead);noteRows('arp',track.arp);noteRows('bass',track.bass);
+  lane(2,track.chordEvs,e=>e.notes);
   const rows={kick:3,snare:2,clap:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/4;
   if(!lay.drums)rest(y0+rh*2+4);
   else track.drums.forEach(d=>{
     if(d.step>=steps)return;if(lay.drums==='lite'&&(d.kind==='snare'||d.kind==='clap'||(d.kind==='kick'&&d.step%16!==0)))return;
     const y=y0+rows[d.kind]*rh+rh/2;c.globalAlpha=0.4+d.vel*0.6;c.fillStyle=COLORS.drums;
     if(d.kind==='kick')c.fillRect(gx+d.step*sw+0.5,y-4,Math.max(3,sw-1),8);else{c.beginPath();c.arc(gx+d.step*sw+sw/2,y,d.kind==='ohat'?3.4:d.kind==='snare'?3:d.kind==='clap'?2.6:2,0,7);c.fill()}});
-  c.globalAlpha=1;drawFrame(-1);
+  c.globalAlpha=1;syncLanes();drawFrame(-1);
 }
 function drawFrame(step){
   if(!rollCache)return;const dpr=Math.min(2,window.devicePixelRatio||1);
@@ -263,77 +280,84 @@ function drawFrame(step){
     ctx2.fillStyle='rgba(245,165,36,.10)';ctx2.fillRect(gx+s*sw,0,sw,canvas.height/dpr);
     ctx2.fillStyle='#f5a524';ctx2.fillRect(gx+s*sw,0,1.5,canvas.height/dpr)}
   if(dragPreview){ctx2.setTransform(dpr,0,0,dpr,0,0);
-    ctx2.fillStyle='rgba(245,165,36,.55)';ctx2.fillRect(dragPreview.x,dragPreview.y,dragPreview.w,dragPreview.h);
+    ctx2.globalAlpha=.55;ctx2.fillStyle=dragPreview.color;ctx2.fillRect(dragPreview.x,dragPreview.y,dragPreview.w,dragPreview.h);ctx2.globalAlpha=1;
     ctx2.strokeStyle='#ece6d8';ctx2.lineWidth=1;ctx2.strokeRect(dragPreview.x+.5,dragPreview.y+.5,dragPreview.w-1,dragPreview.h-1)}
 }
 
-/* ---------- lead note editing in the roll ---------- */
-// edits live in state.leadEdits[part], the same format a recorded melody uses, so both share one path
-function leadEditList(sec){
-  const list=state.leadEdits[sec.part];
-  return list?list.map(e=>Object.assign({},e)):sec.track.lead.map(e=>({step:e.step,dur:e.dur,midi:e.midi-(sec.transpose||0),vel:e.vel}));
+/* ---------- note editing in the roll: lead, arp and bass ---------- */
+// edits live in state[EDITS[L]][part], the same format a recorded melody uses, so drawing and recording share one path
+const LANE_NAME={lead:'melody',arp:'arp',bass:'bass line'};
+function editList(L,sec){
+  const list=state[EDITS[L]][sec.part],tr=sec.transpose||0;
+  return list?list.map(e=>Object.assign({},e)):sec.track[L].map(e=>({step:e.step,dur:e.dur,midi:e.midi-tr,vel:e.vel}));
 }
-function commitLead(sec,list,msg){
-  const fresh=!state.leadEdits[sec.part];
-  list.sort((a,b)=>a.step-b.step);state.leadEdits[sec.part]=list;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
-  setStatus(msg+(fresh?' · this melody is yours now; Clear melody brings the generated one back':''));
+function commitEdits(L,sec,list,msg){
+  const fresh=!state[EDITS[L]][sec.part];
+  list.sort((a,b)=>a.step-b.step);state[EDITS[L]][sec.part]=list;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
+  setStatus(msg+(fresh?' · this '+LANE_NAME[L]+' is yours now; ↺ beside the lane name brings the generated one back':''));
+}
+function clearEdits(L){
+  const sec=song[viewSection];if(!sec||!state[EDITS[L]][sec.part])return;
+  state[EDITS[L]][sec.part]=null;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
+  setStatus('Generated '+LANE_NAME[L]+' is back for the '+(sec.part==='v'?'A verse':'B chorus')+' sections');
 }
 function rollXY(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
-function inLeadLane(p){return !!leadHit&&p.x>=leadHit.gx&&p.y>=leadHit.y0&&p.y<=leadHit.y0+leadHit.h}
-function leadNoteAt(p){return leadHit?(leadHit.rects.find(r=>p.x>=r.x-2&&p.x<=r.x+r.w+2&&p.y>=r.y-2&&p.y<=r.y+r.h+2)||null):null}
+function laneAt(p){for(const L in EDITS){const H=hits[L];if(H&&p.x>=H.gx&&p.y>=H.y0&&p.y<=H.y0+H.h)return L}return null}
+function noteAt(H,p){return H.rects.find(r=>p.x>=r.x-2&&p.x<=r.x+r.w+2&&p.y>=r.y-2&&p.y<=r.y+r.h+2)||null}
 const onEdge=(r,x)=>r.w>=10&&x>=r.x+r.w-6;
-function roomAfter(list,skip,step){
-  let room=leadHit.steps-step;
+function roomAfter(H,list,skip,step){
+  let room=H.steps-step;
   list.forEach((n,i)=>{if(i!==skip&&n.step>step)room=Math.min(room,n.step-step)});
   return Math.max(1,room);
 }
 canvas.addEventListener('pointerdown',e=>{
   if(e.button)return;
-  const sec=song[viewSection],p=rollXY(e);if(!sec||!inLeadLane(p))return;
-  if(!sec.layers.lead){setStatus('This section does not play the lead. Switch it on under Plays in the inspector.');return}
-  const tr=sec.transpose||0,hit=leadNoteAt(p);
+  const sec=song[viewSection],p=rollXY(e);if(!sec)return;
+  const L=laneAt(p);if(!L)return;const H=hits[L];
+  if(!sec.layers[L]){setStatus('This section does not play the '+L+'. Switch it on under Plays in the inspector.');return}
+  const tr=sec.transpose||0,hit=noteAt(H,p);
   if(hit){
-    const list=leadEditList(sec),idx=list.findIndex(n=>n.step===hit.step&&n.midi===hit.midi-tr);
+    const list=editList(L,sec),idx=list.findIndex(n=>n.step===hit.step&&soundOf(L,n.midi,tr)===hit.midi);
     if(idx<0)return;
     if(onEdge(hit,p.x)){
       e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(err){}
-      drag={sec,list,idx,tr,startX:p.x,step:hit.step,dur:list[idx].dur,newDur:list[idx].dur};
+      drag={L,sec,list,idx,tr,startX:p.x,step:hit.step,dur:list[idx].dur,newDur:list[idx].dur};
       return;
     }
-    list.splice(idx,1);commitLead(sec,list,'Note removed');return;
+    list.splice(idx,1);commitEdits(L,sec,list,'Note removed from the '+L);return;
   }
-  const row=Math.max(0,Math.min(leadHit.pitches.length-1,leadHit.pitches.length-1-Math.floor((p.y-leadHit.y0)/leadHit.rowH)));
-  const step=Math.max(0,Math.min(leadHit.steps-1,Math.floor((p.x-leadHit.gx)/leadHit.sw)));
-  const dur=Math.max(1,Math.min(2,leadHit.steps-step)),midi=leadHit.pitches[row].midi;
-  // the lead is one line: a note already sounding is trimmed, notes inside the new one give way
-  const list=leadEditList(sec).map(n=>n.step<step&&n.step+n.dur>step?Object.assign({},n,{dur:step-n.step}):n).filter(n=>n.step<step||n.step>=step+dur);
+  const row=Math.max(0,Math.min(H.pitches.length-1,H.pitches.length-1-Math.floor((p.y-H.y0)/H.rowH)));
+  const step=Math.max(0,Math.min(H.steps-1,Math.floor((p.x-H.gx)/H.sw)));
+  const dur=Math.max(1,Math.min(NEW_DUR[L],H.steps-step)),midi=H.pitches[row].midi;
+  // each of these lanes is one line: a note already sounding is trimmed, notes inside the new one give way
+  const list=editList(L,sec).map(n=>n.step<step&&n.step+n.dur>step?Object.assign({},n,{dur:step-n.step}):n).filter(n=>n.step<step||n.step>=step+dur);
   list.push({step,dur,midi:midi-tr,vel:0.85});
-  commitLead(sec,list,Z.NOTE_NAMES[midi%12]+' added at bar '+(Math.floor(step/16)+1)+'.'+(Math.floor((step%16)/4)+1));
+  commitEdits(L,sec,list,Z.NOTE_NAMES[midi%12]+' added to the '+L+' at bar '+(Math.floor(step/16)+1)+'.'+(Math.floor((step%16)/4)+1));
 });
 canvas.addEventListener('pointermove',e=>{
   const p=rollXY(e);
   if(drag){
-    if(!leadHit)return;
-    const room=roomAfter(drag.list,drag.idx,drag.step);
-    const dur=Math.max(1,Math.min(room,drag.dur+Math.round((p.x-drag.startX)/leadHit.sw)));
+    const H=hits[drag.L];if(!H)return;
+    const room=roomAfter(H,drag.list,drag.idx,drag.step);
+    const dur=Math.max(1,Math.min(room,drag.dur+Math.round((p.x-drag.startX)/H.sw)));
     drag.newDur=dur;
-    const midi=drag.list[drag.idx].midi+drag.tr;let idx=0,bd=1e9;
-    leadHit.pitches.forEach((q,i)=>{const d=Math.abs(q.midi-midi);if(d<bd){bd=d;idx=i}});
-    dragPreview={x:leadHit.gx+drag.step*leadHit.sw+0.5,y:leadHit.y0+leadHit.h-(idx+1)*leadHit.rowH,w:Math.max(2,dur*leadHit.sw-1.2),h:Math.max(2,leadHit.rowH-1.4)};
+    const midi=soundOf(drag.L,drag.list[drag.idx].midi,drag.tr);let idx=0,bd=1e9;
+    H.pitches.forEach((q,i)=>{const d=Math.abs(q.midi-midi);if(d<bd){bd=d;idx=i}});
+    dragPreview={x:H.gx+drag.step*H.sw+0.5,y:H.y0+H.h-(idx+1)*H.rowH,w:Math.max(2,dur*H.sw-1.2),h:Math.max(2,H.rowH-1.4),color:COLORS[drag.L]};
     return;
   }
-  const sec=song[viewSection];
-  if(!inLeadLane(p)||!sec||!sec.layers.lead){canvas.style.cursor='';return}
-  const hit=leadNoteAt(p);canvas.style.cursor=hit?(onEdge(hit,p.x)?'ew-resize':'pointer'):'crosshair';
+  const sec=song[viewSection],L=sec?laneAt(p):null;
+  if(!L||!sec.layers[L]){canvas.style.cursor='';return}
+  const hit=noteAt(hits[L],p);canvas.style.cursor=hit?(onEdge(hit,p.x)?'ew-resize':'pointer'):'crosshair';
 });
 function endDrag(){
   if(!drag)return;const d=drag;drag=null;dragPreview=null;
-  d.list[d.idx].dur=d.newDur;commitLead(d.sec,d.list,'Note is '+d.newDur+' step'+(d.newDur===1?'':'s')+' long');
+  d.list[d.idx].dur=d.newDur;commitEdits(d.L,d.sec,d.list,'Note is '+d.newDur+' step'+(d.newDur===1?'':'s')+' long');
 }
 canvas.addEventListener('pointerup',endDrag);
 canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections});
+Object.assign(ZUI,{state,rec,COLORS,EDITS,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
 })();

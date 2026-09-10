@@ -12,7 +12,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Lock and reroll.** New track rerolls only unlocked layers. Each layer has its own dice.
 - **Chord box.** Number keys play the diatonic chords of the key in close voicings. Sketch a progression and send it to the verse or the chorus.
 - **Record your melody.** Press Rec, play the letter keys over the looping section, and your notes replace the generated melody, snapped to the grid. A metronome click is one button away.
-- **Draw notes in the roll.** In the amber lead lane, click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, edits work while the section loops, and Clear melody brings the generated hook back.
+- **Draw notes in the roll.** The lead, arp and bass lanes are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits work while the section loops, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.
 - **Drums.** 808, 909, Lo-fi and Trap kits, a step grid per part, fills, sidechain pump.
 - **Sound.** Patches per layer, waveform, filter, envelope, detune, delay and reverb sends, a mixer with mute and solo, momentary punch-in effects.
 - **Transitions.** Risers into louder sections and a crash on their first beat.
