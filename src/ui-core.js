@@ -8,19 +8,19 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
   chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',
-            sound:{lead:{wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
+            sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
   dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',
-            sound:{lead:{wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
+            sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
   driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',
-            sound:{lead:{wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
+            sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
   dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',
-            sound:{lead:{wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
+            sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
   retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',
-            sound:{lead:{wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
+            sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
   uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',
-            sound:{lead:{wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
+            sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
   odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',
-            sound:{lead:{wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
+            sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
 const WAVES=[['sine','M2 7q3-7 6 0t6 0 6 0'],['triangle','M2 12l3-10 3 10 3-10 3 10 3-10 3 10'],['saw','M2 12l6-10v10l6-10v10l6-10v10'],['square','M2 12v-10h6v10h6v-10h6v10'],['super','M2 12l4-10v10l4-10v10l4-10v10l4-10v10l4-10v10']];
 const PATCHES={
@@ -98,7 +98,9 @@ function restore(p){
     warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
-  if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
+  // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
+  // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
+  if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();
 }

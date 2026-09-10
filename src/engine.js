@@ -3,10 +3,12 @@
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  // vibrato and vibRate belong to the lead and glide to the bass: the layers that sing a line and the one
+  // that walks between notes. A parameter a layer does not have simply has no control in the Sound panel.
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,vibrato:30,vibRate:45,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
   arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
   chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,glide:18,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
@@ -43,6 +45,8 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // the note a glideing layer played last, so the next one can slide out of it
+    this.glideFrom={};
   }
   init(ctxIn){
     if(this.ctx)return;
@@ -189,9 +193,35 @@ class Engine{
     for(let i=1;i<=legs;i++)o.detune.linearRampToValueAtTime(det+Z.driftCents(dr,Math.random()),time+span*i/legs);
   }
 
+  // glide: a layer that slides between notes starts the next note on the pitch of the one before and ramps
+  // up to its own. Only notes close together slide — a longer gap is a new phrase, and it starts on pitch.
+  // The ramp always lands exactly on the note asked for, so a slide never leaves the key.
+  glideFrom_(L,midi,time,durSec){
+    const p=this.params[L],prev=this.glideFrom[L];
+    if(p.glide===undefined)return 0;
+    const sec=Z.glideSec(p.glide,durSec);
+    this.glideFrom[L]={midi,time};
+    if(!(sec>0)||!prev||prev.midi===midi)return 0;
+    const gap=time-prev.time;
+    return (gap>=0&&gap<=Z.GLIDE.gap)?{sec,freq:midiHz(prev.midi)}:0;
+  }
+  // vibrato: one slow LFO into the detune of every oscillator of the voice, held at nothing for a moment
+  // and then faded in, so a short note is straight and a held one comes alive. Cents, never a semitone.
+  vibrato_(L,oscs,time,durSec){
+    const p=this.params[L];
+    if(!Z.vibrates(p.vibrato,durSec))return null;
+    const ctx=this.ctx,lfo=ctx.createOscillator(),dep=ctx.createGain();
+    lfo.type='sine';lfo.frequency.value=Z.vibRateHz(p.vibRate);
+    dep.gain.setValueAtTime(0,time);dep.gain.setValueAtTime(0,time+Z.VIB.onset);
+    dep.gain.linearRampToValueAtTime(Z.vibCents(p.vibrato),time+Z.VIB.onset+Z.VIB.fade);
+    lfo.connect(dep);oscs.forEach(o=>dep.connect(o.detune));
+    lfo.start(time);return lfo;
+  }
+
   /* ---- synth voice ---- */
   playNote(L,midi,vel,time,durSec,pan,busName){
     const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
+    const slide=this.glideFrom_(L,midi,time,durSec);
     const out=ctx.createGain();out.gain.setValueAtTime(0,time);
     const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
     // the filter opens a shade differently on every note, the way a warm analog one does
@@ -200,11 +230,17 @@ class Engine{
     if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
     else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
     const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
-    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
+    // a sliding voice starts on the note before and ramps to its own; every other voice starts on pitch
+    const tune=(o,hz,ratio)=>{
+      if(!slide){o.frequency.value=hz;return}
+      o.frequency.setValueAtTime(slide.freq*ratio,time);o.frequency.exponentialRampToValueAtTime(hz,time+slide.sec);
+    };
+    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;tune(o,freq,1);this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
     if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
     else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
     else mk(wave,0);
-    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';tune(sub,freq/2,0.5);this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    const vib=this.vibrato_(L,oscs,time,durSec);
     const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
     out.gain.linearRampToValueAtTime(peak,time+atk);
     if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);
@@ -216,7 +252,7 @@ class Engine{
     const release=(t)=>{
       if(released)return;released=true;
       out.gain.cancelScheduledValues(t);out.gain.setValueAtTime(Math.max(out.gain.value,0.0001),t);
-      out.gain.setTargetAtTime(0,t,rel/4);oscs.forEach(o=>o.stop(t+rel+0.1));
+      out.gain.setTargetAtTime(0,t,rel/4);oscs.forEach(o=>o.stop(t+rel+0.1));if(vib)vib.stop(t+rel+0.1);
     };
     if(durSec!==undefined)release(time+durSec);
     return release;
@@ -345,11 +381,11 @@ class Engine{
   /* ---- transport & scheduler ---- */
   start(section){
     this.init();if(this.ctx.resume)this.ctx.resume();
-    this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];
+    this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];this.glideFrom={};
     this.grid=this.ctx.currentTime+0.08;
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;

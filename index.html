@@ -403,6 +403,11 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         </div>
         <div class="field" data-synth><label for="p-spread">Detune spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20"></div>
         <div class="field" data-synth><label for="p-drift">Analog drift <output id="o-drift"></output></label><input type="range" id="p-drift" min="0" max="100" value="28" title="Analog drift: every note of this layer wanders a few cents in pitch and opens its filter a shade differently, so repeated notes never sound identical. Always far under a semitone, so the note never changes."></div>
+        <div class="field" data-synth data-param="glide"><label for="p-glide">Glide <output id="o-glide"></output></label><input type="range" id="p-glide" min="0" max="100" value="18" title="Glide: the bass slides up or down into each note from the one before, the way a finger slides along a string. Only notes close together slide, the slide never takes more than part of the note, and it always lands exactly on the note — so the bass still never leaves the key."></div>
+        <div class="row2" data-synth data-param="vibrato">
+          <div class="field"><label for="p-vibrato">Vibrato <output id="o-vibrato"></output></label><input type="range" id="p-vibrato" min="0" max="100" value="30" title="Vibrato: a held lead note waits a moment and then comes alive, the way a singer leans into a long note. Short notes stay perfectly straight, and the swing is measured in cents — never wide enough to change the note."></div>
+          <div class="field"><label for="p-vibRate">Vibrato rate <output id="o-vibRate"></output></label><input type="range" id="p-vibRate" min="0" max="100" value="45" title="How fast the lead's vibrato swings, from a slow lean to a fast shimmer."></div>
+        </div>
         <div class="field" data-drums><label for="kit">Kit</label><select id="kit" title="The drum machine: 808 deep and boomy, 909 punchy, Lo-fi soft and dusty, Trap long-tailed, House punchy with open bright hats, Breaks dusty with a room-y snare. The kit also decides what the perc row plays — a rim, a shaker or a cowbell."></select></div>
         <div class="field" data-drums>
           <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
@@ -470,6 +475,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
+      <li><b>Let it slide and sing.</b> Pick the <b>bass</b> tab in the Sound panel and there is a <b>Glide</b> amount: the bass slides up or down into each note from the one before, the way a finger slides along a string, whenever the two notes are close enough together to belong to one phrase. Pick the <b>lead</b> tab and there is <b>Vibrato</b> and a rate beside it: a note you hold waits a moment and then comes alive, the way a singer leans into a long note, while short notes stay dead straight. Both come set gently, both are in the WAV export, and both are locked to the key — a slide always lands exactly on the note it was heading for, and vibrato is measured in cents, never a semitone.</li>
       <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
       <li><b>Pick a kit and add some perc.</b> The Sound panel's drums tab has six kits — <b>808</b> deep and boomy, <b>909</b> punchy, <b>Lo-fi</b> soft and dusty, <b>Trap</b> long-tailed, <b>House</b> punchy with open bright hats, <b>Breaks</b> dusty with a room-y snare. Under the kit, the step grid's last row is <b>perc</b>, and the kit decides what it plays: a cowbell, a rim or a shaker. Busy sections come with a perc figure already, off the backbeat and behind it in level; click the row to write your own. It follows the kit into the WAV export and reaches your DAW as the matching GM percussion note.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
@@ -885,6 +891,35 @@ function warmthCurve(v){
 const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
 const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
 
+/* Glide. The bass can slide from the note before into the note it is playing — portamento, the sound of a
+   finger sliding up a string or a mono synth being played legato. A slide bends pitch, so the scale lock
+   sets its terms: it always arrives exactly on the note it was heading for, it is never longer than
+   GLIDE.maxSec, and it never takes more than GLIDE.maxFrac of the note, so every note spends most of its
+   life dead on pitch. Only notes close together slide — more than GLIDE.gap apart and the bass simply
+   plays the new note, the way a player lifts their hand between phrases. */
+const GLIDE={maxSec:0.22,maxFrac:0.45,gap:1.2};
+const glideAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+// how long the slide into a note lasts, in seconds: nothing at all at the bottom of the knob
+function glideSec(amount,durSec){
+  const a=glideAmt(amount);if(!(a>0))return 0;
+  const d=(durSec===undefined||!(durSec>0))?1:durSec;
+  return Math.min(GLIDE.maxSec*a,d*GLIDE.maxFrac);
+}
+// where a slide has got to, a fraction of the way through: an exponential ramp in frequency is a straight
+// line in semitones, so a glide crosses the interval evenly and can never overshoot either end of it
+function glideMidi(from,to,frac){const f=Math.max(0,Math.min(1,+frac||0));return from+(to-from)*f}
+
+/* Vibrato. The lead can be given a vibrato that waits a moment and then fades in, the way a singer or a
+   string player leans into a note they are holding: a short note stays perfectly straight, a long one comes
+   alive. Depth is in cents and rate in hertz, and the depth is capped so that everything that can bend a
+   sounding note — drift, the chorus and a full vibrato together — still comes to less than a semitone. */
+const VIB={cents:26,rateLo:2.2,rateHi:7.2,onset:0.28,fade:0.35};
+const vibAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+const vibCents=d=>vibAmt(d)*VIB.cents;                       // the swing either way, at full depth
+const vibRateHz=r=>VIB.rateLo+vibAmt(r)*(VIB.rateHi-VIB.rateLo);
+// a note shorter than the onset never gets any vibrato at all, so a fast line stays straight
+const vibrates=(depth,durSec)=>vibCents(depth)>0&&(durSec===undefined||durSec>VIB.onset);
+
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -921,7 +956,8 @@ function generateTrack(cfg,seeds,part,loop){
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
-  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
+  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
+  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();
 </script>
 <script>
@@ -930,10 +966,12 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  // vibrato and vibRate belong to the lead and glide to the bass: the layers that sing a line and the one
+  // that walks between notes. A parameter a layer does not have simply has no control in the Sound panel.
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,vibrato:30,vibRate:45,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
   arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
   chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,glide:18,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
@@ -970,6 +1008,8 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // the note a glideing layer played last, so the next one can slide out of it
+    this.glideFrom={};
   }
   init(ctxIn){
     if(this.ctx)return;
@@ -1116,9 +1156,35 @@ class Engine{
     for(let i=1;i<=legs;i++)o.detune.linearRampToValueAtTime(det+Z.driftCents(dr,Math.random()),time+span*i/legs);
   }
 
+  // glide: a layer that slides between notes starts the next note on the pitch of the one before and ramps
+  // up to its own. Only notes close together slide — a longer gap is a new phrase, and it starts on pitch.
+  // The ramp always lands exactly on the note asked for, so a slide never leaves the key.
+  glideFrom_(L,midi,time,durSec){
+    const p=this.params[L],prev=this.glideFrom[L];
+    if(p.glide===undefined)return 0;
+    const sec=Z.glideSec(p.glide,durSec);
+    this.glideFrom[L]={midi,time};
+    if(!(sec>0)||!prev||prev.midi===midi)return 0;
+    const gap=time-prev.time;
+    return (gap>=0&&gap<=Z.GLIDE.gap)?{sec,freq:midiHz(prev.midi)}:0;
+  }
+  // vibrato: one slow LFO into the detune of every oscillator of the voice, held at nothing for a moment
+  // and then faded in, so a short note is straight and a held one comes alive. Cents, never a semitone.
+  vibrato_(L,oscs,time,durSec){
+    const p=this.params[L];
+    if(!Z.vibrates(p.vibrato,durSec))return null;
+    const ctx=this.ctx,lfo=ctx.createOscillator(),dep=ctx.createGain();
+    lfo.type='sine';lfo.frequency.value=Z.vibRateHz(p.vibRate);
+    dep.gain.setValueAtTime(0,time);dep.gain.setValueAtTime(0,time+Z.VIB.onset);
+    dep.gain.linearRampToValueAtTime(Z.vibCents(p.vibrato),time+Z.VIB.onset+Z.VIB.fade);
+    lfo.connect(dep);oscs.forEach(o=>dep.connect(o.detune));
+    lfo.start(time);return lfo;
+  }
+
   /* ---- synth voice ---- */
   playNote(L,midi,vel,time,durSec,pan,busName){
     const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
+    const slide=this.glideFrom_(L,midi,time,durSec);
     const out=ctx.createGain();out.gain.setValueAtTime(0,time);
     const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
     // the filter opens a shade differently on every note, the way a warm analog one does
@@ -1127,11 +1193,17 @@ class Engine{
     if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
     else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
     const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
-    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
+    // a sliding voice starts on the note before and ramps to its own; every other voice starts on pitch
+    const tune=(o,hz,ratio)=>{
+      if(!slide){o.frequency.value=hz;return}
+      o.frequency.setValueAtTime(slide.freq*ratio,time);o.frequency.exponentialRampToValueAtTime(hz,time+slide.sec);
+    };
+    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;tune(o,freq,1);this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
     if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
     else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
     else mk(wave,0);
-    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';tune(sub,freq/2,0.5);this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    const vib=this.vibrato_(L,oscs,time,durSec);
     const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
     out.gain.linearRampToValueAtTime(peak,time+atk);
     if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);
@@ -1143,7 +1215,7 @@ class Engine{
     const release=(t)=>{
       if(released)return;released=true;
       out.gain.cancelScheduledValues(t);out.gain.setValueAtTime(Math.max(out.gain.value,0.0001),t);
-      out.gain.setTargetAtTime(0,t,rel/4);oscs.forEach(o=>o.stop(t+rel+0.1));
+      out.gain.setTargetAtTime(0,t,rel/4);oscs.forEach(o=>o.stop(t+rel+0.1));if(vib)vib.stop(t+rel+0.1);
     };
     if(durSec!==undefined)release(time+durSec);
     return release;
@@ -1272,11 +1344,11 @@ class Engine{
   /* ---- transport & scheduler ---- */
   start(section){
     this.init();if(this.ctx.resume)this.ctx.resume();
-    this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];
+    this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];this.glideFrom={};
     this.grid=this.ctx.currentTime+0.08;
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -1348,19 +1420,19 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
   chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',
-            sound:{lead:{wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
+            sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
   dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',
-            sound:{lead:{wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
+            sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
   driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',
-            sound:{lead:{wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
+            sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
   dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',
-            sound:{lead:{wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
+            sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
   retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',
-            sound:{lead:{wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
+            sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
   uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',
-            sound:{lead:{wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
+            sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
   odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',
-            sound:{lead:{wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
+            sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
 const WAVES=[['sine','M2 7q3-7 6 0t6 0 6 0'],['triangle','M2 12l3-10 3 10 3-10 3 10 3-10 3 10'],['saw','M2 12l6-10v10l6-10v10l6-10v10'],['square','M2 12v-10h6v10h6v-10h6v10'],['super','M2 12l4-10v10l4-10v10l4-10v10l4-10v10l4-10v10']];
 const PATCHES={
@@ -1438,7 +1510,9 @@ function restore(p){
     warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
-  if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
+  // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
+  // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
+  if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();
 }
@@ -1893,10 +1967,12 @@ $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecIn
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
-const PARAMS=['cutoff','reso','attack','release','spread','drift','chorus','delay','reverb','pump','level'];
+const PARAMS=['cutoff','reso','attack','release','spread','drift','glide','vibrato','vibRate','chorus','delay','reverb','pump','level'];
 // drift reads as the cents a note may stray either way: the knob's own units are meaningless, the wander is not
 const driftFmt=v=>v>0?'± '+(Math.round(Z.driftCents(v,1)*10)/10)+' ct':'off';
-const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
+const glideFmt=v=>v>0?Math.round(Z.glideSec(v)*1000)+' ms':'off';
+const vibFmt=v=>v>0?'± '+Math.round(Z.vibCents(v))+' ct':'off';
+const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
 function renderSound(){
@@ -1905,6 +1981,8 @@ function renderSound(){
   $('tabs').querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent===L));
   document.querySelectorAll('[data-synth]').forEach(el=>el.hidden=!synth);
   document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
+  // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
+  document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
@@ -1916,10 +1994,19 @@ $('p-chorus').addEventListener('change',e=>{const v=+e.target.value;
 $('p-drift').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?state.layer+' drifts by '+driftFmt(v)+': every note wanders a little in pitch and filter, so no two are the same. You hear it in the WAV export too.'
     :state.layer+' drift off: every note is machine-identical');});
+$('p-glide').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Bass glide '+glideFmt(v)+': the bass slides into each note from the one before, when they are close enough together to be one phrase. It always lands exactly on the note, and the WAV export slides too.'
+    :'Bass glide off: every note starts on its own pitch');});
+$('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
+    :'Lead vibrato off: every note is held dead straight');});
+$('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
+  if(L==='bass')P.glide=r(0,55);
+  if(L==='lead'){P.vibrato=r(0,70);P.vibRate=r(20,80)}
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
@@ -2043,8 +2130,16 @@ function midiFile(){
   const GM={kick:36,snare:38,clap:39,hat:42,ohat:46,perc:Z.PERC_GM[percVoice()]||Z.PERC_GM.rim};
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
-    const chorus=(E.params[L]||{}).chorus;
-    if(chorus>0)evs.push({tick:0,cc:93,val:Math.max(0,Math.min(127,Math.round(chorus*1.27)))});
+    const pm=E.params[L]||{},cc7=v=>Math.max(0,Math.min(127,Math.round(v)));
+    if(pm.chorus>0)evs.push({tick:0,cc:93,val:cc7(pm.chorus*1.27)});
+    // a glideing bass asks its instrument for portamento (CC65 on, CC5 for the time), and a lead with
+    // vibrato for the same delayed vibrato it plays here: GM2 CC76 depth, CC77 rate and CC78 delay
+    if(pm.glide>0){evs.push({tick:0,cc:65,val:127},{tick:0,cc:5,val:cc7(Z.glideSec(pm.glide)/Z.GLIDE.maxSec*64)})}
+    if(Z.vibCents(pm.vibrato)>0){
+      evs.push({tick:0,cc:76,val:cc7(64+Z.vibCents(pm.vibrato)/Z.VIB.cents*63)});
+      evs.push({tick:0,cc:77,val:cc7(64+(Z.vibRateHz(pm.vibRate)-Z.VIB.rateLo)/(Z.VIB.rateHi-Z.VIB.rateLo)*63)});
+      evs.push({tick:0,cc:78,val:cc7(64+Z.VIB.onset/0.5*63)});
+    }
     S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});

@@ -398,6 +398,35 @@ function warmthCurve(v){
 const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
 const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
 
+/* Glide. The bass can slide from the note before into the note it is playing — portamento, the sound of a
+   finger sliding up a string or a mono synth being played legato. A slide bends pitch, so the scale lock
+   sets its terms: it always arrives exactly on the note it was heading for, it is never longer than
+   GLIDE.maxSec, and it never takes more than GLIDE.maxFrac of the note, so every note spends most of its
+   life dead on pitch. Only notes close together slide — more than GLIDE.gap apart and the bass simply
+   plays the new note, the way a player lifts their hand between phrases. */
+const GLIDE={maxSec:0.22,maxFrac:0.45,gap:1.2};
+const glideAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+// how long the slide into a note lasts, in seconds: nothing at all at the bottom of the knob
+function glideSec(amount,durSec){
+  const a=glideAmt(amount);if(!(a>0))return 0;
+  const d=(durSec===undefined||!(durSec>0))?1:durSec;
+  return Math.min(GLIDE.maxSec*a,d*GLIDE.maxFrac);
+}
+// where a slide has got to, a fraction of the way through: an exponential ramp in frequency is a straight
+// line in semitones, so a glide crosses the interval evenly and can never overshoot either end of it
+function glideMidi(from,to,frac){const f=Math.max(0,Math.min(1,+frac||0));return from+(to-from)*f}
+
+/* Vibrato. The lead can be given a vibrato that waits a moment and then fades in, the way a singer or a
+   string player leans into a note they are holding: a short note stays perfectly straight, a long one comes
+   alive. Depth is in cents and rate in hertz, and the depth is capped so that everything that can bend a
+   sounding note — drift, the chorus and a full vibrato together — still comes to less than a semitone. */
+const VIB={cents:26,rateLo:2.2,rateHi:7.2,onset:0.28,fade:0.35};
+const vibAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+const vibCents=d=>vibAmt(d)*VIB.cents;                       // the swing either way, at full depth
+const vibRateHz=r=>VIB.rateLo+vibAmt(r)*(VIB.rateHi-VIB.rateLo);
+// a note shorter than the onset never gets any vibrato at all, so a fast line stays straight
+const vibrates=(depth,durSec)=>vibCents(depth)>0&&(durSec===undefined||durSec>VIB.onset);
+
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -434,5 +463,6 @@ function generateTrack(cfg,seeds,part,loop){
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
-  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
+  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
+  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();

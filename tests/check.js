@@ -372,6 +372,107 @@ for(const bars of [1,2,4,8,16]){
   assert(new Set(V.map(v=>v.rate)).size===V.length,'chorus voices sharing one rate would move as one');
 }
 
+// glide: the bass slides from the note before into the note it is playing. A slide bends pitch, so the
+// scale lock says how: it must always arrive exactly on the note it was heading for, it must never take so
+// long that the note is more slide than note, and it must never overshoot either end of the interval — so
+// a bass can sing between two notes of the key without ever landing between them.
+{
+  const amounts=[1,18,50,100],none=[0,-40,NaN,undefined,null,'x'],durs=[0.05,0.12,0.4,1.5,4];
+  assert(Z.GLIDE.maxSec>0&&Z.GLIDE.maxSec<0.5,'a glide of '+Z.GLIDE.maxSec+' s is a slur, not a slide');
+  assert(Z.GLIDE.maxFrac>0&&Z.GLIDE.maxFrac<=0.5,'a glide taking '+Z.GLIDE.maxFrac+' of a note would leave it more slide than note');
+  assert(Z.GLIDE.gap>0,'notes must be allowed some distance apart and still slide into one another');
+  for(const a of none)for(const d of durs)assert(Z.glideSec(a,d)===0,'a glide amount of '+a+' should mean no slide at all');
+  for(const a of amounts){
+    assert(Z.glideSec(a)>0,'a glide amount of '+a+' should slide a held note played from the keys');
+    for(const d of durs){
+      const g=Z.glideSec(a,d),tag=' [glide '+a+' · '+d+' s]';
+      assert(g>0,'a glide amount of '+a+' should slide'+tag);
+      assert(g<=Z.GLIDE.maxSec+1e-12,'a slide of '+g+' s is longer than the '+Z.GLIDE.maxSec+' the knob allows'+tag);
+      assert(g<=d*Z.GLIDE.maxFrac+1e-12,'a slide of '+g+' s takes too much of a '+d+' s note'+tag);
+      assert(d-g>=d*(1-Z.GLIDE.maxFrac)-1e-12,'a '+d+' s note spends too little of itself on pitch'+tag);
+    }
+  }
+  assert(Z.glideSec(140,1)===Z.glideSec(100,1),'a glide amount past 100 should clamp to 100');
+  assert(Z.glideSec(50,1)<Z.glideSec(100,1),'the glide knob does not open up evenly');
+  // the slide itself: it starts on the note before, ends exactly on the note played, and stays between them
+  for(const scale in Z.SCALES){
+    for(const root of [0,1,2,3,4,5,6,7,8,9,10,11]){
+      const tag=' [glide · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+      const ps=Z.scalePitches({root,scale},Z.BASS_LO,Z.BASS_HI).map(p=>p.midi);
+      for(let i=1;i<ps.length;i++)for(const [from,to] of [[ps[i-1],ps[i]],[ps[i],ps[i-1]],[ps[0],ps[i]]]){
+        assert(Z.glideMidi(from,to,0)===from,'a slide does not start on the note before'+tag);
+        assert(Z.glideMidi(from,to,1)===to,'a slide ends on '+Z.glideMidi(from,to,1)+', not the '+to+' that was played'+tag);
+        assert(Z.glideMidi(from,to,9)===to&&Z.glideMidi(from,to,-9)===from,'a slide must clamp a position outside its own span'+tag);
+        const lo=Math.min(from,to),hi=Math.max(from,to);
+        for(const f of [0.1,0.25,0.5,0.75,0.9]){
+          const m=Z.glideMidi(from,to,f);
+          assert(m>=lo-1e-12&&m<=hi+1e-12,'a slide reaches '+m+', outside the '+from+'→'+to+' it is crossing'+tag);
+        }
+      }
+    }
+  }
+}
+
+// vibrato: the lead leans into a note it is holding. It is measured in cents, it waits before it starts so
+// a short note stays straight, and — with analog drift and the chorus bending the same note at the same
+// time — everything together must still come to less than a semitone, or a held note could change pitch.
+{
+  const depths=[1,25,30,50,100],none=[0,-40,NaN,undefined,null,'x'];
+  assert(Z.VIB.cents>0&&Z.VIB.cents<50,'a vibrato of '+Z.VIB.cents+' cents could reach the next semitone');
+  assert(Z.VIB.rateLo>0&&Z.VIB.rateLo<Z.VIB.rateHi&&Z.VIB.rateHi<12,'the vibrato rate range is not a vibrato');
+  assert(Z.VIB.onset>0&&Z.VIB.onset<1,'vibrato must wait a moment, but not a whole phrase');
+  assert(Z.VIB.fade>0,'vibrato must fade in rather than switch on');
+  for(const d of none){assert(Z.vibCents(d)===0,'a vibrato depth of '+d+' should hold a note dead straight');
+    assert(Z.vibrates(d,4)===false,'a vibrato depth of '+d+' should never move a note')}
+  for(const d of depths){
+    const c=Z.vibCents(d),tag=' [vibrato '+d+']';
+    assert(c>0&&c<=Z.VIB.cents+1e-12,'a vibrato of '+c+' cents is past the '+Z.VIB.cents+' the knob allows'+tag);
+    assert(c<50,'a vibrato of '+c+' cents would change the note itself'+tag);
+    // only a note longer than the onset ever gets any: a fast line is straight
+    assert(Z.vibrates(d,Z.VIB.onset/2)===false,'a note shorter than the onset must stay straight'+tag);
+    assert(Z.vibrates(d,Z.VIB.onset*4)===true,'a held note should come alive'+tag);
+    assert(Z.vibrates(d,undefined)===true,'a note held from the keys should come alive'+tag);
+  }
+  assert(Z.vibCents(140)===Z.vibCents(100),'a vibrato depth past 100 should clamp to 100');
+  assert(Z.vibCents(50)===Z.VIB.cents/2,'the vibrato depth does not scale evenly');
+  for(const r of [0,25,50,75,100]){
+    const hz=Z.vibRateHz(r);
+    assert(hz>=Z.VIB.rateLo-1e-12&&hz<=Z.VIB.rateHi+1e-12,'a vibrato rate of '+hz+' Hz is outside the knob');
+  }
+  assert(Z.vibRateHz(0)===Z.VIB.rateLo&&Z.vibRateHz(100)===Z.VIB.rateHi,'the vibrato rate knob does not reach its own limits');
+  assert(Z.vibRateHz(140)===Z.vibRateHz(100)&&Z.vibRateHz(-40)===Z.vibRateHz(0),'the vibrato rate knob does not clamp');
+  // everything that can bend one sounding note, all the way up at once, is still less than a semitone
+  const widest=Math.max.apply(null,Z.CHORUS.voices.map(Z.chorusCents));
+  const total=Z.DRIFT.cents+widest+Z.vibCents(100);
+  assert(total<50,'drift, chorus and vibrato together bend a note by '+total+' cents, far enough to change it');
+  // the scale lock: a note at the top of its swing still rounds to the note that was played, in every key
+  for(const scale in Z.SCALES){
+    for(const root of [0,1,2,3,4,5,6,7,8,9,10,11]){
+      const tag=' [vibrato · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+      for(const p of Z.scalePitches({root,scale},48,84))for(const dir of [-1,1]){
+        const heard=p.midi+dir*total/100;
+        assert(Math.round(heard)===p.midi,'a note in full vibrato sounds as '+heard+', not the '+p.midi+' that was played'+tag);
+        assert(((Math.round(heard)%12)+12)%12===((p.midi%12)+12)%12,'a note in full vibrato lost its pitch class'+tag);
+      }
+    }
+  }
+}
+
+// which layer gets which: the bass is the one that slides between notes and the lead the one that sings a
+// held note, and the engine's own defaults must say so — a control with no parameter behind it does nothing,
+// and a parameter with no control could never be reached.
+{
+  assert(Z.DEFAULTS.bass.glide!==undefined,'the bass has no glide amount to slide with');
+  assert(Z.DEFAULTS.lead.vibrato!==undefined&&Z.DEFAULTS.lead.vibRate!==undefined,'the lead has no vibrato to sing with');
+  for(const L of Z.LAYERS){
+    if(L!=='bass')assert(Z.DEFAULTS[L].glide===undefined,'the '+L+' has a glide amount but nothing that slides');
+    if(L!=='lead')assert(Z.DEFAULTS[L].vibrato===undefined&&Z.DEFAULTS[L].vibRate===undefined,'the '+L+' has a vibrato but nothing that sings');
+  }
+  assert(Z.glideSec(Z.DEFAULTS.bass.glide,1)>0,'a fresh track should already have a little glide on the bass');
+  assert(Z.vibrates(Z.DEFAULTS.lead.vibrato,2),'a fresh track should already sing a little on a held lead note');
+  assert(Z.vibCents(Z.DEFAULTS.lead.vibrato)<Z.VIB.cents,'the default vibrato should be gentle, not the widest there is');
+}
+
 // warmth: the master soft clip and its high shelf. It may colour a mix and lift its quiet half, but it must
 // never push the signal past full scale, never invert it, never boost the top end, and at 0 it must be a
 // true bypass — one knob you can leave anywhere without the mix falling apart.
@@ -506,7 +607,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

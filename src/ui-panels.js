@@ -83,10 +83,12 @@ $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecIn
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
-const PARAMS=['cutoff','reso','attack','release','spread','drift','chorus','delay','reverb','pump','level'];
+const PARAMS=['cutoff','reso','attack','release','spread','drift','glide','vibrato','vibRate','chorus','delay','reverb','pump','level'];
 // drift reads as the cents a note may stray either way: the knob's own units are meaningless, the wander is not
 const driftFmt=v=>v>0?'± '+(Math.round(Z.driftCents(v,1)*10)/10)+' ct':'off';
-const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
+const glideFmt=v=>v>0?Math.round(Z.glideSec(v)*1000)+' ms':'off';
+const vibFmt=v=>v>0?'± '+Math.round(Z.vibCents(v))+' ct':'off';
+const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
 function renderSound(){
@@ -95,6 +97,8 @@ function renderSound(){
   $('tabs').querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent===L));
   document.querySelectorAll('[data-synth]').forEach(el=>el.hidden=!synth);
   document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
+  // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
+  document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
@@ -106,10 +110,19 @@ $('p-chorus').addEventListener('change',e=>{const v=+e.target.value;
 $('p-drift').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?state.layer+' drifts by '+driftFmt(v)+': every note wanders a little in pitch and filter, so no two are the same. You hear it in the WAV export too.'
     :state.layer+' drift off: every note is machine-identical');});
+$('p-glide').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Bass glide '+glideFmt(v)+': the bass slides into each note from the one before, when they are close enough together to be one phrase. It always lands exactly on the note, and the WAV export slides too.'
+    :'Bass glide off: every note starts on its own pitch');});
+$('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
+    :'Lead vibrato off: every note is held dead straight');});
+$('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
+  if(L==='bass')P.glide=r(0,55);
+  if(L==='lead'){P.vibrato=r(0,70);P.vibRate=r(20,80)}
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
@@ -233,8 +246,16 @@ function midiFile(){
   const GM={kick:36,snare:38,clap:39,hat:42,ohat:46,perc:Z.PERC_GM[percVoice()]||Z.PERC_GM.rim};
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
-    const chorus=(E.params[L]||{}).chorus;
-    if(chorus>0)evs.push({tick:0,cc:93,val:Math.max(0,Math.min(127,Math.round(chorus*1.27)))});
+    const pm=E.params[L]||{},cc7=v=>Math.max(0,Math.min(127,Math.round(v)));
+    if(pm.chorus>0)evs.push({tick:0,cc:93,val:cc7(pm.chorus*1.27)});
+    // a glideing bass asks its instrument for portamento (CC65 on, CC5 for the time), and a lead with
+    // vibrato for the same delayed vibrato it plays here: GM2 CC76 depth, CC77 rate and CC78 delay
+    if(pm.glide>0){evs.push({tick:0,cc:65,val:127},{tick:0,cc:5,val:cc7(Z.glideSec(pm.glide)/Z.GLIDE.maxSec*64)})}
+    if(Z.vibCents(pm.vibrato)>0){
+      evs.push({tick:0,cc:76,val:cc7(64+Z.vibCents(pm.vibrato)/Z.VIB.cents*63)});
+      evs.push({tick:0,cc:77,val:cc7(64+(Z.vibRateHz(pm.vibRate)-Z.VIB.rateLo)/(Z.VIB.rateHi-Z.VIB.rateLo)*63)});
+      evs.push({tick:0,cc:78,val:cc7(64+Z.VIB.onset/0.5*63)});
+    }
     S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
