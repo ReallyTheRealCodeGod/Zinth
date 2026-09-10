@@ -19,6 +19,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Drums.** 808, 909, Lo-fi and Trap kits, a step grid per part, fills, sidechain pump.
 - **Sound.** Patches per layer, waveform, filter, envelope, detune, delay and reverb sends, a mixer with mute and solo, momentary punch-in effects.
 - **Analog drift.** Every synth layer wanders a few cents in pitch and opens its filter a shade differently on every note, so repeated notes never sound identical and pads breathe. Subtle by default, per layer, and never enough to change a note.
+- **Chorus and warmth.** A **Chorus** amount per layer sends it into a stereo chorus — three short delay lines drifting under their own slow LFOs — so pads spread out and leads sound like more than one player. **Warmth** beside the volume drives the whole mix into a soft clip with the top end rolled off a shade, the way tape or a valve does. Both are in the WAV export, and the MIDI carries the chorus as CC93.
 - **Transitions.** Risers into louder sections and a crash on their first beat.
 - **Leaves Zinth.** Export the whole song as WAV or as a MIDI file with one track per layer and drums on channel 10. Save and open projects as JSON. Everything autosaves in the browser, with undo and redo.
 

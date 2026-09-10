@@ -330,6 +330,41 @@ const driftR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
 function driftCents(amount,r){return driftR(r)*DRIFT.cents*driftAmt(amount)}
 // what a voice's filter cutoff is multiplied by: always a positive number near 1, so a note is never lost
 function driftCutoff(amount,r){return 1+driftR(r)*DRIFT.cutoff*driftAmt(amount)}
+/* Chorus. A shared stereo chorus bus: three short delay lines, each one slowly modulated by its own LFO
+   and panned across the field, that every synth layer can send into. A delay line that moves bends the
+   pitch of whatever runs through it, so a chorus is only ever allowed to move a note by a few cents —
+   the same rule analog drift lives by, and for the same reason: the scale lock holds at any setting. */
+const CHORUS={mix:0.9,maxDelay:0.06,maxCents:25,voices:[
+  {delay:0.0115,rate:0.24,depth:0.0026,pan:-0.75},
+  {delay:0.0178,rate:0.31,depth:0.0021,pan:0.75},
+  {delay:0.0242,rate:0.17,depth:0.0028,pan:0},
+]};
+// the furthest a chorus voice ever pushes a note, in cents: the delay time moves at depth·2π·rate at its
+// steepest, and a delay line that is stretching or shrinking that fast bends the pitch by exactly that much
+function chorusCents(v){return 1200*Math.log2(1+Math.abs(v.depth*2*Math.PI*v.rate))}
+
+/* Warmth. One knob on the master that drives a soft-clip waveshaper and rolls the top end off a little
+   with a high shelf, the way pushing a mix through tape or a valve does: the quiet half of the signal
+   comes up, the peaks round over instead of cornering, and the air comes down a shade so it never turns
+   brittle. At 0 the curve is thrown away entirely and the shelf is flat, so warmth off is a true bypass. */
+const WARMTH={drive:2.6,shelfHz:3200,shelfDb:-5,trim:0.15,points:1024,dflt:22};
+const warmthAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+const warmthDrive=v=>warmthAmt(v)*WARMTH.drive;
+// the soft clip itself, normalised so that ±1 in is ±1 out: it can lift a signal but never push it past
+// full scale, and it is odd-symmetric, so it colours a waveform without ever moving its centre
+function warmthShape(x,v){
+  x=Math.max(-1,Math.min(1,+x||0));const d=warmthDrive(v);
+  return d>0?Math.tanh(d*x)/Math.tanh(d):x;
+}
+function warmthCurve(v){
+  if(!(warmthDrive(v)>0))return null; // null is a WaveShaper's own bypass: the signal passes untouched
+  const n=WARMTH.points,c=new Float32Array(n);
+  for(let i=0;i<n;i++)c[i]=warmthShape(i/(n-1)*2-1,v);
+  return c;
+}
+const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
+const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
+
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -365,5 +400,6 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
 })();

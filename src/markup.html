@@ -21,6 +21,7 @@
       <button class="btn" id="saveProj" title="Save the whole project as a .json file">Save</button>
       <button class="btn" id="openProj" title="Open a saved .json project">Open</button>
       <input type="file" id="projFile" accept=".json,application/json" hidden>
+      <div class="vol warm"><span>Warmth</span><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does — the quiet half comes up, the peaks round over, nothing turns brittle. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
       <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
       <button class="btn icon" id="helpBtn" title="How Zinth works and every shortcut (?)">?</button>
       <span class="status" id="status" aria-live="polite"></span>
@@ -118,6 +119,7 @@
           <div class="grid" id="grid"></div>
         </div>
         <div class="field" data-drums><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35"></div>
+        <div class="field" data-synth><label for="p-chorus">Chorus <output id="o-chorus"></output></label><input type="range" id="p-chorus" min="0" max="100" value="22" title="Chorus: send this layer into a stereo chorus — three slowly drifting delay lines spread across the field — so it comes back wide, thick and moving. It never bends a note far enough to change it, and the WAV export is chorused too."></div>
         <div class="row2">
           <div class="field"><label for="p-delay">Delay <output id="o-delay"></output></label><input type="range" id="p-delay" min="0" max="100" value="20"></div>
           <div class="field"><label for="p-reverb">Reverb <output id="o-reverb"></output></label><input type="range" id="p-reverb" min="0" max="100" value="30"></div>
@@ -178,6 +180,7 @@
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
+      <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">

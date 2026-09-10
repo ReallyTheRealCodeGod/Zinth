@@ -3,10 +3,10 @@
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,delay:35,reverb:30,level:75,mute:false,solo:false},
-  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,delay:45,reverb:25,level:55,mute:false,solo:false},
-  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,delay:0, reverb:5, level:80,mute:false,solo:false},
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes
@@ -29,7 +29,7 @@ function identityCurve(){const c=new Float32Array(3);c[0]=-1;c[1]=0;c[2]=1;retur
 class Engine{
   constructor(){
     this.ctx=null;this.params=JSON.parse(JSON.stringify(DEFAULTS));this.kit='808';
-    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;
+    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
   }
@@ -37,6 +37,11 @@ class Engine{
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
     this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // warmth: the whole mix through a soft clip and a gentle high shelf, before anything else touches it,
+    // so a section sweep, a punch-in and the limiter all work on an already warmed signal
+    this.warmShape=ctx.createWaveShaper();this.warmShape.oversample='2x';
+    this.warmTone=ctx.createBiquadFilter();this.warmTone.type='highshelf';this.warmTone.frequency.value=Z.WARMTH.shelfHz;
+    this.warmTrim=ctx.createGain();
     // the per-section sweep: a master low-pass that a section can open or close over its own length
     this.sweep=ctx.createBiquadFilter();this.sweep.type='lowpass';this.sweep.Q.value=1.1;this.sweep.frequency.value=Z.SWEEP.open;
     // punch-in chain: highpass -> lowpass -> crusher -> gate
@@ -50,7 +55,9 @@ class Engine{
     // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
     this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.master.connect(this.sweep);this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
+    this.master.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);
+    this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
     this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
@@ -64,6 +71,20 @@ class Engine{
     this.reverbOut=ctx.createGain();this.reverbOut.gain.value=0.9;
     this.reverbIn.connect(this.reverb);this.reverb.connect(this.reverbOut);this.reverbOut.connect(this.master);
     this.wash=ctx.createGain();this.wash.gain.value=0;this.duck.connect(this.wash);this.wash.connect(this.reverbIn);
+    // chorus bus: a few short delay lines, each drifting under its own slow LFO and sitting in its own
+    // place in the stereo field. A synth layer sends into it and comes back wide, thick and moving.
+    this.chorusIn=ctx.createGain();this.chorusOut=ctx.createGain();this.chorusOut.gain.value=Z.CHORUS.mix;
+    this.chorusLfos=[];
+    for(const v of Z.CHORUS.voices){
+      const dl=ctx.createDelay(Z.CHORUS.maxDelay);dl.delayTime.value=v.delay;
+      const lfo=ctx.createOscillator();lfo.type='sine';lfo.frequency.value=v.rate;
+      const dep=ctx.createGain();dep.gain.value=v.depth;lfo.connect(dep);dep.connect(dl.delayTime);
+      lfo.start(0);this.chorusLfos.push(lfo);
+      this.chorusIn.connect(dl);
+      if(ctx.createStereoPanner){const pn=ctx.createStereoPanner();pn.pan.value=v.pan;dl.connect(pn);pn.connect(this.chorusOut)}
+      else dl.connect(this.chorusOut);
+    }
+    this.chorusOut.connect(this.master);
     // layer buses
     this.bus={};
     for(const L of LAYERS){
@@ -71,9 +92,11 @@ class Engine{
       ds.gain.value=sendGain(p.delay);rs.gain.value=sendGain(p.reverb);
       g.connect(L==='drums'?this.master:this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);
       this.bus[L]={g,ds,rs};
+      if(p.chorus!==undefined){const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);this.bus[L].cs=cs}
     }
     {const p=this.params.chords,g=ctx.createGain();g.gain.value=levelGain(p.level);const ds=ctx.createGain();ds.gain.value=sendGain(p.delay);const rs=ctx.createGain();rs.gain.value=sendGain(p.reverb);
-     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs}}
+     const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);
+     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs}}
     this.updateGains(true);
     this.noise=this.makeNoise(2);
   }
@@ -88,6 +111,16 @@ class Engine{
   }
   setBpm(b){this.bpm=b;if(this.ctx)this.delay.delayTime.setTargetAtTime(0.75*60/b,this.ctx.currentTime,0.05)}
   setMaster(v){this.masterLevel=Math.pow(v/100,1.6);if(this.ctx)this.master.gain.setTargetAtTime(this.masterLevel,this.ctx.currentTime,0.02)}
+  // warmth: one knob, a soft-clip curve and a high shelf. At 0 the curve is dropped and the shelf is flat,
+  // so the mix passes through untouched; the trim takes back the level the clip adds as it is driven.
+  setWarmth(v,now){
+    this.warmth=Z.warmthAmt(v)*100;
+    if(!this.ctx||!this.warmShape)return;
+    const t=this.ctx.currentTime,sh=Z.warmthShelf(this.warmth),tr=Z.warmthTrim(this.warmth);
+    this.warmShape.curve=Z.warmthCurve(this.warmth);
+    if(now){this.warmTone.gain.value=sh;this.warmTrim.gain.value=tr}
+    else{this.warmTone.gain.setTargetAtTime(sh,t,0.03);this.warmTrim.gain.setTargetAtTime(tr,t,0.03)}
+  }
   anySolo(){return LAYERS.some(L=>this.params[L].solo)}
   audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}
   updateGains(now){
@@ -100,10 +133,12 @@ class Engine{
     if(key==='level'||key==='mute'||key==='solo')this.updateGains(false);
     else if(key==='delay')b.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
     else if(key==='reverb')b.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+    else if(key==='chorus'&&b.cs)b.cs.gain.setTargetAtTime(sendGain(val),t,0.03);
     if(L==='chords'&&this.bus.live){const lb=this.bus.live;
       if(key==='level')lb.g.gain.setTargetAtTime(levelGain(val),t,0.03);
       else if(key==='delay')lb.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
-      else if(key==='reverb')lb.rs.gain.setTargetAtTime(sendGain(val),t,0.03)}
+      else if(key==='reverb')lb.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+      else if(key==='chorus')lb.cs.gain.setTargetAtTime(sendGain(val),t,0.03)}
   }
   stepSec(){return 60/this.bpm/4}
 

@@ -51,6 +51,7 @@ kbd{font:500 11px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .seed input{width:210px;height:36px;padding:0 10px;background:#0e1017;border:1px solid var(--line);border-radius:var(--r);font:500 12px var(--mono);letter-spacing:.03em}
 .vol{display:flex;align-items:center;gap:8px;color:var(--ink-dim);font-size:12px}
 .vol input{width:90px}
+.vol.warm input{width:66px}
 .status{font:400 11px var(--mono);color:var(--ink-mute);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
 .scope{width:120px;height:36px;background:#0e1017;border:1px solid var(--line);border-radius:var(--r)}
 
@@ -310,6 +311,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <button class="btn" id="saveProj" title="Save the whole project as a .json file">Save</button>
       <button class="btn" id="openProj" title="Open a saved .json project">Open</button>
       <input type="file" id="projFile" accept=".json,application/json" hidden>
+      <div class="vol warm"><span>Warmth</span><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does — the quiet half comes up, the peaks round over, nothing turns brittle. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
       <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
       <button class="btn icon" id="helpBtn" title="How Zinth works and every shortcut (?)">?</button>
       <span class="status" id="status" aria-live="polite"></span>
@@ -407,6 +409,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
           <div class="grid" id="grid"></div>
         </div>
         <div class="field" data-drums><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35"></div>
+        <div class="field" data-synth><label for="p-chorus">Chorus <output id="o-chorus"></output></label><input type="range" id="p-chorus" min="0" max="100" value="22" title="Chorus: send this layer into a stereo chorus — three slowly drifting delay lines spread across the field — so it comes back wide, thick and moving. It never bends a note far enough to change it, and the WAV export is chorused too."></div>
         <div class="row2">
           <div class="field"><label for="p-delay">Delay <output id="o-delay"></output></label><input type="range" id="p-delay" min="0" max="100" value="20"></div>
           <div class="field"><label for="p-reverb">Reverb <output id="o-reverb"></output></label><input type="range" id="p-reverb" min="0" max="100" value="30"></div>
@@ -467,6 +470,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
+      <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
@@ -812,6 +816,41 @@ const driftR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
 function driftCents(amount,r){return driftR(r)*DRIFT.cents*driftAmt(amount)}
 // what a voice's filter cutoff is multiplied by: always a positive number near 1, so a note is never lost
 function driftCutoff(amount,r){return 1+driftR(r)*DRIFT.cutoff*driftAmt(amount)}
+/* Chorus. A shared stereo chorus bus: three short delay lines, each one slowly modulated by its own LFO
+   and panned across the field, that every synth layer can send into. A delay line that moves bends the
+   pitch of whatever runs through it, so a chorus is only ever allowed to move a note by a few cents —
+   the same rule analog drift lives by, and for the same reason: the scale lock holds at any setting. */
+const CHORUS={mix:0.9,maxDelay:0.06,maxCents:25,voices:[
+  {delay:0.0115,rate:0.24,depth:0.0026,pan:-0.75},
+  {delay:0.0178,rate:0.31,depth:0.0021,pan:0.75},
+  {delay:0.0242,rate:0.17,depth:0.0028,pan:0},
+]};
+// the furthest a chorus voice ever pushes a note, in cents: the delay time moves at depth·2π·rate at its
+// steepest, and a delay line that is stretching or shrinking that fast bends the pitch by exactly that much
+function chorusCents(v){return 1200*Math.log2(1+Math.abs(v.depth*2*Math.PI*v.rate))}
+
+/* Warmth. One knob on the master that drives a soft-clip waveshaper and rolls the top end off a little
+   with a high shelf, the way pushing a mix through tape or a valve does: the quiet half of the signal
+   comes up, the peaks round over instead of cornering, and the air comes down a shade so it never turns
+   brittle. At 0 the curve is thrown away entirely and the shelf is flat, so warmth off is a true bypass. */
+const WARMTH={drive:2.6,shelfHz:3200,shelfDb:-5,trim:0.15,points:1024,dflt:22};
+const warmthAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+const warmthDrive=v=>warmthAmt(v)*WARMTH.drive;
+// the soft clip itself, normalised so that ±1 in is ±1 out: it can lift a signal but never push it past
+// full scale, and it is odd-symmetric, so it colours a waveform without ever moving its centre
+function warmthShape(x,v){
+  x=Math.max(-1,Math.min(1,+x||0));const d=warmthDrive(v);
+  return d>0?Math.tanh(d*x)/Math.tanh(d):x;
+}
+function warmthCurve(v){
+  if(!(warmthDrive(v)>0))return null; // null is a WaveShaper's own bypass: the signal passes untouched
+  const n=WARMTH.points,c=new Float32Array(n);
+  for(let i=0;i<n;i++)c[i]=warmthShape(i/(n-1)*2-1,v);
+  return c;
+}
+const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
+const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
+
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -847,7 +886,8 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+  CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
 })();
 </script>
 <script>
@@ -856,10 +896,10 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,delay:35,reverb:30,level:75,mute:false,solo:false},
-  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,delay:45,reverb:25,level:55,mute:false,solo:false},
-  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,delay:0, reverb:5, level:80,mute:false,solo:false},
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes
@@ -882,7 +922,7 @@ function identityCurve(){const c=new Float32Array(3);c[0]=-1;c[1]=0;c[2]=1;retur
 class Engine{
   constructor(){
     this.ctx=null;this.params=JSON.parse(JSON.stringify(DEFAULTS));this.kit='808';
-    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;
+    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
   }
@@ -890,6 +930,11 @@ class Engine{
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
     this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // warmth: the whole mix through a soft clip and a gentle high shelf, before anything else touches it,
+    // so a section sweep, a punch-in and the limiter all work on an already warmed signal
+    this.warmShape=ctx.createWaveShaper();this.warmShape.oversample='2x';
+    this.warmTone=ctx.createBiquadFilter();this.warmTone.type='highshelf';this.warmTone.frequency.value=Z.WARMTH.shelfHz;
+    this.warmTrim=ctx.createGain();
     // the per-section sweep: a master low-pass that a section can open or close over its own length
     this.sweep=ctx.createBiquadFilter();this.sweep.type='lowpass';this.sweep.Q.value=1.1;this.sweep.frequency.value=Z.SWEEP.open;
     // punch-in chain: highpass -> lowpass -> crusher -> gate
@@ -903,7 +948,9 @@ class Engine{
     // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
     this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.master.connect(this.sweep);this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
+    this.master.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);
+    this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
     this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
@@ -917,6 +964,20 @@ class Engine{
     this.reverbOut=ctx.createGain();this.reverbOut.gain.value=0.9;
     this.reverbIn.connect(this.reverb);this.reverb.connect(this.reverbOut);this.reverbOut.connect(this.master);
     this.wash=ctx.createGain();this.wash.gain.value=0;this.duck.connect(this.wash);this.wash.connect(this.reverbIn);
+    // chorus bus: a few short delay lines, each drifting under its own slow LFO and sitting in its own
+    // place in the stereo field. A synth layer sends into it and comes back wide, thick and moving.
+    this.chorusIn=ctx.createGain();this.chorusOut=ctx.createGain();this.chorusOut.gain.value=Z.CHORUS.mix;
+    this.chorusLfos=[];
+    for(const v of Z.CHORUS.voices){
+      const dl=ctx.createDelay(Z.CHORUS.maxDelay);dl.delayTime.value=v.delay;
+      const lfo=ctx.createOscillator();lfo.type='sine';lfo.frequency.value=v.rate;
+      const dep=ctx.createGain();dep.gain.value=v.depth;lfo.connect(dep);dep.connect(dl.delayTime);
+      lfo.start(0);this.chorusLfos.push(lfo);
+      this.chorusIn.connect(dl);
+      if(ctx.createStereoPanner){const pn=ctx.createStereoPanner();pn.pan.value=v.pan;dl.connect(pn);pn.connect(this.chorusOut)}
+      else dl.connect(this.chorusOut);
+    }
+    this.chorusOut.connect(this.master);
     // layer buses
     this.bus={};
     for(const L of LAYERS){
@@ -924,9 +985,11 @@ class Engine{
       ds.gain.value=sendGain(p.delay);rs.gain.value=sendGain(p.reverb);
       g.connect(L==='drums'?this.master:this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);
       this.bus[L]={g,ds,rs};
+      if(p.chorus!==undefined){const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);this.bus[L].cs=cs}
     }
     {const p=this.params.chords,g=ctx.createGain();g.gain.value=levelGain(p.level);const ds=ctx.createGain();ds.gain.value=sendGain(p.delay);const rs=ctx.createGain();rs.gain.value=sendGain(p.reverb);
-     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs}}
+     const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);
+     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs}}
     this.updateGains(true);
     this.noise=this.makeNoise(2);
   }
@@ -941,6 +1004,16 @@ class Engine{
   }
   setBpm(b){this.bpm=b;if(this.ctx)this.delay.delayTime.setTargetAtTime(0.75*60/b,this.ctx.currentTime,0.05)}
   setMaster(v){this.masterLevel=Math.pow(v/100,1.6);if(this.ctx)this.master.gain.setTargetAtTime(this.masterLevel,this.ctx.currentTime,0.02)}
+  // warmth: one knob, a soft-clip curve and a high shelf. At 0 the curve is dropped and the shelf is flat,
+  // so the mix passes through untouched; the trim takes back the level the clip adds as it is driven.
+  setWarmth(v,now){
+    this.warmth=Z.warmthAmt(v)*100;
+    if(!this.ctx||!this.warmShape)return;
+    const t=this.ctx.currentTime,sh=Z.warmthShelf(this.warmth),tr=Z.warmthTrim(this.warmth);
+    this.warmShape.curve=Z.warmthCurve(this.warmth);
+    if(now){this.warmTone.gain.value=sh;this.warmTrim.gain.value=tr}
+    else{this.warmTone.gain.setTargetAtTime(sh,t,0.03);this.warmTrim.gain.setTargetAtTime(tr,t,0.03)}
+  }
   anySolo(){return LAYERS.some(L=>this.params[L].solo)}
   audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}
   updateGains(now){
@@ -953,10 +1026,12 @@ class Engine{
     if(key==='level'||key==='mute'||key==='solo')this.updateGains(false);
     else if(key==='delay')b.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
     else if(key==='reverb')b.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+    else if(key==='chorus'&&b.cs)b.cs.gain.setTargetAtTime(sendGain(val),t,0.03);
     if(L==='chords'&&this.bus.live){const lb=this.bus.live;
       if(key==='level')lb.g.gain.setTargetAtTime(levelGain(val),t,0.03);
       else if(key==='delay')lb.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
-      else if(key==='reverb')lb.rs.gain.setTargetAtTime(sendGain(val),t,0.03)}
+      else if(key==='reverb')lb.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+      else if(key==='chorus')lb.cs.gain.setTargetAtTime(sendGain(val),t,0.03)}
   }
   stepSec(){return 60/this.bpm/4}
 
@@ -1247,7 +1322,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -1285,6 +1360,7 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
@@ -1324,6 +1400,7 @@ function applyMood(seed){
 }
 function syncControls(){
   $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;
+  $('warmth').value=state.warmth;E.setWarmth(state.warmth);
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
   $('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);
@@ -1739,10 +1816,10 @@ $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecIn
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
-const PARAMS=['cutoff','reso','attack','release','spread','drift','delay','reverb','pump','level'];
+const PARAMS=['cutoff','reso','attack','release','spread','drift','chorus','delay','reverb','pump','level'];
 // drift reads as the cents a note may stray either way: the knob's own units are meaningless, the wander is not
 const driftFmt=v=>v>0?'± '+(Math.round(Z.driftCents(v,1)*10)/10)+' ct':'off';
-const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
+const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
 function renderSound(){
@@ -1756,13 +1833,16 @@ function renderSound(){
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
 }
 PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;E.setParam(state.layer,k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+$('p-chorus').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?state.layer+' into the chorus at '+v+' %: three slowly drifting delay lines, spread across the stereo field, so it sounds wide and alive. It never moves a note far enough to change it, and the WAV export is chorused too.'
+    :state.layer+' chorus off: dry and centred');});
 $('p-drift').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?state.layer+' drifts by '+driftFmt(v)+': every note wanders a little in pitch and filter, so no two are the same. You hear it in the WAV export too.'
     :state.layer+' drift off: every note is machine-identical');});
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
-  const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55)};
+  const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;U.persist();U.setStatus('Kit: '+state.kit)});
@@ -1853,7 +1933,7 @@ async function exportWav(){
   try{
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.init(off);
+    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.init(off);
     let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
@@ -1863,7 +1943,8 @@ async function exportWav(){
 }
 $('exportWav').addEventListener('click',exportWav);
 // Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
-// A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses.
+// A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses,
+// and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth.
 function midiFile(){
   const PPQ=96,T16=PPQ/4,S=song(),stepSec=60/state.bpm/4;
   const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
@@ -1876,6 +1957,8 @@ function midiFile(){
   const CH={lead:0,arp:1,chords:2,bass:3,drums:9},PROG={lead:80,arp:81,chords:89,bass:38},GM={kick:36,snare:38,clap:39,hat:42,ohat:46};
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
+    const chorus=(E.params[L]||{}).chorus;
+    if(chorus>0)evs.push({tick:0,cc:93,val:Math.max(0,Math.min(127,Math.round(chorus*1.27)))});
     S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
@@ -1924,6 +2007,10 @@ $('energy').addEventListener('input',e=>{state.energy=+e.target.value;syncLabels
 $('bpm').addEventListener('input',e=>{state.bpm=+e.target.value;E.setBpm(state.bpm);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();U.persist()});
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
 $('master').addEventListener('input',e=>{E.setMaster(+e.target.value);U.persist()});
+$('warmth').addEventListener('input',e=>{state.warmth=+e.target.value;E.setWarmth(state.warmth);U.persist()});
+$('warmth').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Warmth '+v+' %: the whole mix through a soft clip with the top end rolled off a shade — the quiet half comes up, the peaks round over. The WAV export is warmed the same way.'
+    :'Warmth off: the mix stays clean and digital');});
 $('evolve').addEventListener('click',()=>{state.evolve=!state.evolve;$('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);U.persist()});
 $('transTgl').addEventListener('click',()=>{state.transitions=!state.transitions;E.transitions=state.transitions;U.syncControls();U.persist();U.setStatus(state.transitions?'Risers and crashes on':'Transitions off')});
 function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textContent=state.bpm;$('energyVal').textContent=state.energy;$('swingVal').textContent=state.swing+' %'}

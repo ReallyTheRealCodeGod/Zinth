@@ -344,6 +344,75 @@ for(const bars of [1,2,4,8,16]){
   }
 }
 
+// chorus: a delay line that moves bends the pitch of whatever runs through it, so the stereo chorus every
+// synth layer can send into is held to the same rule as analog drift — it may widen a note, never change it.
+// Its delay lines must also stay inside the buffer they were given and never ask for a negative delay time.
+{
+  const V=Z.CHORUS.voices;
+  assert(Array.isArray(V)&&V.length>=2,'a stereo chorus needs at least two voices');
+  assert(Z.CHORUS.mix>0&&Z.CHORUS.mix<=1,'the chorus return of '+Z.CHORUS.mix+' is not a usable mix level');
+  assert(Z.CHORUS.maxCents>0&&Z.CHORUS.maxCents<50,'a chorus allowed '+Z.CHORUS.maxCents+' cents could change the note');
+  V.forEach((v,i)=>{
+    const tag=' [chorus voice '+(i+1)+']';
+    assert(v.delay-v.depth>0,'a chorus voice would ask for a negative delay time'+tag);
+    assert(v.delay+v.depth<Z.CHORUS.maxDelay,'a chorus voice would run past its own delay buffer'+tag);
+    assert(v.delay>=0.005&&v.delay<=0.04,'a delay of '+v.delay+' s is an echo or a comb, not a chorus'+tag);
+    assert(v.rate>0.05&&v.rate<2,'a chorus rate of '+v.rate+' Hz is not the slow drift a chorus wants'+tag);
+    assert(v.depth>0,'a chorus voice that does not move is just a delay'+tag);
+    assert(v.pan>=-1&&v.pan<=1,'a chorus voice is panned outside the stereo field'+tag);
+    const cents=Z.chorusCents(v);
+    assert(cents>0,'a chorus voice must move the pitch a little, or it adds nothing'+tag);
+    assert(cents<=Z.CHORUS.maxCents,'a chorus voice bends a note by '+cents+' cents, past the '+Z.CHORUS.maxCents+' allowed'+tag);
+    assert(cents<50,'a chorus voice bends a note by '+cents+' cents, far enough to change the note'+tag);
+    // the scale lock: a chorused note still rounds to the note that was played, in every key and scale
+    for(const dir of [-1,1])for(const m of [Z.BASS_LO,60,72,96])
+      assert(Math.round(m+dir*cents/100)===m,'a chorused note sounds as '+(m+dir*cents/100)+', not the '+m+' that was played'+tag);
+  });
+  assert(V.some(v=>v.pan<0)&&V.some(v=>v.pan>0),'a stereo chorus must reach both sides of the field');
+  assert(new Set(V.map(v=>v.rate)).size===V.length,'chorus voices sharing one rate would move as one');
+}
+
+// warmth: the master soft clip and its high shelf. It may colour a mix and lift its quiet half, but it must
+// never push the signal past full scale, never invert it, never boost the top end, and at 0 it must be a
+// true bypass — one knob you can leave anywhere without the mix falling apart.
+{
+  const amounts=[0,1,12,22,50,75,100],bad=[-40,140,NaN,undefined,null,'x'],none=[-40,NaN,undefined,null,'x'];
+  assert(Z.WARMTH.drive>0,'warmth with no drive would do nothing at all');
+  assert(Z.WARMTH.shelfDb<0,'the warmth shelf must roll the top end off, not boost it');
+  assert(Z.WARMTH.shelfHz>1000&&Z.WARMTH.shelfHz<12000,'a shelf at '+Z.WARMTH.shelfHz+' Hz is not the top end');
+  assert(Z.WARMTH.trim>0&&Z.WARMTH.trim<1,'the warmth trim must take a little level, not all of it');
+  assert(Z.WARMTH.dflt>=0&&Z.WARMTH.dflt<=100,'the default warmth is not on the knob');
+  assert(Z.warmthCurve(0)===null,'warmth at 0 must leave the mix untouched');
+  assert(Z.warmthShelf(0)===0&&Z.warmthTrim(0)===1,'warmth at 0 must leave the tone and the level alone');
+  for(const a of none)assert(Z.warmthCurve(a)===null&&Z.warmthShelf(a)===0&&Z.warmthTrim(a)===1,'a warmth of '+a+' should mean no warmth at all');
+  assert(Z.warmthAmt(140)===1&&Z.warmthAmt(-3)===0,'warmth past either end of the knob should clamp to it');
+  for(const a of amounts.concat(bad)){
+    const tag=' [warmth '+a+']',sh=Z.warmthShelf(a),tr=Z.warmthTrim(a);
+    assert(sh<=0&&sh>=Z.WARMTH.shelfDb-1e-12,'a warmth shelf of '+sh+' dB is outside 0 to '+Z.WARMTH.shelfDb+tag);
+    assert(tr>0&&tr<=1,'a warmth trim of '+tr+' is outside (0, 1]'+tag);
+    assert(Math.abs(Z.warmthShape(0,a))<1e-12,'warmth must leave silence silent'+tag);
+    assert(Math.abs(Z.warmthShape(1,a)-1)<1e-12&&Math.abs(Z.warmthShape(-1,a)+1)<1e-12,'warmth must map full scale to full scale, so it can never clip harder than the mix already does'+tag);
+    let last=-2;
+    for(let i=0;i<=64;i++){
+      const x=i/64*2-1,y=Z.warmthShape(x,a);
+      assert(y>=-1-1e-12&&y<=1+1e-12,'warmth pushed '+x+' to '+y+', past full scale'+tag);
+      assert(y>=last-1e-12,'the warmth curve turns back on itself at '+x+', which would fold the waveform'+tag);
+      last=y;
+      assert(Math.abs(y+Z.warmthShape(-x,a))<1e-12,'the warmth curve is not odd-symmetric, so it would shift the waveform off centre'+tag);
+      if(x>0)assert(y>=x-1e-12,'warmth at '+x+' came back quieter as '+y+', so it is not lifting the quiet half'+tag);
+    }
+    // an input past full scale is held there, the way the waveshaper itself holds the ends of its curve
+    assert(Z.warmthShape(4,a)===Z.warmthShape(1,a)&&Z.warmthShape(-4,a)===Z.warmthShape(-1,a),'warmth must hold its ends outside ±1'+tag);
+  }
+  // the curve handed to the waveshaper is the same function, sampled: ends at ±1, rising all the way
+  const c=Z.warmthCurve(100);
+  assert(c&&c.length===Z.WARMTH.points,'the warmth curve is not the size it says it is');
+  assert(Math.abs(c[0]+1)<1e-6&&Math.abs(c[c.length-1]-1)<1e-6,'the warmth curve does not span full scale');
+  for(let i=1;i<c.length;i++)assert(c[i]>=c[i-1]-1e-12,'the warmth curve is not monotonic at sample '+i);
+  assert(Z.warmthShape(0.25,100)>Z.warmthShape(0.25,25),'more warmth must mean more drive');
+  assert(Z.warmthShelf(100)<Z.warmthShelf(25),'more warmth must roll more of the top end off');
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -357,7 +426,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
