@@ -118,6 +118,41 @@ for(const scale in Z.SCALES){
     }
   }
 }
+// recording from the keys into a layer: a pressed letter key lands where that layer sings — the lead as
+// played, the arp an octave up inside its lane, the bass inside MIDI 36–59 — always keeping its pitch class,
+// and the result is diatonic to the chord scale, so an arp or bass take is as locked as a drawn note.
+for(const scale in Z.SCALES){
+  const cs=Z.chordScaleOf(scale);
+  for(let root=0;root<12;root++){
+    const base=(root>=6?48:60)+root,ar=Z.arpRange(root),chPcs=pcsOf(root,cs.steps);
+    const keys=Z.scalePitches({root,scale},base,base+40).filter(p=>!p.passing).slice(0,14);
+    const tag=' [record into · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+    assert(keys.length>0,'no letter keys in this key'+tag);
+    keys.forEach(p=>{
+      const pc=p.midi%12;
+      assert(Z.recordPitch('lead',p.midi,root)===p.midi,'the lead records at a pitch other than the one you press'+tag);
+      const a=Z.recordPitch('arp',p.midi,root);
+      assert(a%12===pc,'recorded arp note lost its pitch class'+tag);
+      assert(a>=ar[0]&&a<=ar[1],'recorded arp note '+a+' outside the arp lane '+ar.join('–')+tag);
+      assert(chPcs.has(a%12),'recorded arp note '+Z.NOTE_NAMES[a%12]+' outside the chord scale'+tag);
+      const b=Z.recordPitch('bass',p.midi,root);
+      assert(b%12===pc,'recorded bass note lost its pitch class'+tag);
+      assert(b>=Z.BASS_LO&&b<=Z.BASS_HI,'recorded bass note '+b+' out of register'+tag);
+      assert(chPcs.has(b%12),'recorded bass note '+Z.NOTE_NAMES[b%12]+' outside the chord scale'+tag);
+    });
+    // a take goes through the same path as a drawn lane, so it comes back verbatim and stays in register
+    const S={chords:'REC001',lead:'REC001',arp:'REC001',bass:'REC001',drums:'REC001'};
+    const cfgR={root,scale,energy:55,evolve:true,sevenths:false,gate:0.7};
+    const take=L=>keys.slice(0,6).map((p,i)=>({step:i*4,dur:3,midi:Z.recordPitch(L,p.midi,root),vel:0.85}));
+    const ta=Z.generateTrack(Object.assign({},cfgR,{arpEvents:take('arp')}),S,'v',0);
+    ta.arp.forEach((e,i)=>{assert(e.midi===take('arp')[i].midi,'a recorded arp note changed on the way to playback'+tag);
+      assert(chPcs.has(((e.midi%12)+12)%12),'a recorded arp note left the chord scale'+tag)});
+    const tb=Z.generateTrack(Object.assign({},cfgR,{bassEvents:take('bass')}),S,'v',0);
+    tb.bass.forEach(e=>{assert(e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'a recorded bass note left its register'+tag);
+      assert(chPcs.has(((e.midi%12)+12)%12),'a recorded bass note left the chord scale'+tag)});
+  }
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -131,7 +166,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

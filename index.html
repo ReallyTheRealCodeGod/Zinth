@@ -59,6 +59,10 @@ kbd{font:500 11px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .opt.rec{color:var(--rose);border-color:rgba(242,109,133,.5)}
 .opt.rec.on{color:#fff;background:var(--rose);border-color:var(--rose);animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{filter:brightness(.75)}}
+.recbar .into{font:600 10px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute)}
+.recbar .seg{height:28px}
+.recbar .seg button{height:26px;font-size:10px}
+.recbar .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
 .recinfo{font:400 11px var(--mono);color:var(--ink-mute);padding-left:4px}
 .sheet{position:fixed;inset:0;background:rgba(10,11,17,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;backdrop-filter:blur(3px)}
 .sheet-card{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:22px 26px;max-width:640px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.5)}
@@ -266,6 +270,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .key.root{background:linear-gradient(180deg,#ffe3aa,#f2c66a)}
 .key.down,.key:active{transform:translateY(2px);box-shadow:0 1px 0 #9a9384;background:linear-gradient(180deg,#8fe6dc,#4fd1c5)}
 .key.root.down{background:linear-gradient(180deg,#ffd07a,#f5a524)}
+/* while Rec is armed the keys press in the colour of the layer you are recording into */
+.keys.armed .key.down,.keys.armed .key:active,.keys.armed .key.root.down{background:linear-gradient(180deg,#f4efe2,var(--c))}
 
 @media (max-width:1180px){.main{grid-template-columns:250px minmax(0,1fr)}.snd{grid-column:1/-1}}
 @media (max-width:760px){.main{grid-template-columns:1fr}.keys{grid-template-columns:repeat(7,1fr)}.transport{margin-left:0}.mixer{grid-template-columns:repeat(2,1fr)}}
@@ -390,7 +396,13 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <h2 style="margin:0;font:600 12px var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Play along</h2>
       <p id="kbHint">Everything below is locked to the key, so the chord pads and the letter-key notes all fit the track.</p>
       <div class="opts recbar">
-        <button class="opt rec" id="recBtn" aria-pressed="false" title="Record the letter keys into the melody of the selected section's part. Starts playback looping that section.">● Rec</button>
+        <button class="opt rec" id="recBtn" aria-pressed="false" title="Record the letter keys into the selected section's part. Starts playback looping that section.">● Rec</button>
+        <span class="into">into</span>
+        <div class="seg" id="recTarget" role="group" aria-label="Record into">
+          <button data-v="lead" aria-pressed="true" title="Record into the lead: the letter keys play as you hear them (I)">lead</button>
+          <button data-v="arp" aria-pressed="false" title="Record into the arp: the letter keys play an octave up, where the arp sings (I)">arp</button>
+          <button data-v="bass" aria-pressed="false" title="Record into the bass: the letter keys drop into the bass register (I)">bass</button>
+        </div>
         <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
         <button class="opt" id="clearMel" title="Remove your own melody for this part, recorded or drawn in the roll, and bring the generated one back">Clear melody</button>
         <span class="recinfo" id="recInfo"></span>
@@ -424,15 +436,16 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Press Play.</b> You are hearing a whole song: intro, verses, choruses, a break, a drop. Every note of every layer is locked to one key and scale, so nothing ever sounds off.</li>
       <li><b>Roll until you smile.</b> New track rerolls everything. Lock a layer in the mixer to keep it, hit its dice to reroll just that one. Moods pick scale, tempo and sounds for you.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
-      <li><b>Record your hook.</b> Press Rec, play the letter keys over the looping section, and your melody replaces the generated one, snapped to the grid. Undo is always one press away.</li>
+      <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>
+      <div><kbd>I</kbd> record into: lead → arp → bass</div><div><kbd>?</kbd> this sheet</div>
       <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
       <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> release held chords</div>
-      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div><div><kbd>?</kbd> this sheet</div>
+      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div>
     </div>
   </div>
 </div>
@@ -616,6 +629,16 @@ function generateArp(cfg,chords,rng){
 // the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
 const BASS_LO=36,BASS_HI=59;
 function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
+// the arp sings above the chords: this is the window its generator writes in and its roll lane draws
+const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+41]};
+// where a letter key lands when you record it into a layer: the lead as played, the arp an octave up,
+// the bass folded into its own register. The pitch class never changes, so the key stays locked.
+function recordPitch(L,midi,root){
+  if(L==='bass')return bassRegister(midi);
+  if(L!=='arp')return midi;
+  const r=arpRange(root);let m=midi+12;
+  while(m>r[1])m-=12;while(m<r[0])m+=12;return m;
+}
 function generateBass(cfg,chords,rng){
   const energy=cfg.energy/100;
   const pattern=rng.weighted(['roots','pulse','octave','synco','walk'],[1.2-energy,0.4+energy,0.3+energy,0.5+energy*0.6,0.6]);
@@ -677,7 +700,7 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch});
 })();
 </script>
 <script>
@@ -954,7 +977,9 @@ class Engine{
     if(!this.ctx||!this.playing)return null;const now=this.ctx.currentTime;let p=null;
     for(const q of this.queue){if(q.time<=now)p=q;else break}return p;
   }
-  noteOn(midi){this.init();if(this.ctx.resume)this.ctx.resume();return this.playNote('lead',midi,0.9,this.ctx.currentTime,undefined,0.08)}
+  // a live note from the letter keys: it sounds through the layer you play into, so recording sounds like playback
+  noteOn(midi,L){const layer=this.params[L]?L:'lead';this.init();if(this.ctx.resume)this.ctx.resume();
+    return this.playNote(layer,midi,0.9,this.ctx.currentTime,undefined,layer==='lead'?0.08:0)}
   rms(){
     if(!this.ctx)return 0;const a=new Uint8Array(this.analyser.fftSize);this.analyser.getByteTimeDomainData(a);
     let s=0;for(let i=0;i<a.length;i++){const v=(a[i]-128)/128;s+=v*v}return Math.sqrt(s/a.length);
@@ -1015,7 +1040,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,
-  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',
+  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -1052,7 +1077,7 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead'});
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse'});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
@@ -1116,9 +1141,10 @@ function loadCode(){
   syncControls();regenerate();setStatus('Loaded '+c.seeds.chords);
 }
 function sectionCfg(sec){
-  // while recording is armed, parts without a recording fall silent so you record over a clean backing
-  const leadEvents=state.leadEdits[sec.part]||(rec.armed?[]:null);
-  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents,arpEvents:state.arpEdits[sec.part],bassEvents:state.bassEdits[sec.part]});
+  // while recording is armed, the layer you record into falls silent until it holds notes of yours,
+  // so you always play over a clean backing — lead, arp or bass alike
+  const evs=L=>state[EDITS[L]][sec.part]||(rec.armed&&state.recTarget===L?[]:null);
+  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents:evs('lead'),arpEvents:evs('arp'),bassEvents:evs('bass')});
 }
 function buildSong(){return state.sections.map(sec=>Object.assign({},sec,{track:Z.generateTrack(sectionCfg(sec),state.seeds,sec.part,sec.part==='v'?state.loop:0)}))}
 // light rebuild for live edits (recording): keeps the keyboard and pads untouched
@@ -1186,7 +1212,7 @@ function lanePitches(L,sec){
   if(L==='lead'){const lo=64+(root>=6?-6:0);return Z.scalePitches({root,scale:state.scale},lo,lo+22)}
   const scale=Z.SCALES[state.scale].chord||state.scale; // arp and bass follow the chord scale, as their generators do
   if(L==='bass')return Z.scalePitches({root,scale},Z.BASS_LO,Z.BASS_HI);
-  const lo=(root>=6?48:60)+root;return Z.scalePitches({root,scale},lo+7,lo+41);
+  const r=Z.arpRange(root);return Z.scalePitches({root,scale},r[0],r[1]);
 }
 // what a stored note sounds like in this section: the key shift, and the bass folded into its register
 const soundOf=(L,midi,tr)=>{const m=midi+tr;return L==='bass'?Z.bassRegister(m):m};
@@ -1325,7 +1351,7 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,EDITS,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
+Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
 })();
 </script>
 <script>
@@ -1365,32 +1391,51 @@ function drawScope(){
   sctx.stroke();
 }
 
-/* ---------- recording your own melody ---------- */
-const rec=U.rec;
+/* ---------- recording the lead, the arp or the bass from the keys ---------- */
+const rec=U.rec,LANE_NAME=U.LANE_NAME,REC_ORDER=['lead','arp','bass'];
 const partLabel=p=>p==='v'?'A verse':'B chorus';
 function partOfSel(){const s=song()[state.sel];return s?s.part:'v'}
+// where the keys record into this layer, in words, so the status line can always say it
+const recWhere=L=>L==='bass'?'the letter keys drop into the bass register':L==='arp'?'the letter keys play an octave up, where the arp sings':'the letter keys play as you hear them';
+$('recTarget').querySelectorAll('button').forEach(b=>b.style.setProperty('--c',COLORS[b.dataset.v]));
 function renderRecInfo(){
-  const part=partOfSel(),list=state.leadEdits[part];
-  const drawn=['arp','bass'].filter(L=>state[U.EDITS[L]][part]);
-  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated melody')+(drawn.length?' · your own '+drawn.join(' and '):'');
+  const part=partOfSel(),L=state.recTarget,list=state[U.EDITS[L]][part];
+  const others=REC_ORDER.filter(x=>x!==L&&state[U.EDITS[x]][part]);
+  $('recInfo').textContent=partLabel(part)+' · into the '+L+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated '+LANE_NAME[L])+(others.length?' · your own '+others.join(' and '):'');
+  $('recTarget').querySelectorAll('button').forEach(b=>{const on=b.dataset.v===L;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('clearMel').textContent='Clear '+(L==='lead'?'melody':L);
+  $('clearMel').title='Remove your own '+LANE_NAME[L]+' for this part, recorded or drawn in the roll, and bring the generated one back';
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
+}
+function setRecTarget(L){
+  if(!U.EDITS[L]||state.recTarget===L)return;
+  state.recTarget=L;renderKeys();
+  if(rec.armed)U.rebuild();else U.persist();
+  U.setStatus('Recording into the '+L+': '+recWhere(L));
 }
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
   if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;E.start(state.sel);setPlaying(true)}
-  U.rebuild();renderRecInfo();
-  U.setStatus(on?'Recording: play the letter keys, each note snaps to the grid of the '+partLabel(partOfSel())+' sections':'Recording off');
+  U.rebuild();renderKeys();
+  const L=state.recTarget,sec=song()[state.sel];
+  let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
+  if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
+  else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
+  U.setStatus(on?msg:'Recording off');
 }
 function recordNote(start,midi,t1){
-  const sec=song()[start.section];if(!sec)return;const part=sec.part,step=start.step%128;
+  const sec=song()[start.section];if(!sec)return;
+  const L=state.recTarget,part=sec.part,step=start.step%Z.TOTAL,stored=midi-(sec.transpose||0);
   const dur=Math.max(1,Math.round((t1-start.time)/E.stepSec()));
-  const list=(state.leadEdits[part]||[]).filter(e=>!(e.step===step&&e.midi===midi-(sec.transpose||0)));
-  list.push({step,dur,midi:midi-(sec.transpose||0),vel:0.85});list.sort((a,b)=>a.step-b.step);
-  state.leadEdits[part]=list;U.rebuild();renderRecInfo();
+  const list=(state[U.EDITS[L]][part]||[]).filter(e=>!(e.step===step&&e.midi===stored));
+  list.push({step,dur,midi:stored,vel:0.85});list.sort((a,b)=>a.step-b.step);
+  state[U.EDITS[L]][part]=list;U.rebuild();renderRecInfo();
 }
 $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
+$('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});
+function cycleRecTarget(){setRecTarget(REC_ORDER[(REC_ORDER.indexOf(state.recTarget)+1)%REC_ORDER.length])}
 $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecInfo()});
-$('clearMel').addEventListener('click',()=>{const part=partOfSel();state.leadEdits[part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated melody is back for the '+partLabel(part)+' sections')});
+$('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
 const PARAMS=['cutoff','reso','attack','release','spread','delay','reverb','pump','level'];
@@ -1583,6 +1628,7 @@ document.addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();$('play').click();return}
   if(e.repeat)return;
   if(k==='l'){$('loopSec').click();return}
+  if(k==='i'){cycleRecTarget();return}
   if(FXKEYS[k]){fxDown(FXKEYS[k]);return}
   const ci='123456789'.indexOf(e.key);if(ci>=0&&ci<padDefs.length){chordOn(ci);return}
   const ni=KEYMAP.indexOf(e.key.toUpperCase());if(ni>=0)keyOn(ni);
@@ -1640,20 +1686,26 @@ $('useV').addEventListener('click',()=>useProg('v'));$('useC').addEventListener(
 
 /* ---------- note keys ---------- */
 const KEYMAP='ASDFGHJQWERTYU';let kbPitches=[];const held={};
+// while Rec is armed the keys sound the layer you record into, in that layer's own register, so what you
+// play is what you get: the arp an octave up, the bass folded down. The pitch class never changes.
+const recLayer=()=>rec.armed?state.recTarget:'lead';
+const playPitch=i=>kbPitches[i]?Z.recordPitch(recLayer(),kbPitches[i].midi,state.root):0;
 function renderKeys(){
   const base=(state.root>=6?48:60)+state.root;
   kbPitches=Z.scalePitches(U.cfg(),base,base+40).filter(p=>!p.passing).slice(0,14);
-  $('keys').innerHTML=kbPitches.map((p,i)=>'<button class="key'+(p.midi%12===state.root?' root':'')+'" data-i="'+i+'" aria-label="'+Z.NOTE_NAMES[p.midi%12]+(Math.floor(p.midi/12)-1)+'"><span class="n">'+Z.NOTE_NAMES[p.midi%12]+'<sub style="font-size:9px">'+(Math.floor(p.midi/12)-1)+'</sub></span><span class="k">'+KEYMAP[i]+'</span></button>').join('');
+  $('keys').innerHTML=kbPitches.map((p,i)=>{const m=playPitch(i),n=Z.NOTE_NAMES[m%12],oct=Math.floor(m/12)-1;
+    return '<button class="key'+(m%12===state.root?' root':'')+'" data-i="'+i+'" aria-label="'+n+oct+'"><span class="n">'+n+'<sub style="font-size:9px">'+oct+'</sub></span><span class="k">'+KEYMAP[i]+'</span></button>'}).join('');
+  $('keys').style.setProperty('--c',COLORS[recLayer()]);$('keys').classList.toggle('armed',rec.armed);
   renderRecInfo();
 }
 function keyOn(i){
-  if(held[i]||!kbPitches[i])return;const rel=E.noteOn(kbPitches[i].midi),h={rel,start:null};
+  if(held[i]||!kbPitches[i])return;const midi=playPitch(i),rel=E.noteOn(midi,recLayer()),h={rel,start:null,midi};
   if(rec.armed&&E.playing)h.start=E.nearestStep(E.ctx.currentTime); // quantise to the closest sixteenth
   held[i]=h;const el=$('keys').children[i];if(el)el.classList.add('down');
 }
 function keyOff(i){
   const h=held[i];if(!h)return;const t=E.ctx.currentTime;h.rel(t);delete held[i];
-  if(h.start)recordNote(h.start,kbPitches[i].midi,t);
+  if(h.start)recordNote(h.start,h.midi,t);
   const el=$('keys').children[i];if(el)el.classList.remove('down');
 }
 $('keys').addEventListener('pointerdown',e=>{const k=e.target.closest('.key');if(!k)return;e.preventDefault();try{k.setPointerCapture(e.pointerId)}catch(err){}keyOn(+k.dataset.i)});

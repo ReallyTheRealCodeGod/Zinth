@@ -11,7 +11,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Arranger.** Add, reorder, duplicate and delete sections. Each has a type, length, key shift and its own layer switches. Loop one section while you work on it.
 - **Lock and reroll.** New track rerolls only unlocked layers. Each layer has its own dice.
 - **Chord box.** Number keys play the diatonic chords of the key in close voicings. Sketch a progression and send it to the verse or the chorus.
-- **Record your melody.** Press Rec, play the letter keys over the looping section, and your notes replace the generated melody, snapped to the grid. A metronome click is one button away.
+- **Record your melody, your arp or your bass line.** Press Rec, choose the layer to record into, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The keys sound the layer you are playing into and land where it sings: the arp an octave up, the bass in its own register, always in key. A metronome click is one button away.
 - **Draw notes in the roll.** The lead, arp and bass lanes are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits work while the section loops, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.
 - **Drums.** 808, 909, Lo-fi and Trap kits, a step grid per part, fills, sidechain pump.
 - **Sound.** Patches per layer, waveform, filter, envelope, detune, delay and reverb sends, a mixer with mute and solo, momentary punch-in effects.
@@ -24,6 +24,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 | --- | --- |
 | Space | Play / stop |
 | L | Loop the selected section |
+| I | Record into: lead → arp → bass |
 | 1–7 | Chords |
 | A–J, Q–U | Notes, two octaves |
 | Z–M | Punch-in effects (hold) |

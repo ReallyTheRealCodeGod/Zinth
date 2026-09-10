@@ -34,32 +34,51 @@ function drawScope(){
   sctx.stroke();
 }
 
-/* ---------- recording your own melody ---------- */
-const rec=U.rec;
+/* ---------- recording the lead, the arp or the bass from the keys ---------- */
+const rec=U.rec,LANE_NAME=U.LANE_NAME,REC_ORDER=['lead','arp','bass'];
 const partLabel=p=>p==='v'?'A verse':'B chorus';
 function partOfSel(){const s=song()[state.sel];return s?s.part:'v'}
+// where the keys record into this layer, in words, so the status line can always say it
+const recWhere=L=>L==='bass'?'the letter keys drop into the bass register':L==='arp'?'the letter keys play an octave up, where the arp sings':'the letter keys play as you hear them';
+$('recTarget').querySelectorAll('button').forEach(b=>b.style.setProperty('--c',COLORS[b.dataset.v]));
 function renderRecInfo(){
-  const part=partOfSel(),list=state.leadEdits[part];
-  const drawn=['arp','bass'].filter(L=>state[U.EDITS[L]][part]);
-  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated melody')+(drawn.length?' · your own '+drawn.join(' and '):'');
+  const part=partOfSel(),L=state.recTarget,list=state[U.EDITS[L]][part];
+  const others=REC_ORDER.filter(x=>x!==L&&state[U.EDITS[x]][part]);
+  $('recInfo').textContent=partLabel(part)+' · into the '+L+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated '+LANE_NAME[L])+(others.length?' · your own '+others.join(' and '):'');
+  $('recTarget').querySelectorAll('button').forEach(b=>{const on=b.dataset.v===L;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('clearMel').textContent='Clear '+(L==='lead'?'melody':L);
+  $('clearMel').title='Remove your own '+LANE_NAME[L]+' for this part, recorded or drawn in the roll, and bring the generated one back';
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
+}
+function setRecTarget(L){
+  if(!U.EDITS[L]||state.recTarget===L)return;
+  state.recTarget=L;renderKeys();
+  if(rec.armed)U.rebuild();else U.persist();
+  U.setStatus('Recording into the '+L+': '+recWhere(L));
 }
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
   if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;E.start(state.sel);setPlaying(true)}
-  U.rebuild();renderRecInfo();
-  U.setStatus(on?'Recording: play the letter keys, each note snaps to the grid of the '+partLabel(partOfSel())+' sections':'Recording off');
+  U.rebuild();renderKeys();
+  const L=state.recTarget,sec=song()[state.sel];
+  let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
+  if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
+  else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
+  U.setStatus(on?msg:'Recording off');
 }
 function recordNote(start,midi,t1){
-  const sec=song()[start.section];if(!sec)return;const part=sec.part,step=start.step%128;
+  const sec=song()[start.section];if(!sec)return;
+  const L=state.recTarget,part=sec.part,step=start.step%Z.TOTAL,stored=midi-(sec.transpose||0);
   const dur=Math.max(1,Math.round((t1-start.time)/E.stepSec()));
-  const list=(state.leadEdits[part]||[]).filter(e=>!(e.step===step&&e.midi===midi-(sec.transpose||0)));
-  list.push({step,dur,midi:midi-(sec.transpose||0),vel:0.85});list.sort((a,b)=>a.step-b.step);
-  state.leadEdits[part]=list;U.rebuild();renderRecInfo();
+  const list=(state[U.EDITS[L]][part]||[]).filter(e=>!(e.step===step&&e.midi===stored));
+  list.push({step,dur,midi:stored,vel:0.85});list.sort((a,b)=>a.step-b.step);
+  state[U.EDITS[L]][part]=list;U.rebuild();renderRecInfo();
 }
 $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
+$('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});
+function cycleRecTarget(){setRecTarget(REC_ORDER[(REC_ORDER.indexOf(state.recTarget)+1)%REC_ORDER.length])}
 $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecInfo()});
-$('clearMel').addEventListener('click',()=>{const part=partOfSel();state.leadEdits[part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated melody is back for the '+partLabel(part)+' sections')});
+$('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
 const PARAMS=['cutoff','reso','attack','release','spread','delay','reverb','pump','level'];
@@ -252,6 +271,7 @@ document.addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();$('play').click();return}
   if(e.repeat)return;
   if(k==='l'){$('loopSec').click();return}
+  if(k==='i'){cycleRecTarget();return}
   if(FXKEYS[k]){fxDown(FXKEYS[k]);return}
   const ci='123456789'.indexOf(e.key);if(ci>=0&&ci<padDefs.length){chordOn(ci);return}
   const ni=KEYMAP.indexOf(e.key.toUpperCase());if(ni>=0)keyOn(ni);
@@ -309,20 +329,26 @@ $('useV').addEventListener('click',()=>useProg('v'));$('useC').addEventListener(
 
 /* ---------- note keys ---------- */
 const KEYMAP='ASDFGHJQWERTYU';let kbPitches=[];const held={};
+// while Rec is armed the keys sound the layer you record into, in that layer's own register, so what you
+// play is what you get: the arp an octave up, the bass folded down. The pitch class never changes.
+const recLayer=()=>rec.armed?state.recTarget:'lead';
+const playPitch=i=>kbPitches[i]?Z.recordPitch(recLayer(),kbPitches[i].midi,state.root):0;
 function renderKeys(){
   const base=(state.root>=6?48:60)+state.root;
   kbPitches=Z.scalePitches(U.cfg(),base,base+40).filter(p=>!p.passing).slice(0,14);
-  $('keys').innerHTML=kbPitches.map((p,i)=>'<button class="key'+(p.midi%12===state.root?' root':'')+'" data-i="'+i+'" aria-label="'+Z.NOTE_NAMES[p.midi%12]+(Math.floor(p.midi/12)-1)+'"><span class="n">'+Z.NOTE_NAMES[p.midi%12]+'<sub style="font-size:9px">'+(Math.floor(p.midi/12)-1)+'</sub></span><span class="k">'+KEYMAP[i]+'</span></button>').join('');
+  $('keys').innerHTML=kbPitches.map((p,i)=>{const m=playPitch(i),n=Z.NOTE_NAMES[m%12],oct=Math.floor(m/12)-1;
+    return '<button class="key'+(m%12===state.root?' root':'')+'" data-i="'+i+'" aria-label="'+n+oct+'"><span class="n">'+n+'<sub style="font-size:9px">'+oct+'</sub></span><span class="k">'+KEYMAP[i]+'</span></button>'}).join('');
+  $('keys').style.setProperty('--c',COLORS[recLayer()]);$('keys').classList.toggle('armed',rec.armed);
   renderRecInfo();
 }
 function keyOn(i){
-  if(held[i]||!kbPitches[i])return;const rel=E.noteOn(kbPitches[i].midi),h={rel,start:null};
+  if(held[i]||!kbPitches[i])return;const midi=playPitch(i),rel=E.noteOn(midi,recLayer()),h={rel,start:null,midi};
   if(rec.armed&&E.playing)h.start=E.nearestStep(E.ctx.currentTime); // quantise to the closest sixteenth
   held[i]=h;const el=$('keys').children[i];if(el)el.classList.add('down');
 }
 function keyOff(i){
   const h=held[i];if(!h)return;const t=E.ctx.currentTime;h.rel(t);delete held[i];
-  if(h.start)recordNote(h.start,kbPitches[i].midi,t);
+  if(h.start)recordNote(h.start,h.midi,t);
   const el=$('keys').children[i];if(el)el.classList.remove('down');
 }
 $('keys').addEventListener('pointerdown',e=>{const k=e.target.closest('.key');if(!k)return;e.preventDefault();try{k.setPointerCapture(e.pointerId)}catch(err){}keyOn(+k.dataset.i)});

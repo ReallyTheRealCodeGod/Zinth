@@ -117,7 +117,13 @@
       <h2 style="margin:0;font:600 12px var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Play along</h2>
       <p id="kbHint">Everything below is locked to the key, so the chord pads and the letter-key notes all fit the track.</p>
       <div class="opts recbar">
-        <button class="opt rec" id="recBtn" aria-pressed="false" title="Record the letter keys into the melody of the selected section's part. Starts playback looping that section.">● Rec</button>
+        <button class="opt rec" id="recBtn" aria-pressed="false" title="Record the letter keys into the selected section's part. Starts playback looping that section.">● Rec</button>
+        <span class="into">into</span>
+        <div class="seg" id="recTarget" role="group" aria-label="Record into">
+          <button data-v="lead" aria-pressed="true" title="Record into the lead: the letter keys play as you hear them (I)">lead</button>
+          <button data-v="arp" aria-pressed="false" title="Record into the arp: the letter keys play an octave up, where the arp sings (I)">arp</button>
+          <button data-v="bass" aria-pressed="false" title="Record into the bass: the letter keys drop into the bass register (I)">bass</button>
+        </div>
         <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
         <button class="opt" id="clearMel" title="Remove your own melody for this part, recorded or drawn in the roll, and bring the generated one back">Clear melody</button>
         <span class="recinfo" id="recInfo"></span>
@@ -151,15 +157,16 @@
       <li><b>Press Play.</b> You are hearing a whole song: intro, verses, choruses, a break, a drop. Every note of every layer is locked to one key and scale, so nothing ever sounds off.</li>
       <li><b>Roll until you smile.</b> New track rerolls everything. Lock a layer in the mixer to keep it, hit its dice to reroll just that one. Moods pick scale, tempo and sounds for you.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
-      <li><b>Record your hook.</b> Press Rec, play the letter keys over the looping section, and your melody replaces the generated one, snapped to the grid. Undo is always one press away.</li>
+      <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>
+      <div><kbd>I</kbd> record into: lead → arp → bass</div><div><kbd>?</kbd> this sheet</div>
       <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
       <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> release held chords</div>
-      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div><div><kbd>?</kbd> this sheet</div>
+      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div>
     </div>
   </div>
 </div>

@@ -177,6 +177,16 @@ function generateArp(cfg,chords,rng){
 // the bass always sounds in its own register; an edited note is folded by octaves, so its pitch class stays
 const BASS_LO=36,BASS_HI=59;
 function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
+// the arp sings above the chords: this is the window its generator writes in and its roll lane draws
+const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+41]};
+// where a letter key lands when you record it into a layer: the lead as played, the arp an octave up,
+// the bass folded into its own register. The pitch class never changes, so the key stays locked.
+function recordPitch(L,midi,root){
+  if(L==='bass')return bassRegister(midi);
+  if(L!=='arp')return midi;
+  const r=arpRange(root);let m=midi+12;
+  while(m>r[1])m-=12;while(m<r[0])m+=12;return m;
+}
 function generateBass(cfg,chords,rng){
   const energy=cfg.energy/100;
   const pattern=rng.weighted(['roots','pulse','octave','synco','walk'],[1.2-energy,0.4+energy,0.3+energy,0.5+energy*0.6,0.6]);
@@ -238,5 +248,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch});
 })();

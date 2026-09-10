@@ -56,6 +56,10 @@ kbd{font:500 11px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .opt.rec{color:var(--rose);border-color:rgba(242,109,133,.5)}
 .opt.rec.on{color:#fff;background:var(--rose);border-color:var(--rose);animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{filter:brightness(.75)}}
+.recbar .into{font:600 10px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute)}
+.recbar .seg{height:28px}
+.recbar .seg button{height:26px;font-size:10px}
+.recbar .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
 .recinfo{font:400 11px var(--mono);color:var(--ink-mute);padding-left:4px}
 .sheet{position:fixed;inset:0;background:rgba(10,11,17,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;backdrop-filter:blur(3px)}
 .sheet-card{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:22px 26px;max-width:640px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.5)}
@@ -263,6 +267,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .key.root{background:linear-gradient(180deg,#ffe3aa,#f2c66a)}
 .key.down,.key:active{transform:translateY(2px);box-shadow:0 1px 0 #9a9384;background:linear-gradient(180deg,#8fe6dc,#4fd1c5)}
 .key.root.down{background:linear-gradient(180deg,#ffd07a,#f5a524)}
+/* while Rec is armed the keys press in the colour of the layer you are recording into */
+.keys.armed .key.down,.keys.armed .key:active,.keys.armed .key.root.down{background:linear-gradient(180deg,#f4efe2,var(--c))}
 
 @media (max-width:1180px){.main{grid-template-columns:250px minmax(0,1fr)}.snd{grid-column:1/-1}}
 @media (max-width:760px){.main{grid-template-columns:1fr}.keys{grid-template-columns:repeat(7,1fr)}.transport{margin-left:0}.mixer{grid-template-columns:repeat(2,1fr)}}

@@ -49,7 +49,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,
-  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',
+  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -86,7 +86,7 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead'});
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse'});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
@@ -150,9 +150,10 @@ function loadCode(){
   syncControls();regenerate();setStatus('Loaded '+c.seeds.chords);
 }
 function sectionCfg(sec){
-  // while recording is armed, parts without a recording fall silent so you record over a clean backing
-  const leadEvents=state.leadEdits[sec.part]||(rec.armed?[]:null);
-  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents,arpEvents:state.arpEdits[sec.part],bassEvents:state.bassEdits[sec.part]});
+  // while recording is armed, the layer you record into falls silent until it holds notes of yours,
+  // so you always play over a clean backing — lead, arp or bass alike
+  const evs=L=>state[EDITS[L]][sec.part]||(rec.armed&&state.recTarget===L?[]:null);
+  return Object.assign(cfg(),{root:(state.root+(sec.transpose||0)+120)%12,transpose:sec.transpose||0,energy:state.energy+sec.energy,leadEnergy:state.energy+(sec.part==='c'?10:0),hook:!!sec.hook,prog:state.prog[sec.part],drumPattern:state.drumEdits[sec.part],leadEvents:evs('lead'),arpEvents:evs('arp'),bassEvents:evs('bass')});
 }
 function buildSong(){return state.sections.map(sec=>Object.assign({},sec,{track:Z.generateTrack(sectionCfg(sec),state.seeds,sec.part,sec.part==='v'?state.loop:0)}))}
 // light rebuild for live edits (recording): keeps the keyboard and pads untouched
@@ -220,7 +221,7 @@ function lanePitches(L,sec){
   if(L==='lead'){const lo=64+(root>=6?-6:0);return Z.scalePitches({root,scale:state.scale},lo,lo+22)}
   const scale=Z.SCALES[state.scale].chord||state.scale; // arp and bass follow the chord scale, as their generators do
   if(L==='bass')return Z.scalePitches({root,scale},Z.BASS_LO,Z.BASS_HI);
-  const lo=(root>=6?48:60)+root;return Z.scalePitches({root,scale},lo+7,lo+41);
+  const r=Z.arpRange(root);return Z.scalePitches({root,scale},r[0],r[1]);
 }
 // what a stored note sounds like in this section: the key shift, and the bass folded into its register
 const soundOf=(L,midi,tr)=>{const m=midi+tr;return L==='bass'?Z.bassRegister(m):m};
@@ -359,5 +360,5 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,EDITS,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
+Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
 })();

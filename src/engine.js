@@ -271,7 +271,9 @@ class Engine{
     if(!this.ctx||!this.playing)return null;const now=this.ctx.currentTime;let p=null;
     for(const q of this.queue){if(q.time<=now)p=q;else break}return p;
   }
-  noteOn(midi){this.init();if(this.ctx.resume)this.ctx.resume();return this.playNote('lead',midi,0.9,this.ctx.currentTime,undefined,0.08)}
+  // a live note from the letter keys: it sounds through the layer you play into, so recording sounds like playback
+  noteOn(midi,L){const layer=this.params[L]?L:'lead';this.init();if(this.ctx.resume)this.ctx.resume();
+    return this.playNote(layer,midi,0.9,this.ctx.currentTime,undefined,layer==='lead'?0.08:0)}
   rms(){
     if(!this.ctx)return 0;const a=new Uint8Array(this.analyser.fftSize);this.analyser.getByteTimeDomainData(a);
     let s=0;for(let i=0;i<a.length;i++){const v=(a[i]-128)/128;s+=v*v}return Math.sqrt(s/a.length);
