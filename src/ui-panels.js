@@ -112,14 +112,21 @@ $('patchDice').addEventListener('click',()=>{
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
-$('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;U.persist();U.setStatus('Kit: '+state.kit)});
+$('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
+  U.setStatus('Kit: '+state.kit+' · its perc row plays a '+percVoice()+', and the WAV and MIDI exports follow the kit')});
 
 /* drum step grid (edits the pattern of the viewed section's part) */
+// the perc row plays whatever the kit calls for — a rim, a shaker or a cowbell — so the row wears that name
+const percVoice=()=>{const K=Z.KITS[state.kit]||Z.KITS['808'];return (K.perc&&K.perc.voice)||'perc'};
+const rowName=k=>k==='perc'?percVoice():k;
 function renderGrid(){
   const sec=song()[U.viewSection];if(!sec)return;const P=sec.track.drumPattern,edited=!!state.drumEdits[sec.part];
   $('gridLabel').textContent=(sec.part==='v'?'A verse':'B chorus')+(edited?' · edited':'');
   $('fillTgl').classList.toggle('on',!!P.fill);$('fillTgl').setAttribute('aria-pressed',!!P.fill);$('gridReset').disabled=!edited;
-  $('grid').innerHTML=Z.DRUM_KINDS.map(k=>'<div class="grow"><span class="gn">'+k+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+k+' · step '+(s+1)+'"></button>').join('')+'</div>').join('');
+  $('grid').innerHTML=Z.DRUM_KINDS.map(k=>{
+    const nm=rowName(k),tip=k==='perc'?'perc · the '+state.kit+' kit plays a '+nm+' here':nm;
+    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+'"></button>').join('')+'</div>';
+  }).join('');
 }
 function editPattern(fn){const sec=song()[U.viewSection];if(!sec)return;const P=JSON.parse(JSON.stringify(sec.track.drumPattern));fn(P);state.drumEdits[sec.part]=P;U.regenerate()}
 $('grid').addEventListener('click',e=>{const c=e.target.closest('.cell');if(!c)return;editPattern(P=>{const k=c.dataset.k,s=+c.dataset.s,v=P[k][s];P[k][s]=v===0?1:v>=0.8?0.55:0})});
@@ -221,7 +228,9 @@ function midiFile(){
   const str=s=>Array.from(s,c=>c.charCodeAt(0)),u32=n=>[(n>>>24)&255,(n>>16)&255,(n>>8)&255,n&255],u16=n=>[(n>>8)&255,n&255];
   const tracks=[];const mpq=Math.round(60000000/state.bpm);
   tracks.push([0,0xff,0x51,3,(mpq>>16)&255,(mpq>>8)&255,mpq&255, 0,0xff,0x58,4,4,2,24,8, 0,0xff,0x2f,0]);
-  const CH={lead:0,arp:1,chords:2,bass:3,drums:9},PROG={lead:80,arp:81,chords:89,bass:38},GM={kick:36,snare:38,clap:39,hat:42,ohat:46};
+  const CH={lead:0,arp:1,chords:2,bass:3,drums:9},PROG={lead:80,arp:81,chords:89,bass:38};
+  // the perc row reaches a DAW as whatever the kit plays: a side stick, maracas or a cowbell
+  const GM={kick:36,snare:38,clap:39,hat:42,ohat:46,perc:Z.PERC_GM[percVoice()]||Z.PERC_GM.rim};
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
     const chorus=(E.params[L]||{}).chorus;

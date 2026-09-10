@@ -9,12 +9,23 @@ const DEFAULTS={
   bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
-// drum machines: each kit is a different set of synthesis recipes
+// drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
+// row plays — a rim, a shaker or a cowbell — so the same row sounds like it belongs to whichever kit is on.
 const KITS={
-  '808':  {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18}},
-  '909':  {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15}},
-  'Lo-fi':{kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2}},
-  'Trap': {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2}},
+  '808':   {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18},
+            perc:{voice:'cowbell',f1:540,f2:800,decay:0.3,level:0.32}},
+  '909':   {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15},
+            perc:{voice:'rim',f:1800,bp:2600,decay:0.05,level:0.42}},
+  'Lo-fi': {kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2},
+            perc:{voice:'shaker',hp:5200,decay:0.085,level:0.2}},
+  'Trap':  {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2},
+            perc:{voice:'rim',f:2100,bp:3000,decay:0.04,level:0.38}},
+  // House: a short punchy kick, a crisp snare and hats that stay open and bright
+  'House': {kick:{f0:180,f1:52,decay:0.3,click:0.1},snare:{tone:225,noise:0.55,bp:2300,decay:0.15},hat:{hp:10000,decay:0.042,open:0.36,level:0.26},clap:{bp:1500,decay:0.16},
+            perc:{voice:'shaker',hp:7200,decay:0.06,level:0.26}},
+  // Breaks: a dusty low kick under a lowpass, softer hats, and a snare with a room tail behind it
+  'Breaks':{kick:{f0:128,f1:44,decay:0.36,click:0.03,lp:3200},snare:{tone:180,noise:0.72,bp:1500,decay:0.28,tail:0.42},hat:{hp:6800,decay:0.055,open:0.3,level:0.18},clap:{bp:1050,decay:0.24},
+            perc:{voice:'rim',f:1500,bp:2000,decay:0.07,level:0.34}},
 };
 const cutoffHz=v=>80*Math.pow(150,v/100);
 const qOf=v=>0.5+Math.pow(v/100,1.6)*13;
@@ -229,6 +240,36 @@ class Engine{
       n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
       const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(k.tone,time);o.frequency.exponentialRampToValueAtTime(k.tone*0.65,time+0.08);
       og.gain.setValueAtTime(vel*0.35,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.11);o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.12);
+      // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
+      // It hangs off the drum bus like everything else, so muting the drums silences it too.
+      if(k.tail>0){
+        const rn=ctx.createBufferSource();rn.buffer=this.noise;const rf=ctx.createBiquadFilter();rf.type='lowpass';rf.frequency.value=2400;
+        const rg=ctx.createGain();rg.gain.setValueAtTime(vel*0.16,time+0.01);rg.gain.exponentialRampToValueAtTime(0.001,time+k.tail);
+        rn.connect(rf);rf.connect(rg);rg.connect(bus);rn.start(time+0.01);rn.stop(time+k.tail+0.03);
+      }
+    }else if(kind==='perc'){
+      const k=K.perc||KITS['808'].perc;
+      if(k.voice==='cowbell'){
+        // two detuned squares through a narrow bandpass: the cowbell every drum machine has
+        const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=(k.f1+k.f2)/2;f.Q.value=2.4;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        f.connect(g);g.connect(bus);
+        [k.f1,k.f2].forEach(hz=>{const o=ctx.createOscillator();o.type='square';o.frequency.value=hz;o.connect(f);o.start(time);o.stop(time+k.decay+0.02)});
+      }else if(k.voice==='rim'){
+        // a wooden click: a tight band-passed noise snap with a short tonal ping on top of it
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=6;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+        const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.value=k.f;
+        og.gain.setValueAtTime(vel*k.level*0.7,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.03);
+        o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.04);
+      }else{
+        // a shaker: bright noise with a hint of an attack, so it sounds shaken rather than clicked
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;
+        const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel*k.level),time+0.012);
+        g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+      }
     }else if(kind==='clap'){
       const k=K.clap;[0,0.011,0.022,0.033].forEach((off,i)=>{
         const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=1.1;

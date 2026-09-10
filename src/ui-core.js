@@ -7,7 +7,7 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
-  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Lo-fi',
+  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',
             sound:{lead:{wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
   dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',
             sound:{lead:{wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
@@ -17,7 +17,7 @@ const MOODS={
             sound:{lead:{wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
   retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',
             sound:{lead:{wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
-  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'909',
+  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',
             sound:{lead:{wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
   odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',
             sound:{lead:{wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
@@ -368,12 +368,14 @@ function buildRoll(){
   };
   noteRows('lead',track.lead);noteRows('arp',track.arp);noteRows('bass',track.bass);
   lane(2,track.chordEvs,e=>e.notes);
-  const rows={kick:3,snare:2,clap:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/4;
+  const rows={kick:4,snare:3,clap:2,perc:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/5;
   if(!lay.drums)rest(y0+rh*2+4);
   else track.drums.forEach(d=>{
     if(d.step>=steps)return;if(lay.drums==='lite'&&(d.kind==='snare'||d.kind==='clap'||(d.kind==='kick'&&d.step%16!==0)))return;
     const y=y0+rows[d.kind]*rh+rh/2;c.globalAlpha=0.4+d.vel*0.6;c.fillStyle=COLORS.drums;
-    if(d.kind==='kick')c.fillRect(gx+d.step*sw+0.5,y-4,Math.max(3,sw-1),8);else{c.beginPath();c.arc(gx+d.step*sw+sw/2,y,d.kind==='ohat'?3.4:d.kind==='snare'?3:d.kind==='clap'?2.6:2,0,7);c.fill()}});
+    if(d.kind==='kick')c.fillRect(gx+d.step*sw+0.5,y-4,Math.max(3,sw-1),8);
+    else if(d.kind==='perc'){c.save();c.translate(gx+d.step*sw+sw/2,y);c.rotate(Math.PI/4);c.fillRect(-2,-2,4,4);c.restore()} // a diamond, so perc reads apart from the hats
+    else{c.beginPath();c.arc(gx+d.step*sw+sw/2,y,d.kind==='ohat'?3.4:d.kind==='snare'?3:d.kind==='clap'?2.6:2,0,7);c.fill()}});
   c.globalAlpha=1;syncLanes();drawFrame(-1);
 }
 function drawFrame(step){

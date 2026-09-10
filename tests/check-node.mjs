@@ -5,6 +5,8 @@ import vm from 'node:vm';
 
 const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
 const theory=read('../src/theory.js');
+// the engine defines the drum kits the check reads; nothing in it touches audio until init() is called
+const engine=read('../src/engine.js');
 const check=read('./check.js');
 
 const window={};
@@ -12,6 +14,7 @@ const context={window,document:{body:null,addEventListener(){}},performance,cons
 window.window=window;
 vm.createContext(context);
 vm.runInContext(theory,context,{filename:'src/theory.js'});
+vm.runInContext(engine,context,{filename:'src/engine.js'});
 vm.runInContext(check,context,{filename:'tests/check.js'});
 
 const r=window.ZINTH_CHECK;

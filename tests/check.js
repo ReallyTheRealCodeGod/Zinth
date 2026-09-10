@@ -413,6 +413,86 @@ for(const bars of [1,2,4,8,16]){
   assert(Z.warmthShelf(100)<Z.warmthShelf(25),'more warmth must roll more of the top end off');
 }
 
+// drum kits and the perc row. Every kit must be able to play every row of the grid — a kit missing a recipe
+// would drop hits on the floor — and its perc voice must be one the engine synthesises and the MIDI export
+// has a GM note for. A generated perc figure stays off the backbeat the snare and clap own, never plays
+// louder than they do, and never turns up on a quiet track at all.
+{
+  assert(Z.DRUM_KINDS.includes('perc'),'the drum grid has no perc row');
+  assert(Z.DRUM_KINDS.length===6,'the drum grid has '+Z.DRUM_KINDS.length+' rows, expected 6');
+  const KITS=Z.KITS||{};
+  assert(Object.keys(KITS).length>=6,'only '+Object.keys(KITS).length+' drum kits, expected at least 6');
+  ['808','909','Lo-fi','Trap','House','Breaks'].forEach(k=>assert(KITS[k],'the '+k+' kit is missing'));
+  for(const name in KITS){
+    const K=KITS[name],tag=' [kit '+name+']';
+    ['kick','snare','hat','clap','perc'].forEach(v=>assert(K[v]&&typeof K[v]==='object','kit cannot play its '+v+tag));
+    assert(K.kick.decay>0&&K.kick.decay<2,'a kick decay of '+K.kick.decay+' s is not a kick'+tag);
+    assert(K.snare.decay>0&&K.snare.decay<1,'a snare decay of '+K.snare.decay+' s is not a snare'+tag);
+    assert(K.hat.decay>0&&K.hat.open>=K.hat.decay,'an open hat must ring at least as long as a closed one'+tag);
+    assert(K.hat.level>0&&K.hat.level<=1,'a hat level of '+K.hat.level+' is outside (0, 1]'+tag);
+    const p=K.perc;
+    assert(Z.PERC_VOICES.includes(p.voice),'perc voice "'+p.voice+'" is not one the engine can play'+tag);
+    assert(p.decay>0&&p.decay<1,'a perc decay of '+p.decay+' s is not a percussion hit'+tag);
+    assert(p.level>0&&p.level<=1,'a perc level of '+p.level+' is outside (0, 1]'+tag);
+    if(p.voice==='cowbell')assert(p.f1>0&&p.f2>p.f1,'a cowbell needs two rising partials'+tag);
+    else if(p.voice==='rim')assert(p.f>0&&p.bp>0,'a rim needs a tone and a band to snap in'+tag);
+    else assert(p.hp>0,'a shaker needs a high pass to sit above the kit'+tag);
+    const gm=Z.PERC_GM[p.voice];
+    assert(gm>=35&&gm<=81,'perc voice '+p.voice+' has no General MIDI drum note (got '+gm+')'+tag);
+  }
+  Z.PERC_VOICES.forEach(v=>{const gm=Z.PERC_GM[v];assert(gm>=35&&gm<=81,'perc voice '+v+' maps to '+gm+', outside the GM drum map')});
+  assert(Z.PERC.maxVel>0&&Z.PERC.maxVel<0.9,'perc at '+Z.PERC.maxVel+' would play in front of the backbeat');
+  assert(Z.PERC.from>0&&Z.PERC.from<1,'perc must come in somewhere along the energy range');
+  // the generated row, over every energy and a spread of seeds
+  let withPerc=0,loud=0;
+  for(const energy of [0,10,30,44,50,70,85,100]){
+    for(const seed of seeds){
+      const P=Z.generateDrumPattern({energy},new Z.Rng(seed+':perc:'+energy));
+      const tag=' [perc · energy '+energy+' · '+seed+']';
+      assert(Array.isArray(P.perc)&&P.perc.length===16,'the perc row is not sixteen steps'+tag);
+      const hits=P.perc.filter(v=>v>0).length;
+      if(hits)withPerc++;
+      if(energy<Z.PERC.from*100)assert(hits===0,'a track at energy '+energy+' should be too quiet for perc, got '+hits+' hits'+tag);
+      P.perc.forEach((v,o)=>{
+        if(!v)return;
+        assert(v>0&&v<=Z.PERC.maxVel,'a perc hit at '+v+' is louder than the '+Z.PERC.maxVel+' allowed'+tag);
+        assert(!P.snare[o],'perc lands on the snare at step '+o+tag);
+        assert(!P.clap[o],'perc lands on the clap at step '+o+tag);
+        if(P.snare[o]||P.clap[o])loud++;
+      });
+      // it is part of the pattern the grid edits and the engine plays, and it repeats every bar
+      const t=Z.generateTrack({root:0,scale:'minor',energy,evolve:true,sevenths:false,gate:0.7,drumPattern:P},
+        {chords:seed,lead:seed,arp:seed,bass:seed,drums:seed},'v',0);
+      const percEvs=t.drums.filter(d=>d.kind==='perc');
+      assert(percEvs.length===hits*Z.BARS-(P.fill?P.perc.slice(12).filter(v=>v>0).length:0),
+        'the perc row reached playback as '+percEvs.length+' hits, not the '+hits+' a bar it holds'+tag);
+      percEvs.forEach(d=>assert(d.step>=0&&d.step<Z.TOTAL&&d.vel<=Z.PERC.maxVel,'a perc hit left the loop or got louder on the way to playback'+tag));
+    }
+  }
+  assert(withPerc>0,'no energy at all produced a perc figure');
+  assert(loud===0,'perc crowded the backbeat');
+  // a project saved before there was a perc row still opens: the row is filled in, everything else is kept
+  const old={kick:[1,0,0,0,0,0,0,0,0.85,0,0,0,0,0,0,0],snare:new Array(16).fill(0),clap:new Array(16).fill(0),
+    hat:new Array(16).fill(0.5),ohat:new Array(16).fill(0),fill:true};
+  old.snare[4]=0.9;old.snare[12]=0.9;
+  const N=Z.normDrumPattern(old);
+  assert(N.perc.length===16&&N.perc.every(v=>v===0),'an old pattern did not get an empty perc row');
+  Z.DRUM_KINDS.forEach(k=>{if(k!=='perc')assert(N[k].join()===old[k].join(),'normalising a pattern changed its '+k+' row')});
+  assert(N.fill===true,'normalising a pattern lost its fill');
+  const tOld=Z.generateTrack({root:0,scale:'minor',energy:70,evolve:true,sevenths:false,gate:0.7,drumPattern:old},
+    {chords:'OLD001',lead:'OLD001',arp:'OLD001',bass:'OLD001',drums:'OLD001'},'v',0);
+  assert(tOld.drums.some(d=>d.kind==='kick'&&d.step===0),'an old pattern lost its kick');
+  assert(!tOld.drums.some(d=>d.kind==='perc'),'an old pattern gained perc hits it never had');
+  assert(tOld.drumPattern.perc.length===16,'an old pattern reached the grid without a perc row');
+  // a ragged row is repaired rather than trusted: sixteen steps, every value inside 0 to 1
+  const ragged=Z.normDrumPattern({kick:[1,2,-1,'x',null],perc:new Array(40).fill(0.5),fill:false});
+  Z.DRUM_KINDS.forEach(k=>{
+    assert(ragged[k].length===16,'a ragged '+k+' row was not repaired to sixteen steps');
+    ragged[k].forEach(v=>assert(typeof v==='number'&&v>=0&&v<=1,'a repaired '+k+' step of '+v+' is outside 0 to 1'));
+  });
+  assert(ragged.fill===false,'normalising a pattern turned its fill back on');
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -426,7 +506,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

@@ -234,8 +234,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .meter i{display:block;height:100%;width:0;background:linear-gradient(to right,var(--teal),var(--amber));transition:width .08s}
 /* drum step grid */
 .grid{display:flex;flex-direction:column;gap:3px}
-.grow{display:grid;grid-template-columns:44px repeat(16,1fr);gap:2px;align-items:center}
-.grow .gn{font:600 9px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--sand)}
+.grow{display:grid;grid-template-columns:52px repeat(16,1fr);gap:2px;align-items:center}
+.grow .gn{font:600 9px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--sand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cell{height:18px;border-radius:3px;background:var(--panel-3);border:1px solid transparent;padding:0}
 .cell:nth-child(4n+2){border-left-color:rgba(236,230,216,.14)}
 .cell.on{background:var(--sand)}
@@ -403,7 +403,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         </div>
         <div class="field" data-synth><label for="p-spread">Detune spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20"></div>
         <div class="field" data-synth><label for="p-drift">Analog drift <output id="o-drift"></output></label><input type="range" id="p-drift" min="0" max="100" value="28" title="Analog drift: every note of this layer wanders a few cents in pitch and opens its filter a shade differently, so repeated notes never sound identical. Always far under a semitone, so the note never changes."></div>
-        <div class="field" data-drums><label for="kit">Kit</label><select id="kit"></select></div>
+        <div class="field" data-drums><label for="kit">Kit</label><select id="kit" title="The drum machine: 808 deep and boomy, 909 punchy, Lo-fi soft and dusty, Trap long-tailed, House punchy with open bright hats, Breaks dusty with a room-y snare. The kit also decides what the perc row plays — a rim, a shaker or a cowbell."></select></div>
         <div class="field" data-drums>
           <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
           <div class="grid" id="grid"></div>
@@ -471,6 +471,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
       <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
+      <li><b>Pick a kit and add some perc.</b> The Sound panel's drums tab has six kits — <b>808</b> deep and boomy, <b>909</b> punchy, <b>Lo-fi</b> soft and dusty, <b>Trap</b> long-tailed, <b>House</b> punchy with open bright hats, <b>Breaks</b> dusty with a room-y snare. Under the kit, the step grid's last row is <b>perc</b>, and the kit decides what it plays: a cowbell, a rim or a shaker. Busy sections come with a perc figure already, off the backbeat and behind it in level; click the row to write your own. It follows the kit into the WAV export and reaches your DAW as the matching GM percussion note.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
@@ -544,7 +545,16 @@ function romanFor(degree,quality,size){
 
 /* ================= generation ================= */
 const STEPS=16,BARS=8,TOTAL=STEPS*BARS;
-const DRUM_KINDS=['kick','snare','clap','hat','ohat'];
+const DRUM_KINDS=['kick','snare','clap','hat','ohat','perc'];
+/* The perc row: a rim, a shaker or a cowbell — the kit chooses which — that lifts a busy pattern without
+   crowding it. The generator only reaches for it once the track has the energy to carry one, keeps it off
+   the backbeat the snare and the clap own, and never lets it play louder than they do, so perc always
+   sits behind the kit rather than in front of it. Which voice a kit plays reaches a DAW as its GM note. */
+const PERC_VOICES=['rim','shaker','cowbell'];
+const PERC_GM={rim:37,shaker:70,cowbell:56};   // GM percussion: side stick, maracas, cowbell
+const PERC={from:0.45,maxVel:0.65};
+// the sixteenth figures perc plays: offbeats and pickups, never the 1 the kick owns
+const PERC_FIGURES=[[2,6,10,14],[3,7,11,15],[6,14],[2,10],[7,15],[1,5,9,13],[6,10,14]];
 
 /* A progression entry is either a plain degree — what a chord-box sketch produces — or an object
    {d, bars, seventh, inv}: the degree, how many bars it lasts, whether it takes the seventh (else the
@@ -750,6 +760,29 @@ function generateBass(cfg,chords,rng){
   }
   return out;
 }
+// a pattern from an older project has no perc row, and a hand-made one may be ragged: give every kind its
+// sixteen steps, in range, and keep every hit that is already there. Playback, the grid and the exports all
+// read a normalised pattern, so an old song opens with an empty perc row rather than falling over.
+function normDrumPattern(P){
+  const out={fill:!(P&&P.fill===false)};
+  for(const k of DRUM_KINDS){
+    const row=new Array(16).fill(0),src=P&&Array.isArray(P[k])?P[k]:null;
+    if(src)for(let i=0;i<16;i++){const v=+src[i];if(v>0)row[i]=Math.min(1,v)}
+    out[k]=row;
+  }
+  return out;
+}
+// the perc row itself: nothing at all on a quiet track, a figure that steers clear of the snare and the
+// clap on a busy one, and always under PERC.maxVel so it stays behind the backbeat
+function percRow(P,energy,rng){
+  const row=new Array(16).fill(0);
+  if(energy<PERC.from)return row;
+  const reach=(energy-PERC.from)/(1-PERC.from);
+  if(!rng.chance(0.3+reach*0.6))return row;
+  const fig=rng.pick(PERC_FIGURES);
+  fig.forEach(o=>{if(P.snare[o]||P.clap[o])return;row[o]=Math.min(PERC.maxVel,(o%4===2?0.6:0.45)+rng.next()*0.05)});
+  return row;
+}
 // one bar of drums as velocity rows; this is what the step grid edits
 function generateDrumPattern(cfg,rng){
   const energy=cfg.energy/100,P={};DRUM_KINDS.forEach(k=>P[k]=new Array(16).fill(0));P.fill=true;
@@ -762,13 +795,14 @@ function generateDrumPattern(cfg,rng){
   const hatRate=energy>0.7?1:energy>0.3?2:4,openAt=rng.chance(0.5)?14:-1;
   for(let o=0;o<16;o+=hatRate)P.hat[o]=o%4===0?0.7:o%2===0?0.5:0.35;
   if(openAt>=0){P.hat[openAt]=0;P.ohat[openAt]=0.7}
+  P.perc=percRow(P,energy,rng);
   return P;
 }
 function expandDrums(P,bars){
   const out=[];
   for(let bar=0;bar<bars;bar++){
     const s0=bar*STEPS,fill=P.fill&&bar===bars-1;
-    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'))continue;out.push({step:s0+o,kind:k,vel:v})}
+    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'||k==='perc'))continue;out.push({step:s0+o,kind:k,vel:v})}
     if(fill)[12,13,14,15].forEach((o,i)=>out.push({step:s0+o,kind:'snare',vel:0.5+i*0.15}));
   }
   return out;
@@ -876,7 +910,7 @@ function generateTrack(cfg,seeds,part,loop){
   const lead=cfg.leadEvents?edited(cfg.leadEvents):generateLead(leadCfg,chords,rngA,rngB);
   const arp=cfg.arpEvents?edited(cfg.arpEvents):generateArp(cfg,chords,new Rng(seeds.arp+':'+part));
   const bass=cfg.bassEvents?edited(cfg.bassEvents,bassRegister):generateBass(cfg,chords,new Rng(seeds.bass+':'+part));
-  const drumPattern=cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part));
+  const drumPattern=normDrumPattern(cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part)));
   const drums=expandDrums(drumPattern,BARS);
   const chordEvs=chords.map(c=>({step:c.bar0*STEPS,dur:c.bars*STEPS,notes:c.notes,vel:0.8}));
   const byStep={lead:[],arp:[],chords:[],bass:[],drums:[]};
@@ -886,7 +920,7 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
 })();
 </script>
@@ -902,12 +936,23 @@ const DEFAULTS={
   bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
-// drum machines: each kit is a different set of synthesis recipes
+// drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
+// row plays — a rim, a shaker or a cowbell — so the same row sounds like it belongs to whichever kit is on.
 const KITS={
-  '808':  {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18}},
-  '909':  {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15}},
-  'Lo-fi':{kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2}},
-  'Trap': {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2}},
+  '808':   {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18},
+            perc:{voice:'cowbell',f1:540,f2:800,decay:0.3,level:0.32}},
+  '909':   {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15},
+            perc:{voice:'rim',f:1800,bp:2600,decay:0.05,level:0.42}},
+  'Lo-fi': {kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2},
+            perc:{voice:'shaker',hp:5200,decay:0.085,level:0.2}},
+  'Trap':  {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2},
+            perc:{voice:'rim',f:2100,bp:3000,decay:0.04,level:0.38}},
+  // House: a short punchy kick, a crisp snare and hats that stay open and bright
+  'House': {kick:{f0:180,f1:52,decay:0.3,click:0.1},snare:{tone:225,noise:0.55,bp:2300,decay:0.15},hat:{hp:10000,decay:0.042,open:0.36,level:0.26},clap:{bp:1500,decay:0.16},
+            perc:{voice:'shaker',hp:7200,decay:0.06,level:0.26}},
+  // Breaks: a dusty low kick under a lowpass, softer hats, and a snare with a room tail behind it
+  'Breaks':{kick:{f0:128,f1:44,decay:0.36,click:0.03,lp:3200},snare:{tone:180,noise:0.72,bp:1500,decay:0.28,tail:0.42},hat:{hp:6800,decay:0.055,open:0.3,level:0.18},clap:{bp:1050,decay:0.24},
+            perc:{voice:'rim',f:1500,bp:2000,decay:0.07,level:0.34}},
 };
 const cutoffHz=v=>80*Math.pow(150,v/100);
 const qOf=v=>0.5+Math.pow(v/100,1.6)*13;
@@ -1122,6 +1167,36 @@ class Engine{
       n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
       const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(k.tone,time);o.frequency.exponentialRampToValueAtTime(k.tone*0.65,time+0.08);
       og.gain.setValueAtTime(vel*0.35,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.11);o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.12);
+      // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
+      // It hangs off the drum bus like everything else, so muting the drums silences it too.
+      if(k.tail>0){
+        const rn=ctx.createBufferSource();rn.buffer=this.noise;const rf=ctx.createBiquadFilter();rf.type='lowpass';rf.frequency.value=2400;
+        const rg=ctx.createGain();rg.gain.setValueAtTime(vel*0.16,time+0.01);rg.gain.exponentialRampToValueAtTime(0.001,time+k.tail);
+        rn.connect(rf);rf.connect(rg);rg.connect(bus);rn.start(time+0.01);rn.stop(time+k.tail+0.03);
+      }
+    }else if(kind==='perc'){
+      const k=K.perc||KITS['808'].perc;
+      if(k.voice==='cowbell'){
+        // two detuned squares through a narrow bandpass: the cowbell every drum machine has
+        const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=(k.f1+k.f2)/2;f.Q.value=2.4;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        f.connect(g);g.connect(bus);
+        [k.f1,k.f2].forEach(hz=>{const o=ctx.createOscillator();o.type='square';o.frequency.value=hz;o.connect(f);o.start(time);o.stop(time+k.decay+0.02)});
+      }else if(k.voice==='rim'){
+        // a wooden click: a tight band-passed noise snap with a short tonal ping on top of it
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=6;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+        const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.value=k.f;
+        og.gain.setValueAtTime(vel*k.level*0.7,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.03);
+        o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.04);
+      }else{
+        // a shaker: bright noise with a hint of an attack, so it sounds shaken rather than clicked
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;
+        const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel*k.level),time+0.012);
+        g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+      }
     }else if(kind==='clap'){
       const k=K.clap;[0,0.011,0.022,0.033].forEach((off,i)=>{
         const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=1.1;
@@ -1272,7 +1347,7 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
-  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Lo-fi',
+  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',
             sound:{lead:{wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
   dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',
             sound:{lead:{wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
@@ -1282,7 +1357,7 @@ const MOODS={
             sound:{lead:{wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
   retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',
             sound:{lead:{wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
-  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'909',
+  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',
             sound:{lead:{wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
   odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',
             sound:{lead:{wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
@@ -1633,12 +1708,14 @@ function buildRoll(){
   };
   noteRows('lead',track.lead);noteRows('arp',track.arp);noteRows('bass',track.bass);
   lane(2,track.chordEvs,e=>e.notes);
-  const rows={kick:3,snare:2,clap:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/4;
+  const rows={kick:4,snare:3,clap:2,perc:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/5;
   if(!lay.drums)rest(y0+rh*2+4);
   else track.drums.forEach(d=>{
     if(d.step>=steps)return;if(lay.drums==='lite'&&(d.kind==='snare'||d.kind==='clap'||(d.kind==='kick'&&d.step%16!==0)))return;
     const y=y0+rows[d.kind]*rh+rh/2;c.globalAlpha=0.4+d.vel*0.6;c.fillStyle=COLORS.drums;
-    if(d.kind==='kick')c.fillRect(gx+d.step*sw+0.5,y-4,Math.max(3,sw-1),8);else{c.beginPath();c.arc(gx+d.step*sw+sw/2,y,d.kind==='ohat'?3.4:d.kind==='snare'?3:d.kind==='clap'?2.6:2,0,7);c.fill()}});
+    if(d.kind==='kick')c.fillRect(gx+d.step*sw+0.5,y-4,Math.max(3,sw-1),8);
+    else if(d.kind==='perc'){c.save();c.translate(gx+d.step*sw+sw/2,y);c.rotate(Math.PI/4);c.fillRect(-2,-2,4,4);c.restore()} // a diamond, so perc reads apart from the hats
+    else{c.beginPath();c.arc(gx+d.step*sw+sw/2,y,d.kind==='ohat'?3.4:d.kind==='snare'?3:d.kind==='clap'?2.6:2,0,7);c.fill()}});
   c.globalAlpha=1;syncLanes();drawFrame(-1);
 }
 function drawFrame(step){
@@ -1845,14 +1922,21 @@ $('patchDice').addEventListener('click',()=>{
   const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
-$('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;U.persist();U.setStatus('Kit: '+state.kit)});
+$('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;renderGrid();U.persist();
+  U.setStatus('Kit: '+state.kit+' · its perc row plays a '+percVoice()+', and the WAV and MIDI exports follow the kit')});
 
 /* drum step grid (edits the pattern of the viewed section's part) */
+// the perc row plays whatever the kit calls for — a rim, a shaker or a cowbell — so the row wears that name
+const percVoice=()=>{const K=Z.KITS[state.kit]||Z.KITS['808'];return (K.perc&&K.perc.voice)||'perc'};
+const rowName=k=>k==='perc'?percVoice():k;
 function renderGrid(){
   const sec=song()[U.viewSection];if(!sec)return;const P=sec.track.drumPattern,edited=!!state.drumEdits[sec.part];
   $('gridLabel').textContent=(sec.part==='v'?'A verse':'B chorus')+(edited?' · edited':'');
   $('fillTgl').classList.toggle('on',!!P.fill);$('fillTgl').setAttribute('aria-pressed',!!P.fill);$('gridReset').disabled=!edited;
-  $('grid').innerHTML=Z.DRUM_KINDS.map(k=>'<div class="grow"><span class="gn">'+k+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+k+' · step '+(s+1)+'"></button>').join('')+'</div>').join('');
+  $('grid').innerHTML=Z.DRUM_KINDS.map(k=>{
+    const nm=rowName(k),tip=k==='perc'?'perc · the '+state.kit+' kit plays a '+nm+' here':nm;
+    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+'"></button>').join('')+'</div>';
+  }).join('');
 }
 function editPattern(fn){const sec=song()[U.viewSection];if(!sec)return;const P=JSON.parse(JSON.stringify(sec.track.drumPattern));fn(P);state.drumEdits[sec.part]=P;U.regenerate()}
 $('grid').addEventListener('click',e=>{const c=e.target.closest('.cell');if(!c)return;editPattern(P=>{const k=c.dataset.k,s=+c.dataset.s,v=P[k][s];P[k][s]=v===0?1:v>=0.8?0.55:0})});
@@ -1954,7 +2038,9 @@ function midiFile(){
   const str=s=>Array.from(s,c=>c.charCodeAt(0)),u32=n=>[(n>>>24)&255,(n>>16)&255,(n>>8)&255,n&255],u16=n=>[(n>>8)&255,n&255];
   const tracks=[];const mpq=Math.round(60000000/state.bpm);
   tracks.push([0,0xff,0x51,3,(mpq>>16)&255,(mpq>>8)&255,mpq&255, 0,0xff,0x58,4,4,2,24,8, 0,0xff,0x2f,0]);
-  const CH={lead:0,arp:1,chords:2,bass:3,drums:9},PROG={lead:80,arp:81,chords:89,bass:38},GM={kick:36,snare:38,clap:39,hat:42,ohat:46};
+  const CH={lead:0,arp:1,chords:2,bass:3,drums:9},PROG={lead:80,arp:81,chords:89,bass:38};
+  // the perc row reaches a DAW as whatever the kit plays: a side stick, maracas or a cowbell
+  const GM={kick:36,snare:38,clap:39,hat:42,ohat:46,perc:Z.PERC_GM[percVoice()]||Z.PERC_GM.rim};
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
     const chorus=(E.params[L]||{}).chorus;

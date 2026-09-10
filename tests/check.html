@@ -61,7 +61,16 @@ function romanFor(degree,quality,size){
 
 /* ================= generation ================= */
 const STEPS=16,BARS=8,TOTAL=STEPS*BARS;
-const DRUM_KINDS=['kick','snare','clap','hat','ohat'];
+const DRUM_KINDS=['kick','snare','clap','hat','ohat','perc'];
+/* The perc row: a rim, a shaker or a cowbell — the kit chooses which — that lifts a busy pattern without
+   crowding it. The generator only reaches for it once the track has the energy to carry one, keeps it off
+   the backbeat the snare and the clap own, and never lets it play louder than they do, so perc always
+   sits behind the kit rather than in front of it. Which voice a kit plays reaches a DAW as its GM note. */
+const PERC_VOICES=['rim','shaker','cowbell'];
+const PERC_GM={rim:37,shaker:70,cowbell:56};   // GM percussion: side stick, maracas, cowbell
+const PERC={from:0.45,maxVel:0.65};
+// the sixteenth figures perc plays: offbeats and pickups, never the 1 the kick owns
+const PERC_FIGURES=[[2,6,10,14],[3,7,11,15],[6,14],[2,10],[7,15],[1,5,9,13],[6,10,14]];
 
 /* A progression entry is either a plain degree — what a chord-box sketch produces — or an object
    {d, bars, seventh, inv}: the degree, how many bars it lasts, whether it takes the seventh (else the
@@ -267,6 +276,29 @@ function generateBass(cfg,chords,rng){
   }
   return out;
 }
+// a pattern from an older project has no perc row, and a hand-made one may be ragged: give every kind its
+// sixteen steps, in range, and keep every hit that is already there. Playback, the grid and the exports all
+// read a normalised pattern, so an old song opens with an empty perc row rather than falling over.
+function normDrumPattern(P){
+  const out={fill:!(P&&P.fill===false)};
+  for(const k of DRUM_KINDS){
+    const row=new Array(16).fill(0),src=P&&Array.isArray(P[k])?P[k]:null;
+    if(src)for(let i=0;i<16;i++){const v=+src[i];if(v>0)row[i]=Math.min(1,v)}
+    out[k]=row;
+  }
+  return out;
+}
+// the perc row itself: nothing at all on a quiet track, a figure that steers clear of the snare and the
+// clap on a busy one, and always under PERC.maxVel so it stays behind the backbeat
+function percRow(P,energy,rng){
+  const row=new Array(16).fill(0);
+  if(energy<PERC.from)return row;
+  const reach=(energy-PERC.from)/(1-PERC.from);
+  if(!rng.chance(0.3+reach*0.6))return row;
+  const fig=rng.pick(PERC_FIGURES);
+  fig.forEach(o=>{if(P.snare[o]||P.clap[o])return;row[o]=Math.min(PERC.maxVel,(o%4===2?0.6:0.45)+rng.next()*0.05)});
+  return row;
+}
 // one bar of drums as velocity rows; this is what the step grid edits
 function generateDrumPattern(cfg,rng){
   const energy=cfg.energy/100,P={};DRUM_KINDS.forEach(k=>P[k]=new Array(16).fill(0));P.fill=true;
@@ -279,13 +311,14 @@ function generateDrumPattern(cfg,rng){
   const hatRate=energy>0.7?1:energy>0.3?2:4,openAt=rng.chance(0.5)?14:-1;
   for(let o=0;o<16;o+=hatRate)P.hat[o]=o%4===0?0.7:o%2===0?0.5:0.35;
   if(openAt>=0){P.hat[openAt]=0;P.ohat[openAt]=0.7}
+  P.perc=percRow(P,energy,rng);
   return P;
 }
 function expandDrums(P,bars){
   const out=[];
   for(let bar=0;bar<bars;bar++){
     const s0=bar*STEPS,fill=P.fill&&bar===bars-1;
-    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'))continue;out.push({step:s0+o,kind:k,vel:v})}
+    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'||k==='perc'))continue;out.push({step:s0+o,kind:k,vel:v})}
     if(fill)[12,13,14,15].forEach((o,i)=>out.push({step:s0+o,kind:'snare',vel:0.5+i*0.15}));
   }
   return out;
@@ -393,7 +426,7 @@ function generateTrack(cfg,seeds,part,loop){
   const lead=cfg.leadEvents?edited(cfg.leadEvents):generateLead(leadCfg,chords,rngA,rngB);
   const arp=cfg.arpEvents?edited(cfg.arpEvents):generateArp(cfg,chords,new Rng(seeds.arp+':'+part));
   const bass=cfg.bassEvents?edited(cfg.bassEvents,bassRegister):generateBass(cfg,chords,new Rng(seeds.bass+':'+part));
-  const drumPattern=cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part));
+  const drumPattern=normDrumPattern(cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part)));
   const drums=expandDrums(drumPattern,BARS);
   const chordEvs=chords.map(c=>({step:c.bar0*STEPS,dur:c.bars*STEPS,notes:c.notes,vel:0.8}));
   const byStep={lead:[],arp:[],chords:[],bass:[],drums:[]};
@@ -403,8 +436,421 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
+})();
+</script>
+<script>
+(()=>{
+'use strict';
+const Z=window.Z;
+const LAYERS=['lead','arp','chords','bass','drums'];
+const DEFAULTS={
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
+};
+// drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
+// row plays — a rim, a shaker or a cowbell — so the same row sounds like it belongs to whichever kit is on.
+const KITS={
+  '808':   {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18},
+            perc:{voice:'cowbell',f1:540,f2:800,decay:0.3,level:0.32}},
+  '909':   {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15},
+            perc:{voice:'rim',f:1800,bp:2600,decay:0.05,level:0.42}},
+  'Lo-fi': {kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2},
+            perc:{voice:'shaker',hp:5200,decay:0.085,level:0.2}},
+  'Trap':  {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2},
+            perc:{voice:'rim',f:2100,bp:3000,decay:0.04,level:0.38}},
+  // House: a short punchy kick, a crisp snare and hats that stay open and bright
+  'House': {kick:{f0:180,f1:52,decay:0.3,click:0.1},snare:{tone:225,noise:0.55,bp:2300,decay:0.15},hat:{hp:10000,decay:0.042,open:0.36,level:0.26},clap:{bp:1500,decay:0.16},
+            perc:{voice:'shaker',hp:7200,decay:0.06,level:0.26}},
+  // Breaks: a dusty low kick under a lowpass, softer hats, and a snare with a room tail behind it
+  'Breaks':{kick:{f0:128,f1:44,decay:0.36,click:0.03,lp:3200},snare:{tone:180,noise:0.72,bp:1500,decay:0.28,tail:0.42},hat:{hp:6800,decay:0.055,open:0.3,level:0.18},clap:{bp:1050,decay:0.24},
+            perc:{voice:'rim',f:1500,bp:2000,decay:0.07,level:0.34}},
+};
+const cutoffHz=v=>80*Math.pow(150,v/100);
+const qOf=v=>0.5+Math.pow(v/100,1.6)*13;
+const attackSec=v=>0.002+Math.pow(v/100,2)*1.2;
+const releaseSec=v=>0.03+Math.pow(v/100,1.8)*2.5;
+const sendGain=v=>Math.pow(v/100,1.4)*0.9;
+const levelGain=v=>Math.pow(v/100,1.5);
+const midiHz=m=>440*Math.pow(2,(m-69)/12);
+function crushCurve(bits){const n=1024,c=new Float32Array(n),q=Math.pow(2,bits);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;c[i]=Math.round(x*q)/q}return c}
+function identityCurve(){const c=new Float32Array(3);c[0]=-1;c[1]=0;c[2]=1;return c}
+
+class Engine{
+  constructor(){
+    this.ctx=null;this.params=JSON.parse(JSON.stringify(DEFAULTS));this.kit='808';
+    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
+    this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
+    this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+  }
+  init(ctxIn){
+    if(this.ctx)return;
+    const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
+    this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // warmth: the whole mix through a soft clip and a gentle high shelf, before anything else touches it,
+    // so a section sweep, a punch-in and the limiter all work on an already warmed signal
+    this.warmShape=ctx.createWaveShaper();this.warmShape.oversample='2x';
+    this.warmTone=ctx.createBiquadFilter();this.warmTone.type='highshelf';this.warmTone.frequency.value=Z.WARMTH.shelfHz;
+    this.warmTrim=ctx.createGain();
+    // the per-section sweep: a master low-pass that a section can open or close over its own length
+    this.sweep=ctx.createBiquadFilter();this.sweep.type='lowpass';this.sweep.Q.value=1.1;this.sweep.frequency.value=Z.SWEEP.open;
+    // punch-in chain: highpass -> lowpass -> crusher -> gate
+    this.fxHP=ctx.createBiquadFilter();this.fxHP.type='highpass';this.fxHP.frequency.value=10;
+    this.fxLP=ctx.createBiquadFilter();this.fxLP.type='lowpass';this.fxLP.frequency.value=20000;
+    this.fxCrush=ctx.createWaveShaper();this.fxCrush.curve=identityCurve();
+    this.fxGate=ctx.createGain();
+    this.comp=ctx.createDynamicsCompressor();this.comp.threshold.value=-14;this.comp.knee.value=18;this.comp.ratio.value=4;this.comp.attack.value=0.004;this.comp.release.value=0.22;
+    this.limiter=ctx.createDynamicsCompressor();this.limiter.threshold.value=-2;this.limiter.knee.value=0;this.limiter.ratio.value=20;this.limiter.attack.value=0.001;this.limiter.release.value=0.08;
+    // the per-section fade: the very last gain in the chain, so a fade carries everything and nothing
+    // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
+    this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
+    this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
+    this.master.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);
+    this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
+    this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
+    this.duck=ctx.createGain();this.duck.connect(this.master);
+    // delay bus
+    this.delayIn=ctx.createGain();this.delay=ctx.createDelay(2);this.delayFilt=ctx.createBiquadFilter();this.delayFilt.type='lowpass';this.delayFilt.frequency.value=3000;
+    this.delayFb=ctx.createGain();this.delayFb.gain.value=0.42;this.delayOut=ctx.createGain();this.delayOut.gain.value=0.7;
+    this.delayIn.connect(this.delay);this.delay.connect(this.delayFilt);this.delayFilt.connect(this.delayFb);this.delayFb.connect(this.delay);this.delayFilt.connect(this.delayOut);this.delayOut.connect(this.master);
+    this.throw=ctx.createGain();this.throw.gain.value=0;this.duck.connect(this.throw);this.throw.connect(this.delayIn);
+    this.setBpm(this.bpm);
+    // reverb bus
+    this.reverbIn=ctx.createGain();this.reverb=ctx.createConvolver();this.reverb.buffer=this.makeIR(2.8,2.6);
+    this.reverbOut=ctx.createGain();this.reverbOut.gain.value=0.9;
+    this.reverbIn.connect(this.reverb);this.reverb.connect(this.reverbOut);this.reverbOut.connect(this.master);
+    this.wash=ctx.createGain();this.wash.gain.value=0;this.duck.connect(this.wash);this.wash.connect(this.reverbIn);
+    // chorus bus: a few short delay lines, each drifting under its own slow LFO and sitting in its own
+    // place in the stereo field. A synth layer sends into it and comes back wide, thick and moving.
+    this.chorusIn=ctx.createGain();this.chorusOut=ctx.createGain();this.chorusOut.gain.value=Z.CHORUS.mix;
+    this.chorusLfos=[];
+    for(const v of Z.CHORUS.voices){
+      const dl=ctx.createDelay(Z.CHORUS.maxDelay);dl.delayTime.value=v.delay;
+      const lfo=ctx.createOscillator();lfo.type='sine';lfo.frequency.value=v.rate;
+      const dep=ctx.createGain();dep.gain.value=v.depth;lfo.connect(dep);dep.connect(dl.delayTime);
+      lfo.start(0);this.chorusLfos.push(lfo);
+      this.chorusIn.connect(dl);
+      if(ctx.createStereoPanner){const pn=ctx.createStereoPanner();pn.pan.value=v.pan;dl.connect(pn);pn.connect(this.chorusOut)}
+      else dl.connect(this.chorusOut);
+    }
+    this.chorusOut.connect(this.master);
+    // layer buses
+    this.bus={};
+    for(const L of LAYERS){
+      const p=this.params[L],g=ctx.createGain(),ds=ctx.createGain(),rs=ctx.createGain();
+      ds.gain.value=sendGain(p.delay);rs.gain.value=sendGain(p.reverb);
+      g.connect(L==='drums'?this.master:this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);
+      this.bus[L]={g,ds,rs};
+      if(p.chorus!==undefined){const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);this.bus[L].cs=cs}
+    }
+    {const p=this.params.chords,g=ctx.createGain();g.gain.value=levelGain(p.level);const ds=ctx.createGain();ds.gain.value=sendGain(p.delay);const rs=ctx.createGain();rs.gain.value=sendGain(p.reverb);
+     const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);
+     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs}}
+    this.updateGains(true);
+    this.noise=this.makeNoise(2);
+  }
+  makeIR(seconds,decay){
+    const ctx=this.ctx,sr=ctx.sampleRate,n=Math.floor(sr*seconds),buf=ctx.createBuffer(2,n,sr);
+    for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<n;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/n,decay)*(i<sr*0.01?i/(sr*0.01):1)}}
+    return buf;
+  }
+  makeNoise(seconds){
+    const ctx=this.ctx,n=Math.floor(ctx.sampleRate*seconds),buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=Math.random()*2-1;return buf;
+  }
+  setBpm(b){this.bpm=b;if(this.ctx)this.delay.delayTime.setTargetAtTime(0.75*60/b,this.ctx.currentTime,0.05)}
+  setMaster(v){this.masterLevel=Math.pow(v/100,1.6);if(this.ctx)this.master.gain.setTargetAtTime(this.masterLevel,this.ctx.currentTime,0.02)}
+  // warmth: one knob, a soft-clip curve and a high shelf. At 0 the curve is dropped and the shelf is flat,
+  // so the mix passes through untouched; the trim takes back the level the clip adds as it is driven.
+  setWarmth(v,now){
+    this.warmth=Z.warmthAmt(v)*100;
+    if(!this.ctx||!this.warmShape)return;
+    const t=this.ctx.currentTime,sh=Z.warmthShelf(this.warmth),tr=Z.warmthTrim(this.warmth);
+    this.warmShape.curve=Z.warmthCurve(this.warmth);
+    if(now){this.warmTone.gain.value=sh;this.warmTrim.gain.value=tr}
+    else{this.warmTone.gain.setTargetAtTime(sh,t,0.03);this.warmTrim.gain.setTargetAtTime(tr,t,0.03)}
+  }
+  anySolo(){return LAYERS.some(L=>this.params[L].solo)}
+  audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}
+  updateGains(now){
+    if(!this.ctx)return;const t=this.ctx.currentTime;
+    for(const L of LAYERS){const g=this.audible(L)?levelGain(this.params[L].level):0;if(now)this.bus[L].g.gain.value=g;else this.bus[L].g.gain.setTargetAtTime(g,t,0.03)}
+  }
+  setParam(L,key,val){
+    const p=this.params[L];p[key]=val;if(!this.ctx)return;
+    const b=this.bus[L],t=this.ctx.currentTime;
+    if(key==='level'||key==='mute'||key==='solo')this.updateGains(false);
+    else if(key==='delay')b.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
+    else if(key==='reverb')b.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+    else if(key==='chorus'&&b.cs)b.cs.gain.setTargetAtTime(sendGain(val),t,0.03);
+    if(L==='chords'&&this.bus.live){const lb=this.bus.live;
+      if(key==='level')lb.g.gain.setTargetAtTime(levelGain(val),t,0.03);
+      else if(key==='delay')lb.ds.gain.setTargetAtTime(sendGain(val),t,0.03);
+      else if(key==='reverb')lb.rs.gain.setTargetAtTime(sendGain(val),t,0.03);
+      else if(key==='chorus')lb.cs.gain.setTargetAtTime(sendGain(val),t,0.03)}
+  }
+  stepSec(){return 60/this.bpm/4}
+
+  /* ---- punch-in effects (momentary) ---- */
+  fxOn(name){
+    if(!this.ctx||this.fx[name])return;this.fx[name]=true;const t=this.ctx.currentTime;
+    if(name==='lp'){this.fxLP.frequency.cancelScheduledValues(t);this.fxLP.frequency.setValueAtTime(Math.max(300,this.fxLP.frequency.value),t);this.fxLP.frequency.exponentialRampToValueAtTime(260,t+0.5);this.fxLP.Q.value=4}
+    else if(name==='hp'){this.fxHP.frequency.cancelScheduledValues(t);this.fxHP.frequency.setValueAtTime(Math.max(10,this.fxHP.frequency.value),t);this.fxHP.frequency.exponentialRampToValueAtTime(1100,t+0.45);this.fxHP.Q.value=3}
+    else if(name==='crush'){this.fxCrush.curve=crushCurve(3.5)}
+    else if(name==='throw'){this.throw.gain.setTargetAtTime(0.8,t,0.02);this.delayFb.gain.setTargetAtTime(0.78,t,0.02)}
+    else if(name==='wash'){this.wash.gain.setTargetAtTime(1.0,t,0.05)}
+  }
+  fxOff(name){
+    if(!this.ctx||!this.fx[name])return;this.fx[name]=false;const t=this.ctx.currentTime;
+    if(name==='lp'){this.fxLP.frequency.cancelScheduledValues(t);this.fxLP.frequency.setValueAtTime(this.fxLP.frequency.value,t);this.fxLP.frequency.exponentialRampToValueAtTime(20000,t+0.35);this.fxLP.Q.setTargetAtTime(1,t+0.3,0.1)}
+    else if(name==='hp'){this.fxHP.frequency.cancelScheduledValues(t);this.fxHP.frequency.setValueAtTime(this.fxHP.frequency.value,t);this.fxHP.frequency.exponentialRampToValueAtTime(10,t+0.3);this.fxHP.Q.setTargetAtTime(1,t+0.3,0.1)}
+    else if(name==='crush'){this.fxCrush.curve=identityCurve()}
+    else if(name==='throw'){this.throw.gain.setTargetAtTime(0,t,0.02);this.delayFb.gain.setTargetAtTime(0.42,t+0.4,0.3)}
+    else if(name==='wash'){this.wash.gain.setTargetAtTime(0,t,0.1)}
+    else if(name==='gate8'||name==='gate16'){this.fxGate.gain.cancelScheduledValues(t);this.fxGate.gain.setValueAtTime(1,t)}
+  }
+  gateStep(step,time){
+    const g=this.fxGate.gain,d=this.stepSec();
+    if(this.fx.gate16){g.setValueAtTime(1,time);g.setValueAtTime(0,time+d*0.5)}
+    else if(this.fx.gate8){g.setValueAtTime(step%2===0?1:0,time)}
+  }
+
+  // analog drift: every oscillator of a voice takes its own small detune and then wanders slowly away from
+  // it, so a note held on and a note played twice never sit still. The offset is cents — always far under a
+  // semitone — so the note itself never changes, whatever the Drift knob says.
+  driftOsc(o,det,dr,time,durSec){
+    o.detune.value=det+Z.driftCents(dr,Math.random());
+    if(!(dr>0))return;
+    const span=Math.min(8,Math.max(Z.DRIFT.seconds,durSec===undefined?4:durSec));
+    const legs=Math.max(1,Math.round(span/Z.DRIFT.seconds));
+    o.detune.setValueAtTime(o.detune.value,time);
+    for(let i=1;i<=legs;i++)o.detune.linearRampToValueAtTime(det+Z.driftCents(dr,Math.random()),time+span*i/legs);
+  }
+
+  /* ---- synth voice ---- */
+  playNote(L,midi,vel,time,durSec,pan,busName){
+    const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
+    const out=ctx.createGain();out.gain.setValueAtTime(0,time);
+    const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
+    // the filter opens a shade differently on every note, the way a warm analog one does
+    const cut=cutoffHz(p.cutoff)*Z.driftCutoff(dr,Math.random()),atk=attackSec(p.attack),rel=releaseSec(p.release);
+    const pluck=L==='bass'||L==='arp'||(L==='lead'&&p.attack<15);
+    if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
+    else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
+    const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
+    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
+    if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
+    else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
+    else mk(wave,0);
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
+    out.gain.linearRampToValueAtTime(peak,time+atk);
+    if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);
+    filt.connect(out);
+    const dest=(this.bus[busName]||this.bus[L]).g;
+    if(pan&&ctx.createStereoPanner){const pn=ctx.createStereoPanner();pn.pan.value=Math.max(-1,Math.min(1,pan));out.connect(pn);pn.connect(dest)}
+    else out.connect(dest);
+    let released=false;
+    const release=(t)=>{
+      if(released)return;released=true;
+      out.gain.cancelScheduledValues(t);out.gain.setValueAtTime(Math.max(out.gain.value,0.0001),t);
+      out.gain.setTargetAtTime(0,t,rel/4);oscs.forEach(o=>o.stop(t+rel+0.1));
+    };
+    if(durSec!==undefined)release(time+durSec);
+    return release;
+  }
+
+  /* ---- drums ---- */
+  playDrum(kind,vel,time){
+    const ctx=this.ctx,bus=this.bus.drums.g,K=KITS[this.kit]||KITS['808'];
+    if(kind==='kick'){
+      const k=K.kick,pump=(this.params.drums.pump||0)/100;
+      if(pump>0){const d=this.duck.gain;d.cancelScheduledValues(time);d.setValueAtTime(1,time);d.linearRampToValueAtTime(1-pump*0.8,time+0.012);d.setTargetAtTime(1,time+0.03,0.07+pump*0.08)}
+      const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';
+      o.frequency.setValueAtTime(k.f0,time);o.frequency.exponentialRampToValueAtTime(k.f1,time+0.09);
+      g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+      let dest=bus;if(k.lp){const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=k.lp;f.connect(bus);dest=f}
+      o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay+0.05);
+      if(k.click>0){const c=ctx.createOscillator(),cg=ctx.createGain();c.type='square';c.frequency.value=1400;cg.gain.setValueAtTime(vel*k.click,time);cg.gain.exponentialRampToValueAtTime(0.001,time+0.012);c.connect(cg);cg.connect(bus);c.start(time);c.stop(time+0.02)}
+    }else if(kind==='snare'){
+      const k=K.snare,n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=0.7;
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+      n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
+      const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(k.tone,time);o.frequency.exponentialRampToValueAtTime(k.tone*0.65,time+0.08);
+      og.gain.setValueAtTime(vel*0.35,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.11);o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.12);
+      // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
+      // It hangs off the drum bus like everything else, so muting the drums silences it too.
+      if(k.tail>0){
+        const rn=ctx.createBufferSource();rn.buffer=this.noise;const rf=ctx.createBiquadFilter();rf.type='lowpass';rf.frequency.value=2400;
+        const rg=ctx.createGain();rg.gain.setValueAtTime(vel*0.16,time+0.01);rg.gain.exponentialRampToValueAtTime(0.001,time+k.tail);
+        rn.connect(rf);rf.connect(rg);rg.connect(bus);rn.start(time+0.01);rn.stop(time+k.tail+0.03);
+      }
+    }else if(kind==='perc'){
+      const k=K.perc||KITS['808'].perc;
+      if(k.voice==='cowbell'){
+        // two detuned squares through a narrow bandpass: the cowbell every drum machine has
+        const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=(k.f1+k.f2)/2;f.Q.value=2.4;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        f.connect(g);g.connect(bus);
+        [k.f1,k.f2].forEach(hz=>{const o=ctx.createOscillator();o.type='square';o.frequency.value=hz;o.connect(f);o.start(time);o.stop(time+k.decay+0.02)});
+      }else if(k.voice==='rim'){
+        // a wooden click: a tight band-passed noise snap with a short tonal ping on top of it
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=6;
+        const g=ctx.createGain();g.gain.setValueAtTime(vel*k.level,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+        const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.value=k.f;
+        og.gain.setValueAtTime(vel*k.level*0.7,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.03);
+        o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.04);
+      }else{
+        // a shaker: bright noise with a hint of an attack, so it sounds shaken rather than clicked
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;
+        const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vel*k.level),time+0.012);
+        g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+        n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.02);
+      }
+    }else if(kind==='clap'){
+      const k=K.clap;[0,0.011,0.022,0.033].forEach((off,i)=>{
+        const n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=1.1;
+        const g=ctx.createGain(),last=i===3,t0=time+off;g.gain.setValueAtTime(vel*0.4,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(last?k.decay:0.012));
+        n.connect(f);f.connect(g);g.connect(bus);n.start(t0);n.stop(t0+(last?k.decay:0.015)+0.01)});
+    }else{
+      const k=K.hat,open=kind==='ohat',n=ctx.createBufferSource();n.buffer=this.noise;
+      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*(open?k.level*1.2:k.level),time);g.gain.exponentialRampToValueAtTime(0.001,time+(open?k.open:k.decay));
+      n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+(open?k.open:k.decay)+0.02);
+    }
+  }
+
+  /* ---- metronome, risers and crashes ---- */
+  click(step,time){
+    const ctx=this.ctx,o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=step%16===0?1760:1175;
+    g.gain.setValueAtTime(step%16===0?0.3:0.18,time);g.gain.exponentialRampToValueAtTime(0.001,time+0.05);
+    o.connect(g);g.connect(this.master);o.start(time);o.stop(time+0.06);
+  }
+  riser(time,dur){
+    const ctx=this.ctx,n=ctx.createBufferSource();n.buffer=this.noise;n.loop=true;
+    const f=ctx.createBiquadFilter();f.type='bandpass';f.Q.value=1.2;f.frequency.setValueAtTime(250,time);f.frequency.exponentialRampToValueAtTime(5000,time+dur);
+    const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(0.2,time+dur);g.gain.setValueAtTime(0.0001,time+dur+0.005);
+    n.connect(f);f.connect(g);g.connect(this.master);g.connect(this.reverbIn);n.start(time);n.stop(time+dur+0.05);
+  }
+  crash(time){
+    const ctx=this.ctx,n=ctx.createBufferSource();n.buffer=this.noise;n.loop=true;
+    const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=4500;
+    const g=ctx.createGain();g.gain.setValueAtTime(0.28,time);g.gain.exponentialRampToValueAtTime(0.001,time+1.4);
+    n.connect(f);f.connect(g);g.connect(this.master);g.connect(this.reverbIn);n.start(time);n.stop(time+1.5);
+  }
+  // called for every step: a riser over the last bar before a louder section, a crash on the downbeat of one
+  transitionAt(si,step,time){
+    if(!this.transitions||this.loopSection||this.song.length<2)return;
+    const sec=this.song[si];if(!sec)return;const total=(sec.bars||8)*Z.STEPS,n=this.song.length;
+    if(step===total-16){const nx=this.song[(si+1)%n];if(nx&&nx.energy>sec.energy)this.riser(time,16*this.stepSec())}
+    if(step===0){const pv=this.song[(si-1+n)%n];if(pv&&sec.layers.drums===1&&sec.energy>=pv.energy&&this.audible('drums'))this.crash(time)}
+  }
+  // a section's filter sweep: scheduled once, on its first step, over the section's own length.
+  // Looping a section replays it, and the offline render runs the same call, so an export matches.
+  sweepAt(si,step,time){
+    if(!this.ctx||!this.sweep||step!==0)return;
+    const sec=this.song[si];if(!sec)return;
+    const f=this.sweep.frequency,plan=Z.sweepPlan(sec.sweep,(sec.bars||8)*Z.STEPS,this.stepSec());
+    f.cancelScheduledValues(time);
+    if(!plan){f.setValueAtTime(Z.SWEEP.open,time);return}
+    for(const p of plan){if(p.ramp)f.exponentialRampToValueAtTime(p.hz,time+p.t);else f.setValueAtTime(p.hz,time+p.t)}
+  }
+  resetSweep(){if(!this.ctx||!this.sweep)return;const t=this.ctx.currentTime,f=this.sweep.frequency;
+    f.cancelScheduledValues(t);f.setValueAtTime(Z.SWEEP.open,t)}
+  // a section's fade, scheduled on its first step over the section's own length, like the sweep.
+  // A section that does not fade eases the master back to full, so the section after a fade-out
+  // comes back in cleanly and nothing is ever left silent.
+  fadeAt(si,step,time){
+    if(!this.ctx||!this.fade||step!==0)return;
+    const sec=this.song[si];if(!sec)return;
+    const g=this.fade.gain,plan=Z.fadePlan(sec.fade,(sec.bars||8)*Z.STEPS,this.stepSec());
+    g.cancelScheduledValues(time);
+    if(!plan){g.setTargetAtTime(Z.FADE.full,time,0.01);return}
+    for(const p of plan){
+      const t=time+p.t;
+      if(p.ramp)g.exponentialRampToValueAtTime(p.g,t);
+      // coming back up to full is eased over a few milliseconds, so the section after a fade-out never
+      // slams in with a click; a section that starts quiet takes its value at once and is silent anyway
+      else if(p.t===0&&p.g>=Z.FADE.full)g.setTargetAtTime(p.g,t,0.008);
+      else g.setValueAtTime(p.g,t);
+    }
+  }
+  resetFade(){if(!this.ctx||!this.fade)return;const t=this.ctx.currentTime,g=this.fade.gain;
+    g.cancelScheduledValues(t);g.setValueAtTime(Z.FADE.full,t)}
+  nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
+
+  /* ---- transport & scheduler ---- */
+  start(section){
+    this.init();if(this.ctx.resume)this.ctx.resume();
+    this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];
+    this.grid=this.ctx.currentTime+0.08;
+    clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
+  }
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  jump(section){this.section=section;this.step=0}
+  tick(){
+    const ctx=this.ctx;if(!this.song.length)return;
+    while(this.grid<ctx.currentTime+0.16){
+      const d=this.stepSec(),sec=this.song[this.section]||this.song[0];
+      const t=this.grid+(this.step%2===1?this.swing*d:0);
+      this.scheduleStep(this.section,this.step,t);
+      this.transitionAt(this.section,this.step,t);
+      this.sweepAt(this.section,this.step,t);
+      this.fadeAt(this.section,this.step,t);
+      if(this.metronome&&this.step%4===0)this.click(this.step,t);
+      if(this.fx.gate8||this.fx.gate16)this.gateStep(this.step,t);
+      this.queue.push({section:this.section,step:this.step,time:t});
+      this.grid+=d;this.step++;
+      if(this.step>=(sec.bars||8)*Z.STEPS){
+        this.step=0;
+        if(!this.loopSection){this.section++;if(this.section>=this.song.length){this.section=0;this.loop++;if(this.onLoop)this.onLoop(this.loop)}}
+        if(this.onSection)this.onSection(this.section);
+      }
+    }
+    if(this.queue.length>64)this.queue.splice(0,this.queue.length-64);
+  }
+  scheduleStep(si,step,time){
+    const sec=this.song[si];if(!sec)return;const tr=sec.track,d=this.stepSec(),lay=sec.layers;
+    const s=step%Z.TOTAL;
+    for(const L of LAYERS){
+      if(!this.audible(L)||!lay[L])continue;
+      const evs=tr.byStep[L][s];if(!evs||!evs.length)continue;
+      for(const e of evs){
+        const vel=e.vel*(0.93+Math.random()*0.1);
+        if(L==='drums'){
+          if(lay[L]==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&s%16!==0)))continue;
+          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,time);
+        }else if(L==='chords'){
+          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,time,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
+        }else if(L==='arp'){
+          this.playNote(L,e.midi,vel,time,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
+        }else{
+          const dur=Math.max(0.05,e.dur*d*0.95);
+          this.playNote(L,e.midi,vel,time,dur,L==='lead'?0.08:0);
+          if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,time,dur,-0.22);
+        }
+      }
+    }
+  }
+  currentPos(){
+    if(!this.ctx||!this.playing)return null;const now=this.ctx.currentTime;let p=null;
+    for(const q of this.queue){if(q.time<=now)p=q;else break}return p;
+  }
+  // a live note from the letter keys: it sounds through the layer you play into, so recording sounds like playback
+  noteOn(midi,L){const layer=this.params[L]?L:'lead';this.init();if(this.ctx.resume)this.ctx.resume();
+    return this.playNote(layer,midi,0.9,this.ctx.currentTime,undefined,layer==='lead'?0.08:0)}
+  rms(){
+    if(!this.ctx)return 0;const a=new Uint8Array(this.analyser.fftSize);this.analyser.getByteTimeDomainData(a);
+    let s=0;for(let i=0;i<a.length;i++){const v=(a[i]-128)/128;s+=v*v}return Math.sqrt(s/a.length);
+  }
+}
+Z.LAYERS=LAYERS;Z.DEFAULTS=DEFAULTS;Z.KITS=KITS;Z.Engine=Engine;Z.engine=new Engine();Z.cutoffHz=cutoffHz;Z.attackSec=attackSec;Z.releaseSec=releaseSec;
 })();
 </script>
 <script>
@@ -823,6 +1269,86 @@ for(const bars of [1,2,4,8,16]){
   assert(Z.warmthShelf(100)<Z.warmthShelf(25),'more warmth must roll more of the top end off');
 }
 
+// drum kits and the perc row. Every kit must be able to play every row of the grid — a kit missing a recipe
+// would drop hits on the floor — and its perc voice must be one the engine synthesises and the MIDI export
+// has a GM note for. A generated perc figure stays off the backbeat the snare and clap own, never plays
+// louder than they do, and never turns up on a quiet track at all.
+{
+  assert(Z.DRUM_KINDS.includes('perc'),'the drum grid has no perc row');
+  assert(Z.DRUM_KINDS.length===6,'the drum grid has '+Z.DRUM_KINDS.length+' rows, expected 6');
+  const KITS=Z.KITS||{};
+  assert(Object.keys(KITS).length>=6,'only '+Object.keys(KITS).length+' drum kits, expected at least 6');
+  ['808','909','Lo-fi','Trap','House','Breaks'].forEach(k=>assert(KITS[k],'the '+k+' kit is missing'));
+  for(const name in KITS){
+    const K=KITS[name],tag=' [kit '+name+']';
+    ['kick','snare','hat','clap','perc'].forEach(v=>assert(K[v]&&typeof K[v]==='object','kit cannot play its '+v+tag));
+    assert(K.kick.decay>0&&K.kick.decay<2,'a kick decay of '+K.kick.decay+' s is not a kick'+tag);
+    assert(K.snare.decay>0&&K.snare.decay<1,'a snare decay of '+K.snare.decay+' s is not a snare'+tag);
+    assert(K.hat.decay>0&&K.hat.open>=K.hat.decay,'an open hat must ring at least as long as a closed one'+tag);
+    assert(K.hat.level>0&&K.hat.level<=1,'a hat level of '+K.hat.level+' is outside (0, 1]'+tag);
+    const p=K.perc;
+    assert(Z.PERC_VOICES.includes(p.voice),'perc voice "'+p.voice+'" is not one the engine can play'+tag);
+    assert(p.decay>0&&p.decay<1,'a perc decay of '+p.decay+' s is not a percussion hit'+tag);
+    assert(p.level>0&&p.level<=1,'a perc level of '+p.level+' is outside (0, 1]'+tag);
+    if(p.voice==='cowbell')assert(p.f1>0&&p.f2>p.f1,'a cowbell needs two rising partials'+tag);
+    else if(p.voice==='rim')assert(p.f>0&&p.bp>0,'a rim needs a tone and a band to snap in'+tag);
+    else assert(p.hp>0,'a shaker needs a high pass to sit above the kit'+tag);
+    const gm=Z.PERC_GM[p.voice];
+    assert(gm>=35&&gm<=81,'perc voice '+p.voice+' has no General MIDI drum note (got '+gm+')'+tag);
+  }
+  Z.PERC_VOICES.forEach(v=>{const gm=Z.PERC_GM[v];assert(gm>=35&&gm<=81,'perc voice '+v+' maps to '+gm+', outside the GM drum map')});
+  assert(Z.PERC.maxVel>0&&Z.PERC.maxVel<0.9,'perc at '+Z.PERC.maxVel+' would play in front of the backbeat');
+  assert(Z.PERC.from>0&&Z.PERC.from<1,'perc must come in somewhere along the energy range');
+  // the generated row, over every energy and a spread of seeds
+  let withPerc=0,loud=0;
+  for(const energy of [0,10,30,44,50,70,85,100]){
+    for(const seed of seeds){
+      const P=Z.generateDrumPattern({energy},new Z.Rng(seed+':perc:'+energy));
+      const tag=' [perc · energy '+energy+' · '+seed+']';
+      assert(Array.isArray(P.perc)&&P.perc.length===16,'the perc row is not sixteen steps'+tag);
+      const hits=P.perc.filter(v=>v>0).length;
+      if(hits)withPerc++;
+      if(energy<Z.PERC.from*100)assert(hits===0,'a track at energy '+energy+' should be too quiet for perc, got '+hits+' hits'+tag);
+      P.perc.forEach((v,o)=>{
+        if(!v)return;
+        assert(v>0&&v<=Z.PERC.maxVel,'a perc hit at '+v+' is louder than the '+Z.PERC.maxVel+' allowed'+tag);
+        assert(!P.snare[o],'perc lands on the snare at step '+o+tag);
+        assert(!P.clap[o],'perc lands on the clap at step '+o+tag);
+        if(P.snare[o]||P.clap[o])loud++;
+      });
+      // it is part of the pattern the grid edits and the engine plays, and it repeats every bar
+      const t=Z.generateTrack({root:0,scale:'minor',energy,evolve:true,sevenths:false,gate:0.7,drumPattern:P},
+        {chords:seed,lead:seed,arp:seed,bass:seed,drums:seed},'v',0);
+      const percEvs=t.drums.filter(d=>d.kind==='perc');
+      assert(percEvs.length===hits*Z.BARS-(P.fill?P.perc.slice(12).filter(v=>v>0).length:0),
+        'the perc row reached playback as '+percEvs.length+' hits, not the '+hits+' a bar it holds'+tag);
+      percEvs.forEach(d=>assert(d.step>=0&&d.step<Z.TOTAL&&d.vel<=Z.PERC.maxVel,'a perc hit left the loop or got louder on the way to playback'+tag));
+    }
+  }
+  assert(withPerc>0,'no energy at all produced a perc figure');
+  assert(loud===0,'perc crowded the backbeat');
+  // a project saved before there was a perc row still opens: the row is filled in, everything else is kept
+  const old={kick:[1,0,0,0,0,0,0,0,0.85,0,0,0,0,0,0,0],snare:new Array(16).fill(0),clap:new Array(16).fill(0),
+    hat:new Array(16).fill(0.5),ohat:new Array(16).fill(0),fill:true};
+  old.snare[4]=0.9;old.snare[12]=0.9;
+  const N=Z.normDrumPattern(old);
+  assert(N.perc.length===16&&N.perc.every(v=>v===0),'an old pattern did not get an empty perc row');
+  Z.DRUM_KINDS.forEach(k=>{if(k!=='perc')assert(N[k].join()===old[k].join(),'normalising a pattern changed its '+k+' row')});
+  assert(N.fill===true,'normalising a pattern lost its fill');
+  const tOld=Z.generateTrack({root:0,scale:'minor',energy:70,evolve:true,sevenths:false,gate:0.7,drumPattern:old},
+    {chords:'OLD001',lead:'OLD001',arp:'OLD001',bass:'OLD001',drums:'OLD001'},'v',0);
+  assert(tOld.drums.some(d=>d.kind==='kick'&&d.step===0),'an old pattern lost its kick');
+  assert(!tOld.drums.some(d=>d.kind==='perc'),'an old pattern gained perc hits it never had');
+  assert(tOld.drumPattern.perc.length===16,'an old pattern reached the grid without a perc row');
+  // a ragged row is repaired rather than trusted: sixteen steps, every value inside 0 to 1
+  const ragged=Z.normDrumPattern({kick:[1,2,-1,'x',null],perc:new Array(40).fill(0.5),fill:false});
+  Z.DRUM_KINDS.forEach(k=>{
+    assert(ragged[k].length===16,'a ragged '+k+' row was not repaired to sixteen steps');
+    ragged[k].forEach(v=>assert(typeof v==='number'&&v>=0&&v<=1,'a repaired '+k+' step of '+v+' is outside 0 to 1'));
+  });
+  assert(ragged.fill===false,'normalising a pattern turned its fill back on');
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -836,7 +1362,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

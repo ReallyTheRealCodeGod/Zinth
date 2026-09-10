@@ -58,7 +58,16 @@ function romanFor(degree,quality,size){
 
 /* ================= generation ================= */
 const STEPS=16,BARS=8,TOTAL=STEPS*BARS;
-const DRUM_KINDS=['kick','snare','clap','hat','ohat'];
+const DRUM_KINDS=['kick','snare','clap','hat','ohat','perc'];
+/* The perc row: a rim, a shaker or a cowbell — the kit chooses which — that lifts a busy pattern without
+   crowding it. The generator only reaches for it once the track has the energy to carry one, keeps it off
+   the backbeat the snare and the clap own, and never lets it play louder than they do, so perc always
+   sits behind the kit rather than in front of it. Which voice a kit plays reaches a DAW as its GM note. */
+const PERC_VOICES=['rim','shaker','cowbell'];
+const PERC_GM={rim:37,shaker:70,cowbell:56};   // GM percussion: side stick, maracas, cowbell
+const PERC={from:0.45,maxVel:0.65};
+// the sixteenth figures perc plays: offbeats and pickups, never the 1 the kick owns
+const PERC_FIGURES=[[2,6,10,14],[3,7,11,15],[6,14],[2,10],[7,15],[1,5,9,13],[6,10,14]];
 
 /* A progression entry is either a plain degree — what a chord-box sketch produces — or an object
    {d, bars, seventh, inv}: the degree, how many bars it lasts, whether it takes the seventh (else the
@@ -264,6 +273,29 @@ function generateBass(cfg,chords,rng){
   }
   return out;
 }
+// a pattern from an older project has no perc row, and a hand-made one may be ragged: give every kind its
+// sixteen steps, in range, and keep every hit that is already there. Playback, the grid and the exports all
+// read a normalised pattern, so an old song opens with an empty perc row rather than falling over.
+function normDrumPattern(P){
+  const out={fill:!(P&&P.fill===false)};
+  for(const k of DRUM_KINDS){
+    const row=new Array(16).fill(0),src=P&&Array.isArray(P[k])?P[k]:null;
+    if(src)for(let i=0;i<16;i++){const v=+src[i];if(v>0)row[i]=Math.min(1,v)}
+    out[k]=row;
+  }
+  return out;
+}
+// the perc row itself: nothing at all on a quiet track, a figure that steers clear of the snare and the
+// clap on a busy one, and always under PERC.maxVel so it stays behind the backbeat
+function percRow(P,energy,rng){
+  const row=new Array(16).fill(0);
+  if(energy<PERC.from)return row;
+  const reach=(energy-PERC.from)/(1-PERC.from);
+  if(!rng.chance(0.3+reach*0.6))return row;
+  const fig=rng.pick(PERC_FIGURES);
+  fig.forEach(o=>{if(P.snare[o]||P.clap[o])return;row[o]=Math.min(PERC.maxVel,(o%4===2?0.6:0.45)+rng.next()*0.05)});
+  return row;
+}
 // one bar of drums as velocity rows; this is what the step grid edits
 function generateDrumPattern(cfg,rng){
   const energy=cfg.energy/100,P={};DRUM_KINDS.forEach(k=>P[k]=new Array(16).fill(0));P.fill=true;
@@ -276,13 +308,14 @@ function generateDrumPattern(cfg,rng){
   const hatRate=energy>0.7?1:energy>0.3?2:4,openAt=rng.chance(0.5)?14:-1;
   for(let o=0;o<16;o+=hatRate)P.hat[o]=o%4===0?0.7:o%2===0?0.5:0.35;
   if(openAt>=0){P.hat[openAt]=0;P.ohat[openAt]=0.7}
+  P.perc=percRow(P,energy,rng);
   return P;
 }
 function expandDrums(P,bars){
   const out=[];
   for(let bar=0;bar<bars;bar++){
     const s0=bar*STEPS,fill=P.fill&&bar===bars-1;
-    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'))continue;out.push({step:s0+o,kind:k,vel:v})}
+    for(const k of DRUM_KINDS)for(let o=0;o<16;o++){const v=P[k][o];if(!v)continue;if(fill&&o>=12&&(k==='hat'||k==='ohat'||k==='perc'))continue;out.push({step:s0+o,kind:k,vel:v})}
     if(fill)[12,13,14,15].forEach((o,i)=>out.push({step:s0+o,kind:'snare',vel:0.5+i*0.15}));
   }
   return out;
@@ -390,7 +423,7 @@ function generateTrack(cfg,seeds,part,loop){
   const lead=cfg.leadEvents?edited(cfg.leadEvents):generateLead(leadCfg,chords,rngA,rngB);
   const arp=cfg.arpEvents?edited(cfg.arpEvents):generateArp(cfg,chords,new Rng(seeds.arp+':'+part));
   const bass=cfg.bassEvents?edited(cfg.bassEvents,bassRegister):generateBass(cfg,chords,new Rng(seeds.bass+':'+part));
-  const drumPattern=cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part));
+  const drumPattern=normDrumPattern(cfg.drumPattern||generateDrumPattern(cfg,new Rng(seeds.drums+':'+part)));
   const drums=expandDrums(drumPattern,BARS);
   const chordEvs=chords.map(c=>({step:c.bar0*STEPS,dur:c.bars*STEPS,notes:c.notes,vel:0.8}));
   const byStep={lead:[],arp:[],chords:[],bass:[],drums:[]};
@@ -400,6 +433,6 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim});
 })();

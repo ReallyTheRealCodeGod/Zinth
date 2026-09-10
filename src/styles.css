@@ -231,8 +231,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .meter i{display:block;height:100%;width:0;background:linear-gradient(to right,var(--teal),var(--amber));transition:width .08s}
 /* drum step grid */
 .grid{display:flex;flex-direction:column;gap:3px}
-.grow{display:grid;grid-template-columns:44px repeat(16,1fr);gap:2px;align-items:center}
-.grow .gn{font:600 9px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--sand)}
+.grow{display:grid;grid-template-columns:52px repeat(16,1fr);gap:2px;align-items:center}
+.grow .gn{font:600 9px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--sand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cell{height:18px;border-radius:3px;background:var(--panel-3);border:1px solid transparent;padding:0}
 .cell:nth-child(4n+2){border-left-color:rgba(236,230,216,.14)}
 .cell.on{background:var(--sand)}

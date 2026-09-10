@@ -20,6 +20,7 @@ mkdir -p tests
   echo '<title>Zinth theory check</title>'
   echo "$FONTS"
   echo '<script>'; cat src/theory.js; echo '</script>'
+  echo '<script>'; cat src/engine.js; echo '</script>'
   echo '<script>'; cat tests/check.js; echo '</script>'
 } > tests/check.html
 
