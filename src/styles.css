@@ -159,7 +159,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .sec:hover{border-color:var(--ink-mute)}
 .sec .sn{font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:16px}
 .sec .sb{font:400 10px var(--mono);color:var(--ink-mute);position:absolute;top:6px;right:7px}
-.sec .dots{display:flex;gap:3px}
+.sec .dots{display:flex;align-items:center;gap:3px}
+.sec .dots .sw{margin-left:3px;font:500 10px var(--mono);line-height:1;color:var(--teal)}
 .sec .dots i{width:6px;height:6px;border-radius:50%;background:var(--line-2)}
 .sec .dots i.on{background:var(--c)}
 .sec .dots i.lite{background:var(--c);opacity:.4}

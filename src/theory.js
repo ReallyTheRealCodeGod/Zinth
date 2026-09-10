@@ -287,6 +287,20 @@ function expandDrums(P,bars){
   }
   return out;
 }
+/* A section can sweep the whole mix through a master low-pass. The plan is a list of {t,hz,ramp}
+   points in seconds from the section's first step: 'up' opens from SWEEP.lo over the whole section,
+   'down' holds the mix open and closes it over the last bar. Playback and the WAV export apply the
+   same plan, so an export sounds like what you heard. */
+const SWEEP={lo:300,open:18000},SWEEP_MODES=['none','up','down'];
+function sweepPlan(mode,steps,stepSec){
+  if((mode!=='up'&&mode!=='down')||!(steps>0)||!(stepSec>0))return null;
+  const len=steps*stepSec,fall=Math.min(STEPS*stepSec,len);
+  if(mode==='up')return [{t:0,hz:SWEEP.lo,ramp:false},{t:len,hz:SWEEP.open,ramp:true}];
+  const pts=[{t:0,hz:SWEEP.open,ramp:false}];
+  if(len>fall)pts.push({t:len-fall,hz:SWEEP.open,ramp:false});
+  pts.push({t:len,hz:SWEEP.lo,ramp:true});
+  return pts;
+}
 function generateTrack(cfg,seeds,part,loop){
   const clamp=v=>Math.max(0,Math.min(100,v));
   cfg=Object.assign({},cfg,{energy:clamp(cfg.energy)});
@@ -309,5 +323,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan});
 })();

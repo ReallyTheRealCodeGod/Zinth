@@ -64,6 +64,7 @@ function setRec(on){
   let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
   if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
+  if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
   U.setStatus(on?msg:'Recording off');
 }
 function recordNote(start,midi,t1){
@@ -191,7 +192,7 @@ async function exportWav(){
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
     const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.init(off);
-    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);grid+=d}});
+    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
     U.setStatus(await saveFile(name,new Blob([encodeWav(buf)],{type:'audio/wav'}),'Saved '+name+' ('+Math.round(dur-3)+' s)'));

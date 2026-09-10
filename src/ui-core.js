@@ -32,16 +32,21 @@ const PATCHES={
   Brass:{wave:'saw',cutoff:58,reso:40,attack:12,release:28,spread:15},Hollow:{wave:'square',cutoff:42,reso:30,attack:25,release:60,spread:25},
 };
 // Section types: the arranger's building blocks. part 'v' uses the A chords, 'c' the B chords.
+// A section can also sweep the whole mix through a master filter: 'up' opens it over the section,
+// 'down' closes it over the last bar. The types that want one by ear get it from the start.
 const SEC_TYPES={
-  'Intro':     {part:'v',energy:-15,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'}},
+  'Intro':     {part:'v',energy:-15,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'up'},
   'Verse':     {part:'v',energy:-5, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1}},
-  'Pre-chorus':{part:'v',energy:5,  bars:4,layers:{lead:0,arp:1,chords:1,bass:1,drums:1}},
+  'Pre-chorus':{part:'v',energy:5,  bars:4,layers:{lead:0,arp:1,chords:1,bass:1,drums:1},sweep:'up'},
   'Chorus':    {part:'c',energy:12, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true},
   'Bridge':    {part:'c',energy:-8, bars:8,layers:{lead:1,arp:0,chords:1,bass:1,drums:'lite'}},
-  'Break':     {part:'c',energy:-10,bars:4,layers:{lead:1,arp:0,chords:1,bass:0,drums:0},hook:true},
+  'Break':     {part:'c',energy:-10,bars:4,layers:{lead:1,arp:0,chords:1,bass:0,drums:0},hook:true,sweep:'up'},
   'Drop':      {part:'c',energy:20, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true,double:true},
-  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'}},
+  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'down'},
 };
+const SWEEP_MARK={up:'↗',down:'↘'};
+const SWEEP_SAYS={none:'plays open, no sweep',up:'starts dark and opens up over the whole section',down:'plays open and closes down over its last bar'};
+const sweepOf=sec=>Z.SWEEP_MODES.indexOf(sec&&sec.sweep)>0?sec.sweep:'none';
 const DEFAULT_FORM=['Intro','Verse','Chorus','Verse','Chorus','Break','Drop','Outro'];
 const FX=[['lp','Z','Low sweep'],['hp','X','High sweep'],['gate8','C','Gate ⅛'],['gate16','V','Gate ⅟₁₆'],['crush','B','Crush'],['throw','N','Delay throw'],['wash','M','Wash']];
 const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
@@ -53,7 +58,7 @@ const state={
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
-function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double}}
+function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none'}}
 function defaultSections(){return DEFAULT_FORM.map(newSection)}
 
 /* ---------- populate controls ---------- */
@@ -87,7 +92,7 @@ function restore(p){
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
-  state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse'});
+  state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec)});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();
@@ -258,7 +263,7 @@ $('ceReset').addEventListener('click',()=>{
 $('ceClose').addEventListener('click',closeChordEdit);
 function renderArr(){
   const cur=E.playing?E.section:-1;
-  $('arr').innerHTML=song.map((s,i)=>'<button class="sec'+(i===state.sel?' sel':'')+(i===cur?' now':'')+'" data-i="'+i+'" title="Click to select, double-click to play from here"><span class="sn">'+s.type+'</span><span class="sb">'+s.bars+'</span><span class="dots">'+Z.LAYERS.map(L=>'<i style="--c:'+COLORS[L]+'" class="'+(s.layers[L]==='lite'?'lite':s.layers[L]?'on':'')+'"></i>').join('')+'</span>'+(s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>').join('');
+  $('arr').innerHTML=song.map((s,i)=>'<button class="sec'+(i===state.sel?' sel':'')+(i===cur?' now':'')+'" data-i="'+i+'" title="Click to select, double-click to play from here'+(SWEEP_MARK[sweepOf(s)]?' · filter sweep: the mix '+SWEEP_SAYS[sweepOf(s)]:'')+'"><span class="sn">'+s.type+'</span><span class="sb">'+s.bars+'</span><span class="dots">'+Z.LAYERS.map(L=>'<i style="--c:'+COLORS[L]+'" class="'+(s.layers[L]==='lite'?'lite':s.layers[L]?'on':'')+'"></i>').join('')+(SWEEP_MARK[sweepOf(s)]?'<b class="sw">'+SWEEP_MARK[sweepOf(s)]+'</b>':'')+'</span>'+(s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>').join('');
   const bars=song.reduce((a,s)=>a+s.bars,0),secs=bars*4*60/state.bpm;
   $('songLen').textContent=bars+' bars · '+Math.floor(secs/60)+':'+String(Math.round(secs%60)).padStart(2,'0');
 }
@@ -274,13 +279,17 @@ function renderInsp(){
   $('secType').value=sec.type;$('secTrans').value=String(sec.transpose||0);
   $('secPart').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===sec.part));
   $('secBars').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.v===sec.bars));
+  $('secSweep').querySelectorAll('button').forEach(b=>{const on=b.dataset.v===sweepOf(sec);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
   $('secLayers').querySelectorAll('button').forEach(b=>{const v=sec.layers[b.dataset.l];b.className=v==='lite'?'lite':v?'on':'';b.textContent=b.dataset.l+(v==='lite'?' ·lite':'')});
   $('secLeft').disabled=state.sel===0;$('secRight').disabled=state.sel>=state.sections.length-1;$('secDel').disabled=state.sections.length<=1;
 }
 function editSec(fn){const sec=state.sections[state.sel];if(!sec)return;fn(sec);regenerate()}
-$('secType').addEventListener('change',e=>editSec(sec=>{const t=SEC_TYPES[e.target.value];sec.type=e.target.value;sec.part=t.part;sec.bars=t.bars;sec.energy=t.energy;sec.layers=Object.assign({},t.layers);sec.hook=!!t.hook;sec.double=!!t.double}));
+$('secType').addEventListener('change',e=>editSec(sec=>{const t=SEC_TYPES[e.target.value];sec.type=e.target.value;sec.part=t.part;sec.bars=t.bars;sec.energy=t.energy;sec.layers=Object.assign({},t.layers);sec.hook=!!t.hook;sec.double=!!t.double;sec.sweep=t.sweep||'none'}));
 $('secPart').addEventListener('click',e=>{const b=e.target.closest('button');if(b)editSec(sec=>{sec.part=b.dataset.v;sec.hook=sec.part==='c'})});
 $('secBars').addEventListener('click',e=>{const b=e.target.closest('button');if(b)editSec(sec=>sec.bars=+b.dataset.v)});
+$('secSweep').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  const sec=state.sections[state.sel];if(!sec)return;editSec(s=>s.sweep=b.dataset.v);
+  setStatus(sec.type+' '+SWEEP_SAYS[sweepOf(sec)]+(sweepOf(sec)==='none'?'':' · you hear it in playback and in the WAV export'))});
 $('secTrans').addEventListener('change',e=>editSec(sec=>sec.transpose=+e.target.value));
 $('secLayers').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;editSec(sec=>{const L=b.dataset.l,v=sec.layers[L];sec.layers[L]=L==='drums'?(v===1||v===true?'lite':v==='lite'?0:1):(v?0:1)})});
 $('secLeft').addEventListener('click',()=>{const i=state.sel;if(i>0){[state.sections[i-1],state.sections[i]]=[state.sections[i],state.sections[i-1]];state.sel=i-1;viewSection=i-1;regenerate()}});

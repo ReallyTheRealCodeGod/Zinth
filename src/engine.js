@@ -37,6 +37,8 @@ class Engine{
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
     this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // the per-section sweep: a master low-pass that a section can open or close over its own length
+    this.sweep=ctx.createBiquadFilter();this.sweep.type='lowpass';this.sweep.Q.value=1.1;this.sweep.frequency.value=Z.SWEEP.open;
     // punch-in chain: highpass -> lowpass -> crusher -> gate
     this.fxHP=ctx.createBiquadFilter();this.fxHP.type='highpass';this.fxHP.frequency.value=10;
     this.fxLP=ctx.createBiquadFilter();this.fxLP.type='lowpass';this.fxLP.frequency.value=20000;
@@ -45,7 +47,7 @@ class Engine{
     this.comp=ctx.createDynamicsCompressor();this.comp.threshold.value=-14;this.comp.knee.value=18;this.comp.ratio.value=4;this.comp.attack.value=0.004;this.comp.release.value=0.22;
     this.limiter=ctx.createDynamicsCompressor();this.limiter.threshold.value=-2;this.limiter.knee.value=0;this.limiter.ratio.value=20;this.limiter.attack.value=0.001;this.limiter.release.value=0.08;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.master.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
+    this.master.connect(this.sweep);this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
     this.comp.connect(this.limiter);this.limiter.connect(ctx.destination);this.limiter.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
@@ -214,6 +216,18 @@ class Engine{
     if(step===total-16){const nx=this.song[(si+1)%n];if(nx&&nx.energy>sec.energy)this.riser(time,16*this.stepSec())}
     if(step===0){const pv=this.song[(si-1+n)%n];if(pv&&sec.layers.drums===1&&sec.energy>=pv.energy&&this.audible('drums'))this.crash(time)}
   }
+  // a section's filter sweep: scheduled once, on its first step, over the section's own length.
+  // Looping a section replays it, and the offline render runs the same call, so an export matches.
+  sweepAt(si,step,time){
+    if(!this.ctx||!this.sweep||step!==0)return;
+    const sec=this.song[si];if(!sec)return;
+    const f=this.sweep.frequency,plan=Z.sweepPlan(sec.sweep,(sec.bars||8)*Z.STEPS,this.stepSec());
+    f.cancelScheduledValues(time);
+    if(!plan){f.setValueAtTime(Z.SWEEP.open,time);return}
+    for(const p of plan){if(p.ramp)f.exponentialRampToValueAtTime(p.hz,time+p.t);else f.setValueAtTime(p.hz,time+p.t)}
+  }
+  resetSweep(){if(!this.ctx||!this.sweep)return;const t=this.ctx.currentTime,f=this.sweep.frequency;
+    f.cancelScheduledValues(t);f.setValueAtTime(Z.SWEEP.open,t)}
   nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
 
   /* ---- transport & scheduler ---- */
@@ -223,7 +237,7 @@ class Engine{
     this.grid=this.ctx.currentTime+0.08;
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n)}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -232,6 +246,7 @@ class Engine{
       const t=this.grid+(this.step%2===1?this.swing*d:0);
       this.scheduleStep(this.section,this.step,t);
       this.transitionAt(this.section,this.step,t);
+      this.sweepAt(this.section,this.step,t);
       if(this.metronome&&this.step%4===0)this.click(this.step,t);
       if(this.fx.gate8||this.fx.gate16)this.gateStep(this.step,t);
       this.queue.push({section:this.section,step:this.step,time:t});
