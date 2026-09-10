@@ -46,9 +46,12 @@ class Engine{
     this.fxGate=ctx.createGain();
     this.comp=ctx.createDynamicsCompressor();this.comp.threshold.value=-14;this.comp.knee.value=18;this.comp.ratio.value=4;this.comp.attack.value=0.004;this.comp.release.value=0.22;
     this.limiter=ctx.createDynamicsCompressor();this.limiter.threshold.value=-2;this.limiter.knee.value=0;this.limiter.ratio.value=20;this.limiter.attack.value=0.001;this.limiter.release.value=0.08;
+    // the per-section fade: the very last gain in the chain, so a fade carries everything and nothing
+    // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
+    this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
     this.master.connect(this.sweep);this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
-    this.comp.connect(this.limiter);this.limiter.connect(ctx.destination);this.limiter.connect(this.analyser);
+    this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
     this.delayIn=ctx.createGain();this.delay=ctx.createDelay(2);this.delayFilt=ctx.createBiquadFilter();this.delayFilt.type='lowpass';this.delayFilt.frequency.value=3000;
@@ -228,6 +231,26 @@ class Engine{
   }
   resetSweep(){if(!this.ctx||!this.sweep)return;const t=this.ctx.currentTime,f=this.sweep.frequency;
     f.cancelScheduledValues(t);f.setValueAtTime(Z.SWEEP.open,t)}
+  // a section's fade, scheduled on its first step over the section's own length, like the sweep.
+  // A section that does not fade eases the master back to full, so the section after a fade-out
+  // comes back in cleanly and nothing is ever left silent.
+  fadeAt(si,step,time){
+    if(!this.ctx||!this.fade||step!==0)return;
+    const sec=this.song[si];if(!sec)return;
+    const g=this.fade.gain,plan=Z.fadePlan(sec.fade,(sec.bars||8)*Z.STEPS,this.stepSec());
+    g.cancelScheduledValues(time);
+    if(!plan){g.setTargetAtTime(Z.FADE.full,time,0.01);return}
+    for(const p of plan){
+      const t=time+p.t;
+      if(p.ramp)g.exponentialRampToValueAtTime(p.g,t);
+      // coming back up to full is eased over a few milliseconds, so the section after a fade-out never
+      // slams in with a click; a section that starts quiet takes its value at once and is silent anyway
+      else if(p.t===0&&p.g>=Z.FADE.full)g.setTargetAtTime(p.g,t,0.008);
+      else g.setValueAtTime(p.g,t);
+    }
+  }
+  resetFade(){if(!this.ctx||!this.fade)return;const t=this.ctx.currentTime,g=this.fade.gain;
+    g.cancelScheduledValues(t);g.setValueAtTime(Z.FADE.full,t)}
   nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
 
   /* ---- transport & scheduler ---- */
@@ -237,7 +260,7 @@ class Engine{
     this.grid=this.ctx.currentTime+0.08;
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -247,6 +270,7 @@ class Engine{
       this.scheduleStep(this.section,this.step,t);
       this.transitionAt(this.section,this.step,t);
       this.sweepAt(this.section,this.step,t);
+      this.fadeAt(this.section,this.step,t);
       if(this.metronome&&this.step%4===0)this.click(this.step,t);
       if(this.fx.gate8||this.fx.gate16)this.gateStep(this.step,t);
       this.queue.push({section:this.section,step:this.step,time:t});

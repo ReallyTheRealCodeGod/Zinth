@@ -65,6 +65,7 @@ function setRec(on){
   if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
+  if(sec&&(sec.fade==='in'||sec.fade==='out'))msg+=' · this section fades '+(sec.fade==='in'?'in over its first two bars':'out over its last two bars')+', so what you play fades with it';
   U.setStatus(on?msg:'Recording off');
 }
 function recordNote(start,midi,t1){
@@ -192,7 +193,7 @@ async function exportWav(){
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
     const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.init(off);
-    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);grid+=d}});
+    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
     U.setStatus(await saveFile(name,new Blob([encodeWav(buf)],{type:'audio/wav'}),'Saved '+name+' ('+Math.round(dur-3)+' s)'));
@@ -200,9 +201,13 @@ async function exportWav(){
   btn.disabled=false;exporting=false;
 }
 $('exportWav').addEventListener('click',exportWav);
-// Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes
+// Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
+// A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses.
 function midiFile(){
-  const PPQ=96,T16=PPQ/4,S=song();
+  const PPQ=96,T16=PPQ/4,S=song(),stepSec=60/state.bpm/4;
+  const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
+  // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
+  const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
   const vlq=n=>{const b=[n&0x7f];while((n>>=7)>0)b.unshift((n&0x7f)|0x80);return b};
   const str=s=>Array.from(s,c=>c.charCodeAt(0)),u32=n=>[(n>>>24)&255,(n>>16)&255,(n>>8)&255,n&255],u16=n=>[(n>>8)&255,n&255];
   const tracks=[];const mpq=Math.round(60000000/state.bpm);
@@ -211,6 +216,9 @@ function midiFile(){
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
     S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
+      if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
+        if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
+        else evs.push({tick:offset,cc:7,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
         for(const e of list){const tick=offset+st*T16;
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
@@ -220,10 +228,13 @@ function midiFile(){
             if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
         }}
       offset+=steps*T16});
-    evs.sort((a,b)=>a.tick-b.tick||(a.on===b.on?0:a.on?1:-1));
+    const rank=e=>e.cc!==undefined?0:e.on?2:1; // at one tick: volume first, then note-offs, then note-ons
+    evs.sort((a,b)=>a.tick-b.tick||rank(a)-rank(b));
     const ch=CH[L],name='Zinth '+L,bytes=[0,0xff,0x03,name.length,...str(name)];let last=0;
     if(PROG[L]!==undefined)bytes.push(0,0xc0|ch,PROG[L]);
-    for(const e of evs){bytes.push(...vlq(e.tick-last));last=e.tick;bytes.push((e.on?0x90:0x80)|ch,Math.max(0,Math.min(127,e.note)),Math.max(0,Math.min(127,e.vel)))}
+    for(const e of evs){bytes.push(...vlq(e.tick-last));last=e.tick;
+      if(e.cc!==undefined)bytes.push(0xb0|ch,e.cc,e.val);
+      else bytes.push((e.on?0x90:0x80)|ch,Math.max(0,Math.min(127,e.note)),Math.max(0,Math.min(127,e.vel)))}
     bytes.push(0,0xff,0x2f,0);tracks.push(bytes);
   }
   let size=14;for(const t of tracks)size+=8+t.length;

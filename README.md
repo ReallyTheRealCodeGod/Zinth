@@ -10,6 +10,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Never sounds off.** Chords are built from the scale with voice leading. Melodies lean on chord tones on strong beats. Passing tones never land on a downbeat. `tests/check.html` proves it over hundreds of generated tracks.
 - **Arranger.** Add, reorder, duplicate and delete sections. Each has a type, length, key shift and its own layer switches. Loop one section while you work on it.
 - **Sweep a section.** Sweep in the inspector runs the whole mix through a master filter: ↗ up starts dark and opens over the section, ↘ down closes it over the last bar. Intros, pre-choruses and breaks open up, outros close down. It plays in the WAV export too.
+- **Fade a section.** Fade beside it lifts the whole mix out of silence over a section's first two bars (◢ in) or lets it fall away over its last two (◣ out). Outros fade out, so a track ends the way songs end. The WAV export fades with you and the MIDI carries it as volume.
 - **Lock and reroll.** New track rerolls only unlocked layers. Each layer has its own dice.
 - **Chord box.** Number keys play the diatonic chords of the key in close voicings. Sketch a progression and send it to the verse or the chorus.
 - **Edit the chords.** Click a chord card to change its degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. Split a card to add a chord, and ↺ Generated brings the rolled progression back. The progression always fills the eight-bar loop.

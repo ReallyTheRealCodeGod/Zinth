@@ -164,6 +164,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .sec .sb{font:400 10px var(--mono);color:var(--ink-mute);position:absolute;top:6px;right:7px}
 .sec .dots{display:flex;align-items:center;gap:3px}
 .sec .dots .sw{margin-left:3px;font:500 10px var(--mono);line-height:1;color:var(--teal)}
+.sec .dots .fd{margin-left:3px;font:500 9px var(--mono);line-height:1;color:var(--lav)}
 .sec .dots i{width:6px;height:6px;border-radius:50%;background:var(--line-2)}
 .sec .dots i.on{background:var(--c)}
 .sec .dots i.lite{background:var(--c);opacity:.4}
@@ -365,6 +366,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <div class="grp"><span class="lbl">Bars</span><div class="seg" id="secBars"><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button></div></div>
         <div class="grp"><span class="lbl">Key</span><select class="sm" id="secTrans"><option value="-2">−2 st</option><option value="-1">−1 st</option><option value="0">same</option><option value="1">+1 st</option><option value="2">+2 st</option><option value="3">+3 st</option><option value="5">+5 st</option><option value="7">+7 st</option></select></div>
         <div class="grp"><span class="lbl">Sweep</span><div class="seg" id="secSweep" title="Sweep the whole mix through a filter over this section"><button data-v="none" title="No sweep: the mix plays open">none</button><button data-v="up" title="Open up: the mix starts dark and opens over the whole section — an intro or a build">↗ up</button><button data-v="down" title="Close down: the mix is open, then closes over the last bar — an outro or a hand-off">↘ down</button></div></div>
+        <div class="grp"><span class="lbl">Fade</span><div class="seg" id="secFade" title="Fade the whole mix in from silence or out to silence over this section"><button data-v="none" title="No fade: the section plays at full level">none</button><button data-v="in" title="Fade in: the mix rises from silence over the first two bars of this section — the way a song starts">◢ in</button><button data-v="out" title="Fade out: the mix falls away to silence over the last two bars of this section — the way a song ends">◣ out</button></div></div>
         <div class="grp"><span class="lbl">Plays</span><div class="lay" id="secLayers"></div></div>
         <div class="spacer"></div>
         <button class="btn sm" id="secLeft" title="Move earlier">◀</button>
@@ -462,6 +464,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
+      <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
@@ -778,6 +781,36 @@ function sweepPlan(mode,steps,stepSec){
   pts.push({t:len,hz:SWEEP.lo,ramp:true});
   return pts;
 }
+/* A section can also fade. 'in' rises from silence to full over its first two bars, 'out' plays full and
+   falls to silence over its last two bars; a section shorter than that fades over its whole length. The
+   plan is a list of {t,g,ramp} points in seconds from the section's first step, applied by a master gain
+   after the limiter. Playback, the WAV export and the MIDI volume automation all read the same plan. */
+// A gain ramp is exponential, so it moves at a steady number of decibels a second — and a single ramp all
+// the way from silence would spend half a fade below hearing. The knee splits it: the quiet end is crossed
+// quickly and most of the fade happens in the range you can actually hear, the way a hand on a fader moves.
+const FADE={lo:0.0008,full:1,knee:0.08,kneeAt:0.35,bars:2},FADE_MODES=['none','in','out'];
+function fadePlan(mode,steps,stepSec){
+  if((mode!=='in'&&mode!=='out')||!(steps>0)||!(stepSec>0))return null;
+  const len=steps*stepSec,span=Math.min(FADE.bars*STEPS*stepSec,len),knee=span*FADE.kneeAt;
+  if(mode==='in')return [{t:0,g:FADE.lo,ramp:false},{t:knee,g:FADE.knee,ramp:true},{t:span,g:FADE.full,ramp:true}];
+  const pts=[{t:0,g:FADE.full,ramp:false}];
+  if(len>span)pts.push({t:len-span,g:FADE.full,ramp:false});
+  pts.push({t:len-knee,g:FADE.knee,ramp:true},{t:len,g:FADE.lo,ramp:true});
+  return pts;
+}
+// the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
+// holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
+function fadeGain(plan,t){
+  if(!plan||!plan.length)return FADE.full;
+  if(t<=plan[0].t)return plan[0].g;
+  for(let i=1;i<plan.length;i++){
+    const a=plan[i-1],b=plan[i];
+    if(t>=b.t)continue;
+    if(!b.ramp)return a.g;
+    return a.g*Math.pow(b.g/a.g,(t-a.t)/(b.t-a.t||1));
+  }
+  return plan[plan.length-1].g;
+}
 function generateTrack(cfg,seeds,part,loop){
   const clamp=v=>Math.max(0,Math.min(100,v));
   cfg=Object.assign({},cfg,{energy:clamp(cfg.energy)});
@@ -800,7 +833,7 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain});
 })();
 </script>
 <script>
@@ -852,9 +885,12 @@ class Engine{
     this.fxGate=ctx.createGain();
     this.comp=ctx.createDynamicsCompressor();this.comp.threshold.value=-14;this.comp.knee.value=18;this.comp.ratio.value=4;this.comp.attack.value=0.004;this.comp.release.value=0.22;
     this.limiter=ctx.createDynamicsCompressor();this.limiter.threshold.value=-2;this.limiter.knee.value=0;this.limiter.ratio.value=20;this.limiter.attack.value=0.001;this.limiter.release.value=0.08;
+    // the per-section fade: the very last gain in the chain, so a fade carries everything and nothing
+    // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
+    this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
     this.master.connect(this.sweep);this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
-    this.comp.connect(this.limiter);this.limiter.connect(ctx.destination);this.limiter.connect(this.analyser);
+    this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
     this.delayIn=ctx.createGain();this.delay=ctx.createDelay(2);this.delayFilt=ctx.createBiquadFilter();this.delayFilt.type='lowpass';this.delayFilt.frequency.value=3000;
@@ -1034,6 +1070,26 @@ class Engine{
   }
   resetSweep(){if(!this.ctx||!this.sweep)return;const t=this.ctx.currentTime,f=this.sweep.frequency;
     f.cancelScheduledValues(t);f.setValueAtTime(Z.SWEEP.open,t)}
+  // a section's fade, scheduled on its first step over the section's own length, like the sweep.
+  // A section that does not fade eases the master back to full, so the section after a fade-out
+  // comes back in cleanly and nothing is ever left silent.
+  fadeAt(si,step,time){
+    if(!this.ctx||!this.fade||step!==0)return;
+    const sec=this.song[si];if(!sec)return;
+    const g=this.fade.gain,plan=Z.fadePlan(sec.fade,(sec.bars||8)*Z.STEPS,this.stepSec());
+    g.cancelScheduledValues(time);
+    if(!plan){g.setTargetAtTime(Z.FADE.full,time,0.01);return}
+    for(const p of plan){
+      const t=time+p.t;
+      if(p.ramp)g.exponentialRampToValueAtTime(p.g,t);
+      // coming back up to full is eased over a few milliseconds, so the section after a fade-out never
+      // slams in with a click; a section that starts quiet takes its value at once and is silent anyway
+      else if(p.t===0&&p.g>=Z.FADE.full)g.setTargetAtTime(p.g,t,0.008);
+      else g.setValueAtTime(p.g,t);
+    }
+  }
+  resetFade(){if(!this.ctx||!this.fade)return;const t=this.ctx.currentTime,g=this.fade.gain;
+    g.cancelScheduledValues(t);g.setValueAtTime(Z.FADE.full,t)}
   nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
 
   /* ---- transport & scheduler ---- */
@@ -1043,7 +1099,7 @@ class Engine{
     this.grid=this.ctx.currentTime+0.08;
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -1053,6 +1109,7 @@ class Engine{
       this.scheduleStep(this.section,this.step,t);
       this.transitionAt(this.section,this.step,t);
       this.sweepAt(this.section,this.step,t);
+      this.fadeAt(this.section,this.step,t);
       if(this.metronome&&this.step%4===0)this.click(this.step,t);
       if(this.fx.gate8||this.fx.gate16)this.gateStep(this.step,t);
       this.queue.push({section:this.section,step:this.step,time:t});
@@ -1139,7 +1196,8 @@ const PATCHES={
 };
 // Section types: the arranger's building blocks. part 'v' uses the A chords, 'c' the B chords.
 // A section can also sweep the whole mix through a master filter: 'up' opens it over the section,
-// 'down' closes it over the last bar. The types that want one by ear get it from the start.
+// 'down' closes it over the last bar. And it can fade: 'in' rises from silence over its first two bars,
+// 'out' falls to silence over its last two. The types that want either by ear get it from the start.
 const SEC_TYPES={
   'Intro':     {part:'v',energy:-15,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'up'},
   'Verse':     {part:'v',energy:-5, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1}},
@@ -1148,11 +1206,14 @@ const SEC_TYPES={
   'Bridge':    {part:'c',energy:-8, bars:8,layers:{lead:1,arp:0,chords:1,bass:1,drums:'lite'}},
   'Break':     {part:'c',energy:-10,bars:4,layers:{lead:1,arp:0,chords:1,bass:0,drums:0},hook:true,sweep:'up'},
   'Drop':      {part:'c',energy:20, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true,double:true},
-  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'down'},
+  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'down',fade:'out'},
 };
 const SWEEP_MARK={up:'↗',down:'↘'};
 const SWEEP_SAYS={none:'plays open, no sweep',up:'starts dark and opens up over the whole section',down:'plays open and closes down over its last bar'};
 const sweepOf=sec=>Z.SWEEP_MODES.indexOf(sec&&sec.sweep)>0?sec.sweep:'none';
+const FADE_MARK={in:'◢',out:'◣'};
+const FADE_SAYS={none:'plays at full level, no fade',in:'rises from silence over its first two bars',out:'falls away to silence over its last two bars'};
+const fadeOf=sec=>Z.FADE_MODES.indexOf(sec&&sec.fade)>0?sec.fade:'none';
 const DEFAULT_FORM=['Intro','Verse','Chorus','Verse','Chorus','Break','Drop','Outro'];
 const FX=[['lp','Z','Low sweep'],['hp','X','High sweep'],['gate8','C','Gate ⅛'],['gate16','V','Gate ⅟₁₆'],['crush','B','Crush'],['throw','N','Delay throw'],['wash','M','Wash']];
 const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
@@ -1164,7 +1225,7 @@ const state={
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
-function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none'}}
+function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'}}
 function defaultSections(){return DEFAULT_FORM.map(newSection)}
 
 /* ---------- populate controls ---------- */
@@ -1198,7 +1259,7 @@ function restore(p){
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
-  state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec)});
+  state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   if(p.params)for(const L of Z.LAYERS)for(const k in p.params[L]||{})E.setParam(L,k,p.params[L][k]);
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();
@@ -1369,7 +1430,14 @@ $('ceReset').addEventListener('click',()=>{
 $('ceClose').addEventListener('click',closeChordEdit);
 function renderArr(){
   const cur=E.playing?E.section:-1;
-  $('arr').innerHTML=song.map((s,i)=>'<button class="sec'+(i===state.sel?' sel':'')+(i===cur?' now':'')+'" data-i="'+i+'" title="Click to select, double-click to play from here'+(SWEEP_MARK[sweepOf(s)]?' · filter sweep: the mix '+SWEEP_SAYS[sweepOf(s)]:'')+'"><span class="sn">'+s.type+'</span><span class="sb">'+s.bars+'</span><span class="dots">'+Z.LAYERS.map(L=>'<i style="--c:'+COLORS[L]+'" class="'+(s.layers[L]==='lite'?'lite':s.layers[L]?'on':'')+'"></i>').join('')+(SWEEP_MARK[sweepOf(s)]?'<b class="sw">'+SWEEP_MARK[sweepOf(s)]+'</b>':'')+'</span>'+(s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>').join('');
+  $('arr').innerHTML=song.map((s,i)=>{
+    const sw=sweepOf(s),fd=fadeOf(s);
+    const tip='Click to select, double-click to play from here'+(SWEEP_MARK[sw]?' · filter sweep: the mix '+SWEEP_SAYS[sw]:'')+(FADE_MARK[fd]?' · fade: the mix '+FADE_SAYS[fd]:'');
+    return '<button class="sec'+(i===state.sel?' sel':'')+(i===cur?' now':'')+'" data-i="'+i+'" title="'+tip+'"><span class="sn">'+s.type+'</span><span class="sb">'+s.bars+'</span><span class="dots">'+
+      Z.LAYERS.map(L=>'<i style="--c:'+COLORS[L]+'" class="'+(s.layers[L]==='lite'?'lite':s.layers[L]?'on':'')+'"></i>').join('')+
+      (SWEEP_MARK[sw]?'<b class="sw">'+SWEEP_MARK[sw]+'</b>':'')+(FADE_MARK[fd]?'<b class="fd">'+FADE_MARK[fd]+'</b>':'')+'</span>'+
+      (s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>';
+  }).join('');
   const bars=song.reduce((a,s)=>a+s.bars,0),secs=bars*4*60/state.bpm;
   $('songLen').textContent=bars+' bars · '+Math.floor(secs/60)+':'+String(Math.round(secs%60)).padStart(2,'0');
 }
@@ -1386,16 +1454,20 @@ function renderInsp(){
   $('secPart').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===sec.part));
   $('secBars').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.v===sec.bars));
   $('secSweep').querySelectorAll('button').forEach(b=>{const on=b.dataset.v===sweepOf(sec);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('secFade').querySelectorAll('button').forEach(b=>{const on=b.dataset.v===fadeOf(sec);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
   $('secLayers').querySelectorAll('button').forEach(b=>{const v=sec.layers[b.dataset.l];b.className=v==='lite'?'lite':v?'on':'';b.textContent=b.dataset.l+(v==='lite'?' ·lite':'')});
   $('secLeft').disabled=state.sel===0;$('secRight').disabled=state.sel>=state.sections.length-1;$('secDel').disabled=state.sections.length<=1;
 }
 function editSec(fn){const sec=state.sections[state.sel];if(!sec)return;fn(sec);regenerate()}
-$('secType').addEventListener('change',e=>editSec(sec=>{const t=SEC_TYPES[e.target.value];sec.type=e.target.value;sec.part=t.part;sec.bars=t.bars;sec.energy=t.energy;sec.layers=Object.assign({},t.layers);sec.hook=!!t.hook;sec.double=!!t.double;sec.sweep=t.sweep||'none'}));
+$('secType').addEventListener('change',e=>editSec(sec=>{const t=SEC_TYPES[e.target.value];sec.type=e.target.value;sec.part=t.part;sec.bars=t.bars;sec.energy=t.energy;sec.layers=Object.assign({},t.layers);sec.hook=!!t.hook;sec.double=!!t.double;sec.sweep=t.sweep||'none';sec.fade=t.fade||'none'}));
 $('secPart').addEventListener('click',e=>{const b=e.target.closest('button');if(b)editSec(sec=>{sec.part=b.dataset.v;sec.hook=sec.part==='c'})});
 $('secBars').addEventListener('click',e=>{const b=e.target.closest('button');if(b)editSec(sec=>sec.bars=+b.dataset.v)});
 $('secSweep').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   const sec=state.sections[state.sel];if(!sec)return;editSec(s=>s.sweep=b.dataset.v);
   setStatus(sec.type+' '+SWEEP_SAYS[sweepOf(sec)]+(sweepOf(sec)==='none'?'':' · you hear it in playback and in the WAV export'))});
+$('secFade').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  const sec=state.sections[state.sel];if(!sec)return;editSec(s=>s.fade=b.dataset.v);
+  setStatus(sec.type+' '+FADE_SAYS[fadeOf(sec)]+(fadeOf(sec)==='none'?'':' · you hear it in playback, in the WAV export and as volume in the MIDI'))});
 $('secTrans').addEventListener('change',e=>editSec(sec=>sec.transpose=+e.target.value));
 $('secLayers').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;editSec(sec=>{const L=b.dataset.l,v=sec.layers[L];sec.layers[L]=L==='drums'?(v===1||v===true?'lite':v==='lite'?0:1):(v?0:1)})});
 $('secLeft').addEventListener('click',()=>{const i=state.sel;if(i>0){[state.sections[i-1],state.sections[i]]=[state.sections[i],state.sections[i-1]];state.sel=i-1;viewSection=i-1;regenerate()}});
@@ -1622,6 +1694,7 @@ function setRec(on){
   if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
+  if(sec&&(sec.fade==='in'||sec.fade==='out'))msg+=' · this section fades '+(sec.fade==='in'?'in over its first two bars':'out over its last two bars')+', so what you play fades with it';
   U.setStatus(on?msg:'Recording off');
 }
 function recordNote(start,midi,t1){
@@ -1749,7 +1822,7 @@ async function exportWav(){
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
     const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.init(off);
-    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);grid+=d}});
+    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
     U.setStatus(await saveFile(name,new Blob([encodeWav(buf)],{type:'audio/wav'}),'Saved '+name+' ('+Math.round(dur-3)+' s)'));
@@ -1757,9 +1830,13 @@ async function exportWav(){
   btn.disabled=false;exporting=false;
 }
 $('exportWav').addEventListener('click',exportWav);
-// Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes
+// Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
+// A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses.
 function midiFile(){
-  const PPQ=96,T16=PPQ/4,S=song();
+  const PPQ=96,T16=PPQ/4,S=song(),stepSec=60/state.bpm/4;
+  const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
+  // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
+  const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
   const vlq=n=>{const b=[n&0x7f];while((n>>=7)>0)b.unshift((n&0x7f)|0x80);return b};
   const str=s=>Array.from(s,c=>c.charCodeAt(0)),u32=n=>[(n>>>24)&255,(n>>16)&255,(n>>8)&255,n&255],u16=n=>[(n>>8)&255,n&255];
   const tracks=[];const mpq=Math.round(60000000/state.bpm);
@@ -1768,6 +1845,9 @@ function midiFile(){
   for(const L of Z.LAYERS){
     const evs=[];let offset=0;
     S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
+      if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
+        if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
+        else evs.push({tick:offset,cc:7,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
         for(const e of list){const tick=offset+st*T16;
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
@@ -1777,10 +1857,13 @@ function midiFile(){
             if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
         }}
       offset+=steps*T16});
-    evs.sort((a,b)=>a.tick-b.tick||(a.on===b.on?0:a.on?1:-1));
+    const rank=e=>e.cc!==undefined?0:e.on?2:1; // at one tick: volume first, then note-offs, then note-ons
+    evs.sort((a,b)=>a.tick-b.tick||rank(a)-rank(b));
     const ch=CH[L],name='Zinth '+L,bytes=[0,0xff,0x03,name.length,...str(name)];let last=0;
     if(PROG[L]!==undefined)bytes.push(0,0xc0|ch,PROG[L]);
-    for(const e of evs){bytes.push(...vlq(e.tick-last));last=e.tick;bytes.push((e.on?0x90:0x80)|ch,Math.max(0,Math.min(127,e.note)),Math.max(0,Math.min(127,e.vel)))}
+    for(const e of evs){bytes.push(...vlq(e.tick-last));last=e.tick;
+      if(e.cc!==undefined)bytes.push(0xb0|ch,e.cc,e.val);
+      else bytes.push((e.on?0x90:0x80)|ch,Math.max(0,Math.min(127,e.note)),Math.max(0,Math.min(127,e.vel)))}
     bytes.push(0,0xff,0x2f,0);tracks.push(bytes);
   }
   let size=14;for(const t of tracks)size+=8+t.length;

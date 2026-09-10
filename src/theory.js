@@ -301,6 +301,36 @@ function sweepPlan(mode,steps,stepSec){
   pts.push({t:len,hz:SWEEP.lo,ramp:true});
   return pts;
 }
+/* A section can also fade. 'in' rises from silence to full over its first two bars, 'out' plays full and
+   falls to silence over its last two bars; a section shorter than that fades over its whole length. The
+   plan is a list of {t,g,ramp} points in seconds from the section's first step, applied by a master gain
+   after the limiter. Playback, the WAV export and the MIDI volume automation all read the same plan. */
+// A gain ramp is exponential, so it moves at a steady number of decibels a second — and a single ramp all
+// the way from silence would spend half a fade below hearing. The knee splits it: the quiet end is crossed
+// quickly and most of the fade happens in the range you can actually hear, the way a hand on a fader moves.
+const FADE={lo:0.0008,full:1,knee:0.08,kneeAt:0.35,bars:2},FADE_MODES=['none','in','out'];
+function fadePlan(mode,steps,stepSec){
+  if((mode!=='in'&&mode!=='out')||!(steps>0)||!(stepSec>0))return null;
+  const len=steps*stepSec,span=Math.min(FADE.bars*STEPS*stepSec,len),knee=span*FADE.kneeAt;
+  if(mode==='in')return [{t:0,g:FADE.lo,ramp:false},{t:knee,g:FADE.knee,ramp:true},{t:span,g:FADE.full,ramp:true}];
+  const pts=[{t:0,g:FADE.full,ramp:false}];
+  if(len>span)pts.push({t:len-span,g:FADE.full,ramp:false});
+  pts.push({t:len-knee,g:FADE.knee,ramp:true},{t:len,g:FADE.lo,ramp:true});
+  return pts;
+}
+// the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
+// holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
+function fadeGain(plan,t){
+  if(!plan||!plan.length)return FADE.full;
+  if(t<=plan[0].t)return plan[0].g;
+  for(let i=1;i<plan.length;i++){
+    const a=plan[i-1],b=plan[i];
+    if(t>=b.t)continue;
+    if(!b.ramp)return a.g;
+    return a.g*Math.pow(b.g/a.g,(t-a.t)/(b.t-a.t||1));
+  }
+  return plan[plan.length-1].g;
+}
 function generateTrack(cfg,seeds,part,loop){
   const clamp=v=>Math.max(0,Math.min(100,v));
   cfg=Object.assign({},cfg,{energy:clamp(cfg.energy)});
@@ -323,5 +353,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain});
 })();
