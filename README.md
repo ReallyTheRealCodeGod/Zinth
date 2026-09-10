@@ -52,4 +52,10 @@ On Windows without Git Bash:
 | `src/ui-panels.js` | Sound panel, mixer, chord box, keys, recording, export |
 | `tests/check.js` | Theory self-test; open `tests/check.html` after building |
 
-The theory check runs in the browser. Open `tests/check.html` and read the verdict at the top.
+The theory check runs in the browser. Open `tests/check.html` and read the verdict at the top. It also runs headlessly:
+
+```bash
+node tests/check-node.mjs
+```
+
+`ROADMAP.md` is the prioritised work queue, and `CHANGELOG.md` records what landed. A scheduled cloud agent works down the roadmap one item per run.
