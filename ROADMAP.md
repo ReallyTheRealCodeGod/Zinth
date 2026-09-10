@@ -26,7 +26,7 @@ This file is the work queue for the background agent. Items are in priority orde
 
 ## Sound
 
-- [ ] **Analog drift.** Each synth voice gets a slow random pitch drift of a few cents and a slightly randomised filter cutoff, so repeated notes never sound identical. Subtle by default, with a "Drift" amount in the Sound panel.
+- [x] **Analog drift.** Each synth voice gets a slow random pitch drift of a few cents and a slightly randomised filter cutoff, so repeated notes never sound identical. Subtle by default, with a "Drift" amount in the Sound panel. (2026-09-10: an **Analog drift** slider per synth layer reading in cents, on by default and subtle; every oscillator of every voice takes its own offset and then wanders slowly away from it, and the voice's filter opens a shade differently each note; `Z.driftCents` and `Z.driftCutoff` cap the wander far under a semitone, and the theory check proves a drifted note still rounds to the note that was played in every key and scale.)
 - [ ] **Chorus and warmth.** A stereo chorus send per synth layer, and a "Warmth" knob on the master that drives a soft-clip waveshaper with a gentle high-shelf roll-off. Both in the export.
 - [ ] **Two more kits and a perc row.** "House" (punchy, open, bright hats) and "Breaks" (dusty, swung, room-y snare) kits, plus a "perc" row in the drum grid (rim, shaker, cowbell chosen by kit). Generated patterns use perc tastefully at higher energy.
 - [ ] **Bass glide and lead vibrato.** A "Glide" amount for the bass (portamento between consecutive notes) and a "Vibrato" depth and rate for the lead, delayed vibrato that fades in on held notes.

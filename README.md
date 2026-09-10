@@ -18,6 +18,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Draw notes in the roll.** The lead, arp and bass lanes are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits work while the section loops, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.
 - **Drums.** 808, 909, Lo-fi and Trap kits, a step grid per part, fills, sidechain pump.
 - **Sound.** Patches per layer, waveform, filter, envelope, detune, delay and reverb sends, a mixer with mute and solo, momentary punch-in effects.
+- **Analog drift.** Every synth layer wanders a few cents in pitch and opens its filter a shade differently on every note, so repeated notes never sound identical and pads breathe. Subtle by default, per layer, and never enough to change a note.
 - **Transitions.** Risers into louder sections and a crash on their first beat.
 - **Leaves Zinth.** Export the whole song as WAV or as a MIDI file with one track per layer and drums on channel 10. Save and open projects as JSON. Everything autosaves in the browser, with undo and redo.
 

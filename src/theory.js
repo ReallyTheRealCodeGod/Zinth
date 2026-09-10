@@ -318,6 +318,18 @@ function fadePlan(mode,steps,stepSec){
   pts.push({t:len-knee,g:FADE.knee,ramp:true},{t:len,g:FADE.lo,ramp:true});
   return pts;
 }
+/* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
+   and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
+   of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
+   drifted note is still, unmistakably, the note you asked for — the scale lock holds however far the knob
+   goes. r is a random number in [0,1]: 0 is the flattest a voice may sit, 1 the sharpest, 0.5 dead centre. */
+const DRIFT={cents:14,cutoff:0.18,seconds:2.4};
+const driftAmt=a=>Math.max(0,Math.min(100,+a||0))/100;
+const driftR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
+// how many cents a voice strays: ±DRIFT.cents at the top of the knob, nothing at all at the bottom
+function driftCents(amount,r){return driftR(r)*DRIFT.cents*driftAmt(amount)}
+// what a voice's filter cutoff is multiplied by: always a positive number near 1, so a note is never lost
+function driftCutoff(amount,r){return 1+driftR(r)*DRIFT.cutoff*driftAmt(amount)}
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -353,5 +365,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff});
 })();

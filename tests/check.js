@@ -297,6 +297,53 @@ for(const bars of [1,2,4,8,16]){
   }
 }
 
+// analog drift: every synth voice wanders a few cents in pitch and a little in filter cutoff, so no two
+// notes are identical. The scale lock says how far it may go: a drifted note must still round to exactly
+// the note that was asked for, in every key, at every setting of the knob — including one set past its own
+// range. And the filter multiplier must stay a positive number, or a drifted note would be lost entirely.
+{
+  const rs=[0,0.001,0.17,0.5,0.83,1],amounts=[0,1,12,28,50,75,100];
+  // an amount past either end of the knob is clamped to it; anything that is not a number at all means no drift
+  const bad=[-40,140,NaN,undefined,null,'x'],none=[-40,NaN,undefined,null,'x'];
+  assert(Z.DRIFT.cents>0&&Z.DRIFT.cents<50,'drift of '+Z.DRIFT.cents+' cents could reach the next semitone');
+  assert(Z.DRIFT.cutoff>0&&Z.DRIFT.cutoff<1,'a filter drift of '+Z.DRIFT.cutoff+' could close a voice completely');
+  assert(Z.DRIFT.seconds>0,'drift must wander over a real span of time');
+  for(const r of rs){
+    assert(Z.driftCents(0,r)===0,'drift at 0 must leave a note perfectly still (r='+r+')');
+    assert(Z.driftCutoff(0,r)===1,'drift at 0 must leave the filter cutoff alone (r='+r+')');
+    for(const a of amounts.concat(bad)){
+      const c=Z.driftCents(a,r),k=Z.driftCutoff(a,r),tag=' [drift '+a+' · r='+r+']';
+      assert(Math.abs(c)<=Z.DRIFT.cents+1e-12,'drift of '+c+' cents is past the '+Z.DRIFT.cents+' the knob allows'+tag);
+      assert(Math.abs(c)<50,'drift of '+c+' cents would change the note itself'+tag);
+      assert(k>0,'a filter drift multiplier of '+k+' would silence the voice'+tag);
+      assert(Math.abs(k-1)<=Z.DRIFT.cutoff+1e-12,'filter drift '+k+' is past the range the knob allows'+tag);
+    }
+    // an amount that is not a number, or one below the knob, is read as no drift at all
+    for(const a of none)assert(Z.driftCents(a,r)===0&&Z.driftCutoff(a,r)===1,'a drift amount of '+a+' should mean no drift');
+    // and one past the top of the knob is read as the top of the knob, never as something wilder
+    assert(Z.driftCents(140,r)===Z.driftCents(100,r)&&Z.driftCutoff(140,r)===Z.driftCutoff(100,r),'a drift amount past 100 should clamp to 100 (r='+r+')');
+  }
+  // the knob's ends and its centre: fully flat, fully sharp, and dead in tune
+  assert(Z.driftCents(100,0)===-Z.DRIFT.cents&&Z.driftCents(100,1)===Z.DRIFT.cents,'the drift knob does not reach its own limits');
+  assert(Z.driftCents(100,0.5)===0&&Z.driftCutoff(100,0.5)===1,'the middle of the drift range must be dead in tune');
+  assert(Z.driftCents(50,1)===Z.DRIFT.cents/2,'the drift amount does not scale evenly');
+  // an r outside [0,1] is clamped, so a stray random value can never push a note out of key
+  assert(Z.driftCents(100,9)===Z.DRIFT.cents&&Z.driftCents(100,-9)===-Z.DRIFT.cents,'drift must clamp a random value outside 0–1');
+  // the scale lock itself: a drifted note still rounds to the note that was played, in every key and scale
+  for(const scale in Z.SCALES){
+    for(let root=0;root<12;root++){
+      const tag=' [drift · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+      for(const p of Z.scalePitches({root,scale},Z.BASS_LO,96)){
+        for(const r of rs){
+          const heard=p.midi+Z.driftCents(100,r)/100;
+          assert(Math.round(heard)===p.midi,'a drifted note sounds as '+heard+', not the '+p.midi+' that was played'+tag);
+          assert(((Math.round(heard)%12)+12)%12===((p.midi%12)+12)%12,'a drifted note lost its pitch class'+tag);
+        }
+      }
+    }
+  }
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -310,7 +357,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

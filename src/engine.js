@@ -3,10 +3,10 @@
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,delay:35,reverb:30,level:75,mute:false,solo:false},
-  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,delay:45,reverb:25,level:55,mute:false,solo:false},
-  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes
@@ -131,21 +131,34 @@ class Engine{
     else if(this.fx.gate8){g.setValueAtTime(step%2===0?1:0,time)}
   }
 
+  // analog drift: every oscillator of a voice takes its own small detune and then wanders slowly away from
+  // it, so a note held on and a note played twice never sit still. The offset is cents — always far under a
+  // semitone — so the note itself never changes, whatever the Drift knob says.
+  driftOsc(o,det,dr,time,durSec){
+    o.detune.value=det+Z.driftCents(dr,Math.random());
+    if(!(dr>0))return;
+    const span=Math.min(8,Math.max(Z.DRIFT.seconds,durSec===undefined?4:durSec));
+    const legs=Math.max(1,Math.round(span/Z.DRIFT.seconds));
+    o.detune.setValueAtTime(o.detune.value,time);
+    for(let i=1;i<=legs;i++)o.detune.linearRampToValueAtTime(det+Z.driftCents(dr,Math.random()),time+span*i/legs);
+  }
+
   /* ---- synth voice ---- */
   playNote(L,midi,vel,time,durSec,pan,busName){
-    const ctx=this.ctx,p=this.params[L],freq=midiHz(midi);
+    const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
     const out=ctx.createGain();out.gain.setValueAtTime(0,time);
     const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
-    const cut=cutoffHz(p.cutoff),atk=attackSec(p.attack),rel=releaseSec(p.release);
+    // the filter opens a shade differently on every note, the way a warm analog one does
+    const cut=cutoffHz(p.cutoff)*Z.driftCutoff(dr,Math.random()),atk=attackSec(p.attack),rel=releaseSec(p.release);
     const pluck=L==='bass'||L==='arp'||(L==='lead'&&p.attack<15);
     if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
     else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
     const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
-    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;o.detune.value=det;o.connect(filt);o.start(time);oscs.push(o)};
+    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
     if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
     else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
     else mk(wave,0);
-    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
     const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
     out.gain.linearRampToValueAtTime(peak,time+atk);
     if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);

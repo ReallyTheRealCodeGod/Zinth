@@ -400,6 +400,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
           <div class="field"><label for="p-release">Release <output id="o-release"></output></label><input type="range" id="p-release" min="0" max="100" value="30"></div>
         </div>
         <div class="field" data-synth><label for="p-spread">Detune spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20"></div>
+        <div class="field" data-synth><label for="p-drift">Analog drift <output id="o-drift"></output></label><input type="range" id="p-drift" min="0" max="100" value="28" title="Analog drift: every note of this layer wanders a few cents in pitch and opens its filter a shade differently, so repeated notes never sound identical. Always far under a semitone, so the note never changes."></div>
         <div class="field" data-drums><label for="kit">Kit</label><select id="kit"></select></div>
         <div class="field" data-drums>
           <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
@@ -465,6 +466,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
+      <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
     <div class="keysheet">
@@ -798,6 +800,18 @@ function fadePlan(mode,steps,stepSec){
   pts.push({t:len-knee,g:FADE.knee,ramp:true},{t:len,g:FADE.lo,ramp:true});
   return pts;
 }
+/* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
+   and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
+   of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
+   drifted note is still, unmistakably, the note you asked for — the scale lock holds however far the knob
+   goes. r is a random number in [0,1]: 0 is the flattest a voice may sit, 1 the sharpest, 0.5 dead centre. */
+const DRIFT={cents:14,cutoff:0.18,seconds:2.4};
+const driftAmt=a=>Math.max(0,Math.min(100,+a||0))/100;
+const driftR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
+// how many cents a voice strays: ±DRIFT.cents at the top of the knob, nothing at all at the bottom
+function driftCents(amount,r){return driftR(r)*DRIFT.cents*driftAmt(amount)}
+// what a voice's filter cutoff is multiplied by: always a positive number near 1, so a note is never lost
+function driftCutoff(amount,r){return 1+driftR(r)*DRIFT.cutoff*driftAmt(amount)}
 // the gain a plan holds t seconds into its section, read exactly as the audio parameter reads it: a value
 // holds until the next point, and an exponential curve runs into a ramped one. The MIDI export samples this.
 function fadeGain(plan,t){
@@ -833,7 +847,7 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff});
 })();
 </script>
 <script>
@@ -842,10 +856,10 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS
 const Z=window.Z;
 const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,delay:35,reverb:30,level:75,mute:false,solo:false},
-  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,delay:45,reverb:25,level:55,mute:false,solo:false},
-  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes
@@ -970,21 +984,34 @@ class Engine{
     else if(this.fx.gate8){g.setValueAtTime(step%2===0?1:0,time)}
   }
 
+  // analog drift: every oscillator of a voice takes its own small detune and then wanders slowly away from
+  // it, so a note held on and a note played twice never sit still. The offset is cents — always far under a
+  // semitone — so the note itself never changes, whatever the Drift knob says.
+  driftOsc(o,det,dr,time,durSec){
+    o.detune.value=det+Z.driftCents(dr,Math.random());
+    if(!(dr>0))return;
+    const span=Math.min(8,Math.max(Z.DRIFT.seconds,durSec===undefined?4:durSec));
+    const legs=Math.max(1,Math.round(span/Z.DRIFT.seconds));
+    o.detune.setValueAtTime(o.detune.value,time);
+    for(let i=1;i<=legs;i++)o.detune.linearRampToValueAtTime(det+Z.driftCents(dr,Math.random()),time+span*i/legs);
+  }
+
   /* ---- synth voice ---- */
   playNote(L,midi,vel,time,durSec,pan,busName){
-    const ctx=this.ctx,p=this.params[L],freq=midiHz(midi);
+    const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
     const out=ctx.createGain();out.gain.setValueAtTime(0,time);
     const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
-    const cut=cutoffHz(p.cutoff),atk=attackSec(p.attack),rel=releaseSec(p.release);
+    // the filter opens a shade differently on every note, the way a warm analog one does
+    const cut=cutoffHz(p.cutoff)*Z.driftCutoff(dr,Math.random()),atk=attackSec(p.attack),rel=releaseSec(p.release);
     const pluck=L==='bass'||L==='arp'||(L==='lead'&&p.attack<15);
     if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
     else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
     const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
-    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;o.detune.value=det;o.connect(filt);o.start(time);oscs.push(o)};
+    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;o.frequency.value=freq;this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
     if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
     else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
     else mk(wave,0);
-    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';sub.frequency.value=freq/2;this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
     const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
     out.gain.linearRampToValueAtTime(peak,time+atk);
     if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);
@@ -1712,8 +1739,10 @@ $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecIn
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
-const PARAMS=['cutoff','reso','attack','release','spread','delay','reverb','pump','level'];
-const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
+const PARAMS=['cutoff','reso','attack','release','spread','drift','delay','reverb','pump','level'];
+// drift reads as the cents a note may stray either way: the knob's own units are meaningless, the wander is not
+const driftFmt=v=>v>0?'± '+(Math.round(Z.driftCents(v,1)*10)/10)+' ct':'off';
+const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
 function renderSound(){
@@ -1727,10 +1756,13 @@ function renderSound(){
   if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
 }
 PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;E.setParam(state.layer,k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+$('p-drift').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?state.layer+' drifts by '+driftFmt(v)+': every note wanders a little in pitch and filter, so no two are the same. You hear it in the WAV export too.'
+    :state.layer+' drift off: every note is machine-identical');});
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
-  const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70)};
+  const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55)};
   for(const k in P)E.setParam(L,k,P[k]);renderSound();U.persist();U.setStatus('Random patch on '+L);
 });
 $('kit').addEventListener('change',e=>{state.kit=e.target.value;E.kit=state.kit;U.persist();U.setStatus('Kit: '+state.kit)});
