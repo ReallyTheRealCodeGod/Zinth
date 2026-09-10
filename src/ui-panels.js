@@ -262,12 +262,14 @@ const typing=e=>!!(e.target&&e.target.matches&&e.target.matches('input,select,te
 document.addEventListener('keydown',e=>{
   if(typing(e))return;
   const k=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
-  if(e.key==='Escape'){if(!$('sheet').hidden)showSheet(false);else chordOff();return}
+  if(e.key==='Escape'){if(!$('sheet').hidden)showSheet(false);else if(!U.closeChordEdit())chordOff();return}
   if(e.key==='?'){showSheet($('sheet').hidden);return}
   if(!$('sheet').hidden)return;
   if(mod&&k==='z'){e.preventDefault();if(e.shiftKey)U.redoStep();else U.undoStep();return}
   if(mod&&k==='y'){e.preventDefault();U.redoStep();return}
   if(mod)return;
+  // while a chord card is open for editing, ← and → step to the chord before or after it
+  if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&U.nudgeChordEdit(e.key==='ArrowLeft'?-1:1)){e.preventDefault();return}
   if(e.code==='Space'){e.preventDefault();$('play').click();return}
   if(e.repeat)return;
   if(k==='l'){$('loopSec').click();return}

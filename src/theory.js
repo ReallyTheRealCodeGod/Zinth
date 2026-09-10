@@ -60,34 +60,95 @@ function romanFor(degree,quality,size){
 const STEPS=16,BARS=8,TOTAL=STEPS*BARS;
 const DRUM_KINDS=['kick','snare','clap','hat','ohat'];
 
+/* A progression entry is either a plain degree — what a chord-box sketch produces — or an object
+   {d, bars, seventh, inv}: the degree, how many bars it lasts, whether it takes the seventh (else the
+   track's own 7ths setting decides) and a fixed inversion (else voice leading picks one). Both forms
+   live side by side in state.prog[part], so old projects and sketches keep working. */
+function progEntry(x,n){
+  const o=(x&&typeof x==='object')?x:{d:x};
+  const d=Math.round(+o.d);if(!(d>=0&&d<n))return null;
+  const e={d},b=Math.round(+o.bars),i=Math.round(+o.inv);
+  if(b>=1&&b<=BARS)e.bars=b;
+  if(o.seventh!==undefined&&o.seventh!==null)e.seventh=!!o.seventh;
+  if(i>=0&&i<=3)e.inv=i;
+  return e;
+}
+function normProg(prog,n){
+  if(!Array.isArray(prog))return null;
+  const out=prog.map(x=>progEntry(x,n)).filter(Boolean).slice(0,BARS);
+  return out.length?out:null;
+}
+// Give every chord its span: a chord that sets its own length keeps it, the rest share what is left, and
+// the last chord stretches or is clipped so the progression always covers exactly the 8 bars of the loop.
+function layoutProg(list){
+  const fixed=list.reduce((a,e)=>a+(e.bars||0),0),autos=list.filter(e=>!e.bars).length;
+  const room=Math.max(0,BARS-fixed),base=autos?Math.floor(room/autos):0,extra=autos?room-base*autos:0;
+  const out=[];let bar=0,ai=0;
+  for(const e of list){
+    if(bar>=BARS)break;
+    const want=e.bars||(base+(ai++<extra?1:0));
+    const bars=Math.min(want,BARS-bar);
+    if(bars<1)continue;
+    out.push({e,bar0:bar,bars});bar+=bars;
+  }
+  if(!out.length){out.push({e:list[0],bar0:0,bars:BARS});bar=BARS}
+  if(bar<BARS)out[out.length-1].bars+=BARS-bar;
+  return out;
+}
+// a track code carries a progression as "0x4-3x2i1": degree, "x" bars, "7" or "3" for a forced
+// seventh or triad, "i" for a fixed inversion. A plain "0-3-4-0" is still a valid progression.
+function progCode(list){
+  if(!Array.isArray(list)||!list.length)return '';
+  return list.map(x=>{
+    const e=(x&&typeof x==='object')?x:{d:x};let s=String(Math.max(0,Math.round(+e.d)||0));
+    if(e.bars)s+='x'+e.bars;
+    if(e.seventh===true)s+='7';else if(e.seventh===false)s+='3';
+    if(e.inv!==undefined&&e.inv!==null)s+='i'+e.inv;
+    return s;
+  }).join('-');
+}
+function parseProgCode(str){
+  const tok=/^(\d+)(?:x(\d))?(7|3)?(?:i(\d))?$/;
+  if(!/^\d+(x\d)?(7|3)?(i\d)?(-\d+(x\d)?(7|3)?(i\d)?)*$/.test(str||''))return null;
+  return String(str).split('-').slice(0,BARS).map(t=>{
+    const m=tok.exec(t),e={d:+m[1]};
+    if(m[2])e.bars=+m[2];
+    if(m[3])e.seventh=m[3]==='7';
+    if(m[4]!==undefined)e.inv=+m[4];
+    return e;
+  });
+}
 function generateChords(cfg,rng){
   const cs=chordScaleOf(cfg.scale);
-  const degrees=(cfg.prog&&cfg.prog.length?cfg.prog.filter(d=>d>=0&&d<cs.steps.length).slice(0,BARS):[]);
-  if(!degrees.length)degrees.push(...rng.pick(cs.progs));
-  const size=cfg.sevenths?4:3;
+  const list=normProg(cfg.prog,cs.steps.length)||rng.pick(cs.progs).map(d=>({d}));
   const rootMidi=(cfg.root>=6?48:60)+cfg.root;
-  const n=degrees.length,baseBars=Math.floor(BARS/n),extra=BARS-baseBars*n;let bar=0;
   let prev=null;
-  return degrees.map((deg,i)=>{
-    const bars=baseBars+(i<extra?1:0),bar0=bar;bar+=bars;
-    const base=buildChord(cs.steps,deg,size,rootMidi);
+  return layoutProg(list).map(({e,bar0,bars})=>{
+    const size=(e.seventh===undefined?cfg.sevenths:e.seventh)?4:3;
+    const base=buildChord(cs.steps,e.d,size,rootMidi);
     const info=chordInfo(base);
     const rootPc=base[0]%12,fifthPc=base[2]%12;
     let notes=base;
-    if(prev){ // voice leading: least movement from the previous voicing, near the home register
+    // voice leading: least movement from the previous voicing, near the home register. A chord that names
+    // its own inversion only chooses the octave, so the note you asked for stays in the bass.
+    const invs=e.inv===undefined?base.map((_,k)=>k):[Math.min(e.inv,size-1)];
+    if(prev||e.inv!==undefined){
       let best=null,bd=1e9;
-      for(let inv=0;inv<size;inv++)for(const oct of [-12,0]){
+      for(const inv of invs)for(const oct of [-12,0]){
         const v=base.map((m,k)=>(k<inv?m+12:m)+oct).sort((a,b)=>a-b);
         if(new Set(v).size!==v.length)continue;
         const mean=v.reduce((a,b)=>a+b,0)/v.length;
-        let d=0;v.forEach((m,k)=>{d+=Math.abs(m-prev[Math.min(k,prev.length-1)])});
+        let d=0;if(prev)v.forEach((m,k)=>{d+=Math.abs(m-prev[Math.min(k,prev.length-1)])});
         d+=Math.max(0,Math.abs(mean-(rootMidi+6))-6)*2;
         if(d<bd){bd=d;best=v}
       }
-      notes=best;
+      if(best)notes=best;
     }
     prev=notes;
-    return {degree:deg,notes,rootPc,fifthPc,name:info.name,roman:romanFor(deg,info.quality,size),bar0,bars,pcs:new Set(notes.map(m=>m%12))};
+    const inv=Math.max(0,base.map(m=>((m%12)+12)%12).indexOf(((notes[0]%12)+12)%12));
+    return {degree:e.d,notes,rootPc,fifthPc,seventh:size>3,inv,
+      name:info.name+(inv?'/'+NOTE_NAMES[((notes[0]%12)+12)%12]:''),
+      roman:romanFor(e.d,info.quality,size),bar0,bars,pcs:new Set(notes.map(m=>m%12))};
   });
 }
 const chordAt=(chords,step)=>{const bar=Math.floor(step/STEPS);for(const c of chords)if(bar<c.bar0+c.bars)return c;return chords[chords.length-1]};
@@ -248,5 +309,5 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch});
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,STEPS,BARS,TOTAL,DRUM_KINDS,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,progCode,parseProgCode});
 })();

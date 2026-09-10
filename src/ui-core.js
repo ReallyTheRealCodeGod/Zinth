@@ -105,13 +105,13 @@ function redoStep(){if(!undo.redo.length){setStatus('Nothing to redo');return}co
 const clampN=(v,a,b,dflt)=>{v=+v;return isNaN(v)?dflt:Math.max(a,Math.min(b,Math.round(v)))};
 function code(){
   const S=state.seeds,same=Z.LAYERS.every(L=>S[L]===S.chords);
-  return [same?S.chords:Z.LAYERS.map(L=>S[L]).join('~'),state.mood,state.root,state.scale,state.bpm,state.energy,state.swing,state.prog.v?state.prog.v.join('-'):'x',state.prog.c?state.prog.c.join('-'):'x'].join('.');
+  return [same?S.chords:Z.LAYERS.map(L=>S[L]).join('~'),state.mood,state.root,state.scale,state.bpm,state.energy,state.swing,Z.progCode(state.prog.v)||'x',Z.progCode(state.prog.c)||'x'].join('.');
 }
 function parseCode(str){
   const p=String(str||'').trim().split('.');const raw=(p[0]||'').toUpperCase().split('~').map(s=>s.replace(/[^A-Z0-9]/g,'').slice(0,10)).filter(Boolean);
   if(!raw.length)return null;const seeds={};Z.LAYERS.forEach((L,i)=>seeds[L]=raw.length===5?raw[i]:raw[0]);
   if(p.length<8)return {seeds};
-  const prog=x=>/^\d+(-\d+)*$/.test(x||'')?x.split('-').map(Number).slice(0,8):null;
+  const prog=x=>Z.parseProgCode(x);
   return {seeds,mood:MOODS[p[1]]?p[1]:state.mood,root:clampN(p[2],0,11,null),scale:Z.SCALES[p[3]]?p[3]:null,bpm:clampN(p[4],60,180,state.bpm),energy:clampN(p[5],0,100,state.energy),swing:clampN(p[6],0,60,state.swing),progV:prog(p[7]),progC:prog(p[8])};
 }
 
@@ -178,8 +178,84 @@ function renderProg(){
   const sec=song[viewSection];if(!sec)return;
   $('progLabel').textContent='Chords · '+(sec.part==='v'?'A verse':'B chorus')+(sec.transpose?' · '+Z.NOTE_NAMES[(state.root+sec.transpose+120)%12]+' ('+(sec.transpose>0?'+':'')+sec.transpose+')':'');
   $('progTag').hidden=!state.prog[sec.part];
-  $('prog').innerHTML=sec.track.chords.map((c,i)=>'<div class="chord" data-i="'+i+'"><span class="rn">'+c.roman+'</span><span class="cn">'+c.name+'</span><span class="bars">bars '+(c.bar0+1)+'–'+(c.bar0+c.bars)+'</span></div>').join('');
+  $('prog').innerHTML=sec.track.chords.map((c,i)=>'<button class="chord'+(i===chordEd?' edit':'')+'" data-i="'+i+'" aria-label="Chord '+(i+1)+', '+c.name+', bars '+(c.bar0+1)+' to '+(c.bar0+c.bars)+'" title="Click to change this chord: its degree, its seventh, its voicing and how many bars it lasts"><span class="rn">'+c.roman+'</span><span class="cn">'+c.name+'</span><span class="bars">bars '+(c.bar0+1)+'–'+(c.bar0+c.bars)+'</span></button>').join('');
+  renderChordEdit();
 }
+/* ---------- chord editing on the chord cards ---------- */
+// The cards are the progression. Click one to change its degree, its seventh, its voicing or how many bars
+// it lasts. The first edit freezes the generated chords into state.prog[part] as objects; the plain degree
+// arrays a chord-box sketch produces keep working and are upgraded in place the moment you touch a card.
+let chordEd=-1;
+const INV_NAMES=['root','1st','2nd','3rd'];
+const partName=p=>p==='v'?'A verse':'B chorus';
+const chordsOf=()=>{const sec=song[viewSection];return sec?sec.track.chords:[]};
+function progList(sec){
+  const p=state.prog[sec.part];
+  if(p&&p.length)return p.map(x=>(x&&typeof x==='object')?Object.assign({},x):{d:x});
+  return sec.track.chords.map(c=>({d:c.degree,bars:c.bars}));
+}
+function editProg(fn,msg){
+  const sec=song[viewSection];if(!sec||chordEd<0)return;
+  const list=progList(sec);if(!list[chordEd]||fn(list)===false)return;
+  state.prog[sec.part]=list.slice(0,Z.BARS);regenerate();
+  // store exactly what you hear: a chord pushed past bar 8 is gone, a clipped one keeps the bars it got
+  const now=song[viewSection];
+  if(now)state.prog[now.part]=now.track.chords.map((c,i)=>{const e=Object.assign({},list[i]||{});e.d=c.degree;e.bars=c.bars;return e});
+  chordEd=Math.min(chordEd,chordsOf().length-1);renderProg();persist();
+  if(msg)setStatus(msg);
+}
+// re-rendering replaces the cards and the degree buttons, so hand the keyboard back what it was on
+function refocus(el){if(el)try{el.focus({preventScroll:true})}catch(e){}}
+function focusChordCard(){refocus($('prog').querySelector('.chord.edit'))}
+function openChordEdit(i){
+  chordEd=chordEd===i?-1:i;renderProg();focusChordCard();
+  const c=chordsOf()[chordEd];
+  if(c)setStatus('Chord '+(chordEd+1)+' · '+c.name+': change its degree, its seventh, its voicing or how long it lasts. ← → step between chords, Esc closes.');
+}
+function closeChordEdit(){if(chordEd<0)return false;chordEd=-1;renderProg();return true}
+function nudgeChordEdit(d){const n=chordsOf().length;if(chordEd<0||!n)return false;chordEd=(chordEd+d+n)%n;renderProg();focusChordCard();return true}
+function renderChordEdit(){
+  const box=$('chordEdit'),list=chordsOf(),sec=song[viewSection];
+  if(!sec||chordEd<0||chordEd>=list.length){box.hidden=true;return}
+  box.hidden=false;
+  const c=list[chordEd],cs=Z.chordScaleOf(state.scale),entry=progList(sec)[chordEd]||{};
+  $('ceLabel').textContent=partName(sec.part)+' · chord '+(chordEd+1)+' of '+list.length+' · '+c.name+' · bars '+(c.bar0+1)+'–'+(c.bar0+c.bars);
+  const had=document.activeElement,keep=had&&had.parentElement===$('ceDeg')?had.dataset.v:null;
+  $('ceDeg').innerHTML=cs.steps.map((_,d)=>{
+    const rn=Z.romanFor(d,Z.chordInfo(Z.buildChord(cs.steps,d,3,60)).quality,3),on=d===c.degree;
+    return '<button data-v="'+d+'"'+(on?' class="on"':'')+' aria-pressed="'+on+'" title="Degree '+(d+1)+' of the key">'+rn+'</button>';
+  }).join('');
+  if(keep!=null)refocus($('ceDeg').querySelector('[data-v="'+keep+'"]'));
+  $('ceBars').querySelectorAll('button').forEach(b=>{const on=+b.dataset.v===c.bars;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('ceInv').querySelectorAll('button').forEach(b=>{
+    b.hidden=b.dataset.v==='3'&&c.notes.length<4;
+    const on=b.dataset.v==='a'?entry.inv===undefined:(entry.inv!==undefined&&+b.dataset.v===c.inv);
+    b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);
+  });
+  $('ce7').classList.toggle('on',!!c.seventh);$('ce7').setAttribute('aria-pressed',!!c.seventh);
+  $('ceDel').disabled=list.length<2;$('ceReset').disabled=!state.prog[sec.part];
+}
+$('prog').addEventListener('click',e=>{const b=e.target.closest('.chord');if(b)openChordEdit(+b.dataset.i)});
+$('ceDeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)editProg(l=>{l[chordEd].d=+b.dataset.v},'Chord '+(chordEd+1)+' is now '+b.textContent)});
+$('ceBars').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const n=+b.dataset.v;
+  editProg(l=>{l[chordEd].bars=n},'Chord '+(chordEd+1)+' lasts '+n+' bar'+(n===1?'':'s')+' · the progression always fills 8 bars, so what no longer fits steps aside')});
+$('ceInv').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.v;
+  editProg(l=>{if(v==='a')delete l[chordEd].inv;else l[chordEd].inv=+v},
+    v==='a'?'Chord '+(chordEd+1)+' follows the voice leading again':'Chord '+(chordEd+1)+' sits in '+INV_NAMES[+v]+' position')});
+$('ce7').addEventListener('click',()=>{const c=chordsOf()[chordEd];if(!c)return;const on=!c.seventh;
+  editProg(l=>{l[chordEd].seventh=on},'Chord '+(chordEd+1)+(on?' takes its seventh':' is a plain triad'))});
+$('ceSplit').addEventListener('click',()=>{
+  editProg(l=>{const bars=l[chordEd].bars||2,half=Math.max(1,Math.floor(bars/2));
+    l[chordEd].bars=Math.max(1,bars-half);l.splice(chordEd+1,0,Object.assign({},l[chordEd],{bars:half}))},
+    'Chord split in two · pick a degree for the new half');
+});
+$('ceDel').addEventListener('click',()=>{if(chordsOf().length<2)return;editProg(l=>{l.splice(chordEd,1)},'Chord removed · the last chord stretches to fill the 8 bars')});
+$('ceReset').addEventListener('click',()=>{
+  const sec=song[viewSection];if(!sec||!state.prog[sec.part])return;
+  state.prog[sec.part]=null;regenerate();chordEd=Math.min(chordEd,chordsOf().length-1);renderProg();
+  setStatus('Generated chords are back for the '+partName(sec.part)+' sections');
+});
+$('ceClose').addEventListener('click',closeChordEdit);
 function renderArr(){
   const cur=E.playing?E.section:-1;
   $('arr').innerHTML=song.map((s,i)=>'<button class="sec'+(i===state.sel?' sel':'')+(i===cur?' now':'')+'" data-i="'+i+'" title="Click to select, double-click to play from here"><span class="sn">'+s.type+'</span><span class="sb">'+s.bars+'</span><span class="dots">'+Z.LAYERS.map(L=>'<i style="--c:'+COLORS[L]+'" class="'+(s.layers[L]==='lite'?'lite':s.layers[L]?'on':'')+'"></i>').join('')+'</span>'+(s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>').join('');
@@ -360,5 +436,5 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits});
+Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();

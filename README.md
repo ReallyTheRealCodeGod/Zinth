@@ -11,6 +11,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Arranger.** Add, reorder, duplicate and delete sections. Each has a type, length, key shift and its own layer switches. Loop one section while you work on it.
 - **Lock and reroll.** New track rerolls only unlocked layers. Each layer has its own dice.
 - **Chord box.** Number keys play the diatonic chords of the key in close voicings. Sketch a progression and send it to the verse or the chorus.
+- **Edit the chords.** Click a chord card to change its degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. Split a card to add a chord, and ↺ Generated brings the rolled progression back. The progression always fills the eight-bar loop.
 - **Record your melody, your arp or your bass line.** Press Rec, choose the layer to record into, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The keys sound the layer you are playing into and land where it sings: the arp an octave up, the bass in its own register, always in key. A metronome click is one button away.
 - **Draw notes in the roll.** The lead, arp and bass lanes are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits work while the section loops, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.
 - **Drums.** 808, 909, Lo-fi and Trap kits, a step grid per part, fills, sidechain pump.
@@ -28,7 +29,8 @@ No build tools or dependencies. Open `index.html` in a browser.
 | 1–7 | Chords |
 | A–J, Q–U | Notes, two octaves |
 | Z–M | Punch-in effects (hold) |
-| Esc | Release held chords |
+| ← → | Step between chord cards while the chord editor is open |
+| Esc | Close the chord editor · release held chords |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
 | ? | Help sheet |
 

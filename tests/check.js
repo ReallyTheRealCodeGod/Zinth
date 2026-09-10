@@ -153,6 +153,60 @@ for(const scale in Z.SCALES){
   }
 }
 
+// chords edited on the chord cards: a progression of objects keeps every degree, its per-chord bar length,
+// its per-chord seventh and its inversion, always fills the 8 bars of the loop, and stays in the chord
+// scale. Plain degree arrays — what a chord-box sketch produces — keep working beside them.
+for(const scale in Z.SCALES){
+  const cs=Z.chordScaleOf(scale),n=cs.steps.length;
+  for(const root of [0,4,9]){
+    const chPcs=pcsOf(root,cs.steps),tag=' [chord cards · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+']';
+    const S={chords:'PROG01',lead:'PROG01',arp:'PROG01',bass:'PROG01',drums:'PROG01'};
+    const base={root,scale,energy:55,evolve:true,sevenths:false,gate:0.7};
+    const inScale=(t,why)=>{
+      assert(t.chords.reduce((a,c)=>a+c.bars,0)===Z.BARS,why+' does not cover 8 bars'+tag);
+      t.chords.forEach(c=>{
+        assert(c.notes.length>=3&&c.notes.every((m,i)=>i===0||m>c.notes[i-1]),why+' voicing not ascending: '+c.notes.join('/')+tag);
+        c.notes.forEach(m=>assert(chPcs.has(((m%12)+12)%12),why+' tone '+Z.NOTE_NAMES[m%12]+' outside the chord scale'+tag));
+      });
+    };
+    // per-chord bar lengths: I for 4 bars, then IV and V for 2 — the fourth chord no longer fits and steps aside
+    const wanted=[{d:0,bars:4},{d:3,bars:2},{d:4,bars:2,seventh:true},{d:1,bars:2}];
+    const t=Z.generateTrack(Object.assign({},base,{prog:wanted}),S,'v',0);
+    inScale(t,'an edited progression');
+    assert(t.chords.length===3,'per-chord bars: kept '+t.chords.length+' chords, expected the 3 that fit 8 bars'+tag);
+    assert(t.chords.map(c=>c.bars).join()==='4,2,2','per-chord bar lengths ignored: '+t.chords.map(c=>c.bars).join()+tag);
+    assert(t.chords.map(c=>c.degree).join()==='0,3,4','edited chord degrees not honoured'+tag);
+    assert(t.chords[2].notes.length===4,'a chord asked for its seventh and did not get it'+tag);
+    assert(t.chords[0].notes.length===3,'a chord took a seventh it was not given'+tag);
+    // the arp and the bass follow the edited chords, so the whole track moves with them
+    t.arp.forEach(e=>assert(Z.chordAt(t.chords,e.step).pcs.has(((e.midi%12)+12)%12),'arp note not in the edited chord'+tag));
+    t.bass.forEach(e=>assert(chPcs.has(((e.midi%12)+12)%12),'bass note left the scale over edited chords'+tag));
+    // a fixed inversion puts the chord tone you picked at the bottom, in every key and scale
+    for(let inv=0;inv<3;inv++){
+      const ti=Z.generateTrack(Object.assign({},base,{prog:[{d:0,bars:4,inv},{d:3,bars:4,inv}]}),S,'v',0);
+      inScale(ti,'an inverted progression');
+      ti.chords.forEach((c,i)=>{
+        const want=Z.buildChord(cs.steps,i?3:0,3,60+root)[inv]%12;
+        assert(((c.notes[0]%12)+12)%12===want,'inversion '+inv+' did not put the right chord tone in the bass'+tag);
+        assert(c.inv===inv,'chord reports inversion '+c.inv+', expected '+inv+tag);
+      });
+    }
+    // a plain degree array still lays out evenly, and one chord fills the whole loop
+    const sketch=[0,3,4,0];
+    const tp=Z.generateTrack(Object.assign({},base,{prog:sketch}),S,'v',0);
+    inScale(tp,'a sketched progression');
+    assert(tp.chords.map(c=>c.degree).join()===sketch.join(),'a sketched progression was not honoured'+tag);
+    assert(tp.chords.every(c=>c.bars===2),'a sketched progression did not share the bars evenly'+tag);
+    const t1=Z.generateTrack(Object.assign({},base,{prog:[{d:n-1,bars:1}]}),S,'v',0);
+    inScale(t1,'a single chord');
+    assert(t1.chords.length===1&&t1.chords[0].degree===n-1,'a single edited chord did not fill the loop'+tag);
+    // a progression survives the round trip through a track code, modifiers and all
+    const codeStr=Z.progCode(wanted),back=Z.parseProgCode(codeStr);
+    assert(JSON.stringify(back)===JSON.stringify(wanted),'a progression did not survive its track code: '+codeStr+tag);
+    assert(JSON.stringify(Z.parseProgCode(Z.progCode(sketch)))===JSON.stringify(sketch.map(d=>({d}))),'a sketched progression did not survive its track code'+tag);
+  }
+}
+
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -166,7 +220,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

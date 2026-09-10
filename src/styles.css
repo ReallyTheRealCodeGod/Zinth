@@ -134,12 +134,20 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .prog{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;margin-bottom:10px}
 .chord{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px 6px 10px;display:flex;flex-direction:column;gap:1px;position:relative;overflow:hidden}
 .chord::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--lav);opacity:.6}
+.chord{text-align:left;transition:border-color .12s,background .12s}
+.chord:hover{border-color:var(--lav);background:var(--panel-3)}
 .chord.now{border-color:var(--lav);box-shadow:0 0 0 1px rgba(167,139,250,.35)}
+.chord.edit{border-color:var(--lav);background:rgba(167,139,250,.12);box-shadow:0 0 0 1px var(--lav)}
+/* chord editor: the same inspector row as the arranger, in the chord colour */
+.cedit .seg button.on{box-shadow:inset 0 -2px 0 var(--lav);color:var(--lav)}
+.cedit #ceLabel{font:400 11px var(--mono);letter-spacing:0;text-transform:none;color:var(--lav)}
+.cedit #ceDeg button{min-width:32px;font-size:11px;letter-spacing:.04em;text-transform:none}
 .chord .rn{font:600 15px var(--disp);letter-spacing:.04em}
 .chord .cn{font:400 12px var(--mono);color:var(--ink-dim)}
 .chord .bars{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute)}
 .prog-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .prog-head .lbl{flex:1}
+.prog-head .chint{font-size:11px;color:var(--ink-mute)}
 .tag{font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--line-2);color:var(--ink-dim)}
 .tag.own{color:var(--lav);border-color:rgba(167,139,250,.5)}
 
