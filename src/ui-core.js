@@ -50,7 +50,7 @@ const state={
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',
 };
 const rec={armed:false};
-let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1;
+let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,leadHit=null,drag=null,dragPreview=null;
 function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double}}
 function defaultSections(){return DEFAULT_FORM.map(newSection)}
 
@@ -208,8 +208,13 @@ $('addSec').addEventListener('click',()=>{const s=newSection('Verse');state.sect
 
 const canvas=$('rollCanvas'),ctx2=canvas.getContext('2d');
 let rollBars=8;
+// the lead lane is one row per scale pitch, in the register the lead generator writes in
+function leadPitches(sec){
+  const root=(state.root+(sec.transpose||0)+120)%12,lo=64+(root>=6?-6:0);
+  return Z.scalePitches({root,scale:state.scale},lo,lo+22);
+}
 function buildRoll(){
-  const sec=song[viewSection];if(!sec)return;const track=sec.track,lay=sec.layers;rollBars=Math.min(8,sec.bars);
+  const sec=song[viewSection];leadHit=null;if(!sec)return;const track=sec.track,lay=sec.layers;rollBars=Math.min(8,sec.bars);
   const W=$('roll').clientWidth||1000,H=340,dpr=Math.min(2,window.devicePixelRatio||1);
   canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.height=H+'px';
   rollCache=document.createElement('canvas');rollCache.width=W*dpr;rollCache.height=H*dpr;
@@ -230,7 +235,19 @@ function buildRoll(){
     const nh=Math.max(3,Math.min(9,h/(hi-lo+1)));
     evs.forEach(e=>{const notes=[].concat(getMidi(e));notes.forEach(m=>{const y=y0+h-((m-lo)/(hi-lo))*(h-nh);c.globalAlpha=0.45+e.vel*0.55;c.fillStyle=COLORS[L];c.fillRect(gx+e.step*sw+0.5,y,Math.max(2,Math.min(e.dur,steps-e.step)*sw-1.2),nh)})});c.globalAlpha=1;
   };
-  lane(0,track.lead,e=>e.midi);lane(1,track.arp,e=>e.midi);lane(2,track.chordEvs,e=>e.notes);lane(3,track.bass,e=>e.midi);
+  const leadY=14,leadH=laneH-22,pitches=leadPitches(sec),rowH=leadH/pitches.length,rects=[];
+  if(!lay.lead)rest(leadY+leadH/2+4);
+  else{
+    track.lead.filter(e=>e.step<steps).forEach(e=>{
+      let idx=0,bd=1e9;pitches.forEach((p,i)=>{const d=Math.abs(p.midi-e.midi);if(d<bd){bd=d;idx=i}});
+      const x=gx+e.step*sw+0.5,y=leadY+leadH-(idx+1)*rowH,w=Math.max(2,Math.min(e.dur,steps-e.step)*sw-1.2),h=Math.max(2,rowH-1.4);
+      c.globalAlpha=0.5+e.vel*0.5;c.fillStyle=COLORS.lead;c.fillRect(x,y,w,h);
+      rects.push({step:e.step,midi:e.midi,x,y,w,h});
+    });
+    c.globalAlpha=1;
+  }
+  leadHit={gx,sw,steps,y0:leadY,h:leadH,pitches,rowH,rects};
+  lane(1,track.arp,e=>e.midi);lane(2,track.chordEvs,e=>e.notes);lane(3,track.bass,e=>e.midi);
   const rows={kick:3,snare:2,clap:1,ohat:0,hat:0},y0=4*laneH+12,rh=(laneH-20)/4;
   if(!lay.drums)rest(y0+rh*2+4);
   else track.drums.forEach(d=>{
@@ -245,7 +262,77 @@ function drawFrame(step){
   if(step>=0){const W=canvas.width/dpr,gx=74,sw=(W-gx)/(rollBars*16),s=step%(rollBars*16);ctx2.scale(dpr,dpr);
     ctx2.fillStyle='rgba(245,165,36,.10)';ctx2.fillRect(gx+s*sw,0,sw,canvas.height/dpr);
     ctx2.fillStyle='#f5a524';ctx2.fillRect(gx+s*sw,0,1.5,canvas.height/dpr)}
+  if(dragPreview){ctx2.setTransform(dpr,0,0,dpr,0,0);
+    ctx2.fillStyle='rgba(245,165,36,.55)';ctx2.fillRect(dragPreview.x,dragPreview.y,dragPreview.w,dragPreview.h);
+    ctx2.strokeStyle='#ece6d8';ctx2.lineWidth=1;ctx2.strokeRect(dragPreview.x+.5,dragPreview.y+.5,dragPreview.w-1,dragPreview.h-1)}
 }
+
+/* ---------- lead note editing in the roll ---------- */
+// edits live in state.leadEdits[part], the same format a recorded melody uses, so both share one path
+function leadEditList(sec){
+  const list=state.leadEdits[sec.part];
+  return list?list.map(e=>Object.assign({},e)):sec.track.lead.map(e=>({step:e.step,dur:e.dur,midi:e.midi-(sec.transpose||0),vel:e.vel}));
+}
+function commitLead(sec,list,msg){
+  const fresh=!state.leadEdits[sec.part];
+  list.sort((a,b)=>a.step-b.step);state.leadEdits[sec.part]=list;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
+  setStatus(msg+(fresh?' · this melody is yours now; Clear melody brings the generated one back':''));
+}
+function rollXY(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
+function inLeadLane(p){return !!leadHit&&p.x>=leadHit.gx&&p.y>=leadHit.y0&&p.y<=leadHit.y0+leadHit.h}
+function leadNoteAt(p){return leadHit?(leadHit.rects.find(r=>p.x>=r.x-2&&p.x<=r.x+r.w+2&&p.y>=r.y-2&&p.y<=r.y+r.h+2)||null):null}
+const onEdge=(r,x)=>r.w>=10&&x>=r.x+r.w-6;
+function roomAfter(list,skip,step){
+  let room=leadHit.steps-step;
+  list.forEach((n,i)=>{if(i!==skip&&n.step>step)room=Math.min(room,n.step-step)});
+  return Math.max(1,room);
+}
+canvas.addEventListener('pointerdown',e=>{
+  if(e.button)return;
+  const sec=song[viewSection],p=rollXY(e);if(!sec||!inLeadLane(p))return;
+  if(!sec.layers.lead){setStatus('This section does not play the lead. Switch it on under Plays in the inspector.');return}
+  const tr=sec.transpose||0,hit=leadNoteAt(p);
+  if(hit){
+    const list=leadEditList(sec),idx=list.findIndex(n=>n.step===hit.step&&n.midi===hit.midi-tr);
+    if(idx<0)return;
+    if(onEdge(hit,p.x)){
+      e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(err){}
+      drag={sec,list,idx,tr,startX:p.x,step:hit.step,dur:list[idx].dur,newDur:list[idx].dur};
+      return;
+    }
+    list.splice(idx,1);commitLead(sec,list,'Note removed');return;
+  }
+  const row=Math.max(0,Math.min(leadHit.pitches.length-1,leadHit.pitches.length-1-Math.floor((p.y-leadHit.y0)/leadHit.rowH)));
+  const step=Math.max(0,Math.min(leadHit.steps-1,Math.floor((p.x-leadHit.gx)/leadHit.sw)));
+  const dur=Math.max(1,Math.min(2,leadHit.steps-step)),midi=leadHit.pitches[row].midi;
+  // the lead is one line: a note already sounding is trimmed, notes inside the new one give way
+  const list=leadEditList(sec).map(n=>n.step<step&&n.step+n.dur>step?Object.assign({},n,{dur:step-n.step}):n).filter(n=>n.step<step||n.step>=step+dur);
+  list.push({step,dur,midi:midi-tr,vel:0.85});
+  commitLead(sec,list,Z.NOTE_NAMES[midi%12]+' added at bar '+(Math.floor(step/16)+1)+'.'+(Math.floor((step%16)/4)+1));
+});
+canvas.addEventListener('pointermove',e=>{
+  const p=rollXY(e);
+  if(drag){
+    if(!leadHit)return;
+    const room=roomAfter(drag.list,drag.idx,drag.step);
+    const dur=Math.max(1,Math.min(room,drag.dur+Math.round((p.x-drag.startX)/leadHit.sw)));
+    drag.newDur=dur;
+    const midi=drag.list[drag.idx].midi+drag.tr;let idx=0,bd=1e9;
+    leadHit.pitches.forEach((q,i)=>{const d=Math.abs(q.midi-midi);if(d<bd){bd=d;idx=i}});
+    dragPreview={x:leadHit.gx+drag.step*leadHit.sw+0.5,y:leadHit.y0+leadHit.h-(idx+1)*leadHit.rowH,w:Math.max(2,dur*leadHit.sw-1.2),h:Math.max(2,leadHit.rowH-1.4)};
+    return;
+  }
+  const sec=song[viewSection];
+  if(!inLeadLane(p)||!sec||!sec.layers.lead){canvas.style.cursor='';return}
+  const hit=leadNoteAt(p);canvas.style.cursor=hit?(onEdge(hit,p.x)?'ew-resize':'pointer'):'crosshair';
+});
+function endDrag(){
+  if(!drag)return;const d=drag;drag=null;dragPreview=null;
+  d.list[d.idx].dur=d.newDur;commitLead(d.sec,d.list,'Note is '+d.newDur+' step'+(d.newDur===1?'':'s')+' long');
+}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
+canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
 Object.assign(ZUI,{state,rec,COLORS,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections});

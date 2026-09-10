@@ -40,7 +40,7 @@ const partLabel=p=>p==='v'?'A verse':'B chorus';
 function partOfSel(){const s=song()[state.sel];return s?s.part:'v'}
 function renderRecInfo(){
   const part=partOfSel(),list=state.leadEdits[part];
-  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' recorded note'+(list.length===1?'':'s'):'generated melody');
+  $('recInfo').textContent=partLabel(part)+': '+(list?list.length+' note'+(list.length===1?'':'s')+' of your own':'generated melody');
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
 }
 function setRec(on){

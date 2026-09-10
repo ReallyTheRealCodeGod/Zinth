@@ -299,6 +299,28 @@ for(const scale in Z.SCALES){
     }
   }
 }
+// edited and recorded lead notes (the roll's lead lane and Rec share this path): notes are stored
+// without the section's key shift, come back verbatim, follow the shift, and stay in the scale
+for(const scale in Z.SCALES){
+  for(const root of [0,5,11]){
+    for(const transpose of [-2,0,3]){
+      const secRoot=((root+transpose)%12+12)%12,melPcs=pcsOf(secRoot,Z.SCALES[scale].steps);
+      const pitches=Z.scalePitches({root,scale},60,84);
+      const edits=[{step:0,dur:4,midi:pitches[0].midi,vel:0.85},{step:9,dur:2,midi:pitches[2].midi,vel:0.7},
+        {step:Z.TOTAL-1,dur:8,midi:pitches[1].midi,vel:0.6},{step:Z.TOTAL+4,dur:2,midi:pitches[0].midi,vel:0.85}];
+      const cfg={root:secRoot,scale,energy:60,evolve:true,sevenths:false,gate:0.7,transpose,leadEvents:edits};
+      const t=Z.generateTrack(cfg,{chords:'EDIT01',lead:'EDIT01',arp:'EDIT01',bass:'EDIT01',drums:'EDIT01'},'v',0);
+      const tag=' [edited lead · '+Z.NOTE_NAMES[root]+' '+Z.SCALES[scale].name+' · '+transpose+' st]';
+      assert(t.lead.length===3,'edited lead kept '+t.lead.length+' notes, expected the 3 inside the loop'+tag);
+      t.lead.forEach((e,i)=>{
+        assert(e.step===edits[i].step&&e.dur===edits[i].dur&&e.vel===edits[i].vel,'edited lead note changed'+tag);
+        assert(e.midi===edits[i].midi+transpose,'edited lead note did not follow the section key shift'+tag);
+        assert(melPcs.has(((e.midi%12)+12)%12),'edited lead note '+Z.NOTE_NAMES[e.midi%12]+' outside scale'+tag);
+        assert(t.byStep.lead[e.step].includes(e),'edited lead note missing from the playback index'+tag);
+      });
+    }
+  }
+}
 // chord box voicings: every diatonic chord of every scale, in every key, is entirely in scale
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
@@ -312,7 +334,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Every chord-box pad in every key is entirely in scale.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
