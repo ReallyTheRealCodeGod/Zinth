@@ -1,0 +1,163 @@
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Zin<span>th</span></h1>
+      <small>scale-locked song studio · every note lands in key</small>
+    </div>
+    <div class="transport">
+      <button class="play" id="play" aria-pressed="false"><i class="ico"></i><span id="playLabel">Play</span></button>
+      <div class="beat-leds" id="leds" aria-hidden="true"><i class="led"></i><i class="led"></i><i class="led"></i><i class="led"></i></div>
+      <canvas class="scope" id="scope" width="240" height="72" aria-hidden="true"></canvas>
+      <div class="readout"><b id="bpmOut">112</b><span>bpm</span></div>
+      <div class="readout"><b id="posOut">1.1</b><span id="posLabel">bar . beat</span></div>
+      <button class="btn tgl" id="loopSec" aria-pressed="false" title="Repeat the selected section while you work on it (L)">Loop section</button>
+      <div class="seed">
+        <input id="seed" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Track code" title="Track code. Paste one in and press Load to recall a track idea.">
+        <button class="btn" id="seedGo" title="Load this track code">Load</button>
+        <button class="btn icon" id="saveFav" title="Keep this song in Saved songs" aria-pressed="false">♥</button>
+      </div>
+      <button class="btn" id="exportWav" title="Render the whole song to a WAV file">Export WAV</button>
+      <button class="btn" id="exportMid" title="Export the whole song as a MIDI file for your DAW">Export MIDI</button>
+      <button class="btn" id="saveProj" title="Save the whole project as a .json file">Save</button>
+      <button class="btn" id="openProj" title="Open a saved .json project">Open</button>
+      <input type="file" id="projFile" accept=".json,application/json" hidden>
+      <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
+      <button class="btn icon" id="helpBtn" title="How Zinth works and every shortcut (?)">?</button>
+      <span class="status" id="status" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="panel gen" aria-label="Track settings">
+      <h2>Track</h2>
+      <div class="stack">
+        <div class="field"><label>Mood</label><div class="chips" id="moods" role="group" aria-label="Mood presets"></div></div>
+        <div class="row2">
+          <div class="field"><label for="root">Key</label><select id="root"></select></div>
+          <div class="field"><label for="scale">Scale</label><select id="scale"></select></div>
+        </div>
+        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112"></div>
+        <div class="field"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55"></div>
+        <div class="field"><label for="swing">Swing <output id="swingVal">12 %</output></label><input type="range" id="swing" min="0" max="60" value="12"></div>
+        <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
+        <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
+        <button class="btn big" id="generate" title="Reroll every layer that is not locked in the mixer">New track</button>
+        <p style="margin:-4px 0 0;font-size:12px;color:var(--ink-mute)">Rerolls every layer that is not locked in the mixer. Lock what you love, roll the rest.</p>
+        <div class="field"><label>Saved songs</label><div class="saved" id="saved"></div></div>
+      </div>
+    </section>
+
+    <section class="panel centre" aria-label="Sequencer">
+      <div class="keystrip">
+        <div class="name" id="keyName">C <em>Dorian</em></div>
+        <div class="notes" id="scaleNotes"></div>
+      </div>
+      <div class="prog-head"><span class="lbl" id="progLabel">Chords · Verse (A)</span><span class="tag" id="progTag" hidden>your progression</span></div>
+      <div class="prog" id="prog"></div>
+      <div class="arr-head">
+        <span class="lbl">Arrangement <output id="songLen"></output></span>
+        <button class="btn sm" id="addSec" title="Add a section after the selected one">+ Section</button>
+      </div>
+      <div class="arr" id="arr" aria-label="Arrangement"></div>
+      <div class="insp" id="insp">
+        <div class="grp"><span class="lbl">Type</span><select class="sm" id="secType"></select></div>
+        <div class="grp"><span class="lbl">Chords</span><div class="seg" id="secPart"><button data-v="v">A · verse</button><button data-v="c">B · chorus</button></div></div>
+        <div class="grp"><span class="lbl">Bars</span><div class="seg" id="secBars"><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button></div></div>
+        <div class="grp"><span class="lbl">Key</span><select class="sm" id="secTrans"><option value="-2">−2 st</option><option value="-1">−1 st</option><option value="0">same</option><option value="1">+1 st</option><option value="2">+2 st</option><option value="3">+3 st</option><option value="5">+5 st</option><option value="7">+7 st</option></select></div>
+        <div class="grp"><span class="lbl">Plays</span><div class="lay" id="secLayers"></div></div>
+        <div class="spacer"></div>
+        <button class="btn sm" id="secLeft" title="Move earlier">◀</button>
+        <button class="btn sm" id="secRight" title="Move later">▶</button>
+        <button class="btn sm" id="secDup" title="Duplicate section">Duplicate</button>
+        <button class="btn sm" id="secDel" title="Delete section">Delete</button>
+      </div>
+      <div class="roll" id="roll">
+        <canvas id="rollCanvas" width="1000" height="340"></canvas>
+        <div class="lanes" id="lanes"></div>
+      </div>
+      <div class="mixer" id="mixer"></div>
+      <div class="fx" id="fx" aria-label="Punch-in effects"></div>
+      <div class="hint">
+        <span>Punch-in effects are momentary: hold the key or the button. Lanes can be muted from their names.</span>
+        <span><kbd>Space</kbd> play / stop &nbsp; <kbd>L</kbd> loop section &nbsp; <kbd>Esc</kbd> release chords</span>
+      </div>
+    </section>
+
+    <section class="panel snd" aria-label="Sound design">
+      <h2>Sound</h2>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="stack" id="sndFields">
+        <div class="field" data-synth><label for="patch">Patch</label><div class="patch"><select id="patch"></select><button class="btn icon" id="patchDice" title="Random patch">🎲</button></div></div>
+        <div class="field" data-synth><label>Wave</label><div class="waves" id="waves"></div></div>
+        <div class="field" data-synth><label for="p-cutoff">Filter cutoff <output id="o-cutoff"></output></label><input type="range" id="p-cutoff" min="0" max="100" value="60"></div>
+        <div class="field" data-synth><label for="p-reso">Resonance <output id="o-reso"></output></label><input type="range" id="p-reso" min="0" max="100" value="20"></div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-attack">Attack <output id="o-attack"></output></label><input type="range" id="p-attack" min="0" max="100" value="5"></div>
+          <div class="field"><label for="p-release">Release <output id="o-release"></output></label><input type="range" id="p-release" min="0" max="100" value="30"></div>
+        </div>
+        <div class="field" data-synth><label for="p-spread">Detune spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20"></div>
+        <div class="field" data-drums><label for="kit">Kit</label><select id="kit"></select></div>
+        <div class="field" data-drums>
+          <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
+          <div class="grid" id="grid"></div>
+        </div>
+        <div class="field" data-drums><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35"></div>
+        <div class="row2">
+          <div class="field"><label for="p-delay">Delay <output id="o-delay"></output></label><input type="range" id="p-delay" min="0" max="100" value="20"></div>
+          <div class="field"><label for="p-reverb">Reverb <output id="o-reverb"></output></label><input type="range" id="p-reverb" min="0" max="100" value="30"></div>
+        </div>
+        <div class="field"><label for="p-level">Level <output id="o-level"></output></label><input type="range" id="p-level" min="0" max="100" value="80"><div class="meter"><i id="meter"></i></div></div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="kb" aria-label="Play-along keyboard">
+    <div class="head">
+      <h2 style="margin:0;font:600 12px var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Play along</h2>
+      <p id="kbHint">Everything below is locked to the key, so the chord pads and the letter-key notes all fit the track.</p>
+      <div class="opts recbar">
+        <button class="opt rec" id="recBtn" aria-pressed="false" title="Record the letter keys into the melody of the selected section's part. Starts playback looping that section.">● Rec</button>
+        <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
+        <button class="opt" id="clearMel" title="Remove your recorded melody for this part and bring the generated one back">Clear melody</button>
+        <span class="recinfo" id="recInfo"></span>
+      </div>
+    </div>
+    <div class="cb" aria-label="Chord box">
+      <div class="cb-head">
+        <span class="cb-title">Chords</span>
+        <p>Number keys <kbd>1</kbd>–<kbd>7</kbd> or tap. Every pad is a chord of the key, so any order works.</p>
+        <div class="opts">
+          <button class="opt" id="cb7" aria-pressed="false" title="Add the seventh to every chord">7ths</button>
+          <button class="opt on" id="cbHold" aria-pressed="true" title="A chord keeps sounding until you play the next one">Hold</button>
+          <button class="opt on" id="cbBass" aria-pressed="true" title="Add the chord root in the bass">Bass</button>
+        </div>
+        <div class="tray-wrap">
+          <div class="tray" id="tray"></div>
+          <button class="btn sm" id="useV" disabled title="Use these chords for every A (verse) section">→ A verse</button>
+          <button class="btn sm" id="useC" disabled title="Use these chords for every B (chorus) section">→ B chorus</button>
+          <button class="btn sm" id="clearTray" disabled>Clear</button>
+        </div>
+      </div>
+      <div class="pads" id="pads"></div>
+    </div>
+    <div class="keys" id="keys"></div>
+  </footer>
+</div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="How Zinth works">
+  <div class="sheet-card">
+    <div class="sheet-head"><h2>How Zin<span>th</span> works</h2><button class="btn sm" id="sheetClose">Close</button></div>
+    <ol class="steps">
+      <li><b>Press Play.</b> You are hearing a whole song: intro, verses, choruses, a break, a drop. Every note of every layer is locked to one key and scale, so nothing ever sounds off.</li>
+      <li><b>Roll until you smile.</b> New track rerolls everything. Lock a layer in the mixer to keep it, hit its dice to reroll just that one. Moods pick scale, tempo and sounds for you.</li>
+      <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
+      <li><b>Record your hook.</b> Press Rec, play the letter keys over the looping section, and your melody replaces the generated one, snapped to the grid. Undo is always one press away.</li>
+      <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
+    </ol>
+    <div class="keysheet">
+      <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>
+      <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
+      <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> release held chords</div>
+      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div><div><kbd>?</kbd> this sheet</div>
+    </div>
+  </div>
+</div>
