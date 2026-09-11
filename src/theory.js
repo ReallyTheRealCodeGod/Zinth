@@ -270,6 +270,15 @@ function bassRegister(m){while(m<BASS_LO)m+=12;while(m>BASS_HI)m-=12;return m}
 // the arp sings above the chords: this is the window its generator writes in and its roll lane draws.
 // It is three octaves and a fifth wide, so the widest octave range still fits inside it.
 const arpRange=root=>{const lo=(root>=6?48:60)+root;return [lo+7,lo+43]};
+// The rows of an editable lane in the roll: one per pitch of the key, in the register that layer's generator
+// writes in. The roll draws these, a click picks one of them, and a demo song's notes are chosen from them,
+// so a note that can be written into a lane at all is a note of the key by construction.
+function lanePitches(L,root,scale){
+  if(L==='lead'){const lo=64+(root>=6?-6:0);return scalePitches({root,scale},lo,lo+22)}
+  const chord=SCALES[scale].chord||scale; // arp and bass follow the chord scale, as their generators do
+  if(L==='bass')return scalePitches({root,scale:chord},BASS_LO,BASS_HI);
+  const r=arpRange(root);return scalePitches({root,scale:chord},r[0],r[1]);
+}
 
 /* The arp, and the three things that decide what it plays. A mode says the order it walks the chord in, an
    octave range how far up it reaches, and a gate how much of each step a note holds — from a staccato tick
@@ -435,6 +444,28 @@ function fadePlan(mode,steps,stepSec){
   pts.push({t:len-knee,g:FADE.knee,ramp:true},{t:len,g:FADE.lo,ramp:true});
   return pts;
 }
+/* Section types: the arranger's building blocks, and the eight-section form a fresh track opens with.
+   Part 'v' uses the A chords, 'c' the B chords. A type can also ask for a sweep or a fade by ear — an intro
+   opens up, an outro closes down and fades away — which is what a section of that type starts with. This is
+   plain data, so the arranger, a demo song and the check all read the same table. */
+const SEC_TYPES={
+  'Intro':     {part:'v',energy:-15,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'up'},
+  'Verse':     {part:'v',energy:-5, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1}},
+  'Pre-chorus':{part:'v',energy:5,  bars:4,layers:{lead:0,arp:1,chords:1,bass:1,drums:1},sweep:'up'},
+  'Chorus':    {part:'c',energy:12, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true},
+  'Bridge':    {part:'c',energy:-8, bars:8,layers:{lead:1,arp:0,chords:1,bass:1,drums:'lite'}},
+  'Break':     {part:'c',energy:-10,bars:4,layers:{lead:1,arp:0,chords:1,bass:0,drums:0},hook:true,sweep:'up'},
+  'Drop':      {part:'c',energy:20, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true,double:true},
+  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'down',fade:'out'},
+};
+const DEFAULT_FORM=['Intro','Verse','Chorus','Verse','Chorus','Break','Drop','Outro'];
+// one section of a type, with everything the arranger and the exports read; the caller adds its id
+function sectionOf(type){
+  const t=SEC_TYPES[type]||SEC_TYPES.Verse;
+  return {type:SEC_TYPES[type]?type:'Verse',part:t.part,bars:t.bars,energy:t.energy,transpose:0,
+    layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'};
+}
+
 /* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
    and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
    of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
@@ -616,7 +647,8 @@ function generateTrack(cfg,seeds,part,loop){
   drums.forEach(e=>byStep.drums[e.step].push(e));
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
-window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
+window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,lanePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
+  SEC_TYPES,DEFAULT_FORM,sectionOf,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,

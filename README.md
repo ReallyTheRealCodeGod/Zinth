@@ -6,6 +6,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 
 ## What it does
 
+- **Six songs to start from.** The help sheet leads with six finished tracks — *Late Bus Home* (chill), *Night Drive* (driving), *Lantern Street* (dark), *Coin Rush* (retro), *Sunrise Flight* (uplifting), *Glass Observatory* (otherworldly). Press one, or <kbd>1</kbd>–<kbd>6</kbd> while the sheet is open, and it plays. Each is a whole project — key, scale, tempo, form, its own chords, a drum pattern written step by step, a hook in the lead lane, a sound for every layer — so from the moment it opens it is yours to reroll, redraw and export. Ctrl+Z brings your own track back.
 - **Generates whole songs.** Intro, verses, choruses, break, drop, outro. Verses use one progression, choruses another, and the chorus hook comes back note for note.
 - **Never sounds off.** Chords are built from the scale with voice leading. Melodies lean on chord tones on strong beats. Passing tones never land on a downbeat. `tests/check.html` proves it over hundreds of generated tracks.
 - **Eighteen scales.** The Scale menu is grouped so it stays readable: the **modes** (major, minor, Dorian, Phrygian, Lydian, Mixolydian, harmonic minor), five-note scales that cannot clash (both pentatonics, blues, Hirajoshi, In-sen), and an **exotic** shelf — **Lydian dominant**, **Dorian ♭2**, **Hungarian minor**, **Phrygian dominant**, **Neapolitan minor** and whole tone. Every scale carries a line about what it sounds like as its tooltip, and its own hand-picked pool of progressions: no pool in Zinth holds a diminished chord, and the self-test proves it for every scale in every key.
@@ -35,6 +36,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 | Space | Play / stop |
 | L | Loop the selected section |
 | I | Record into: lead → arp → bass |
+| 1–6 | Load a demo song (while the help sheet is open) |
 | 1–7 | Chords |
 | A–J, Q–U | Notes, two octaves |
 | Z–M | Punch-in effects (hold) |
@@ -59,7 +61,8 @@ On Windows without Git Bash:
 
 | File | Role |
 | --- | --- |
-| `src/theory.js` | Scales, chords, voice leading, generators for melody, arp, bass and drums |
+| `src/theory.js` | Scales, chords, section types, voice leading, generators for melody, arp, bass and drums |
+| `src/demos.js` | The six demo songs and the builder that turns one into a project snapshot |
 | `src/engine.js` | Web Audio synth voices, drum kits, buses, effects, scheduler |
 | `src/ui-core.js` | State, project model, undo, arranger, piano roll |
 | `src/ui-panels.js` | Sound panel, mixer, chord box, keys, recording, export |

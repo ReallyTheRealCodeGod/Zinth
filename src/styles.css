@@ -70,6 +70,18 @@ kbd{font:500 11px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .steps{margin:0 0 16px;padding-left:22px;display:flex;flex-direction:column;gap:8px;max-width:62ch;line-height:1.5}
 .steps li::marker{color:var(--teal);font:600 13px var(--disp)}
 .keysheet{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:13px;color:var(--ink-dim);border-top:1px solid var(--line);padding-top:14px}
+/* the six demo songs at the top of the help sheet: one press and a whole project is playing */
+.demos-head{margin:2px 0 9px}
+.demos-head h3{margin:0 0 4px;font:600 12px var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+.demos-head p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-dim);max-width:64ch}
+.demos{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:0 0 18px}
+.demo{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:9px 11px;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);transition:background .12s,border-color .12s}
+.demo:hover{background:var(--panel-3);border-color:var(--c,var(--teal))}
+.demo b{display:flex;align-items:center;gap:6px;font:600 13.5px var(--disp);letter-spacing:.04em;color:var(--ink)}
+.demo b .k{font:500 10px var(--mono);letter-spacing:0;color:var(--ink-mute);border:1px solid var(--line-2);border-radius:3px;padding:0 4px}
+.demo .d{font-size:11.5px;line-height:1.35;color:var(--ink-dim)}
+.demo em{font:500 10px var(--mono);font-style:normal;letter-spacing:.06em;text-transform:uppercase;color:var(--c,var(--teal))}
 
 /* main grid */
 .main{display:grid;grid-template-columns:262px minmax(0,1fr) 300px;gap:14px;align-items:start}

@@ -840,6 +840,93 @@ for(const bars of [1,2,4,8,16]){
 for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<12;root++){const chPcs=pcsOf(root,cs.steps);
   cs.steps.forEach((_,d)=>[3,4].forEach(size=>Z.buildChord(cs.steps,d,size,60+root).forEach(m=>assert(chPcs.has(((m%12)+12)%12),'pad chord degree '+(d+1)+' outside '+Z.NOTE_NAMES[root]+' '+cs.name))))}}
 
+/* The demo songs. Six finished projects that a new user loads with one press, so they have to be right in a
+   way a rolled track does not: a rolled track is one of millions, a demo is one of six and everybody hears
+   it. Each one is checked as a project — every field restore() reads is there, every section is a type the
+   arranger knows with all five of its layer switches, every chord is a real degree of the chord scale and
+   never a diminished one — and then as music: the whole song is generated section by section, with the demo's
+   own chords, drums and hook in place, and every note of every layer has to be in the key. The hook notes
+   have to sit exactly on the pitch rows the roll draws, which is the same as saying they are notes you could
+   have drawn yourself. */
+{
+  const ids=new Set(),FIELDS=['seeds','locks','mood','root','scale','bpm','energy','swing','sevenths','gate','warmth','eq','arp',
+    'prog','drumEdits','leadEdits','arpEdits','bassEdits','kit','transitions','sections','sel','layer','recTarget'];
+  assert(Array.isArray(Z.DEMOS)&&Z.DEMOS.length>=6,'there are fewer than six demo songs');
+  for(const d of Z.DEMOS||[]){
+    const tag=' [demo '+d.id+']';
+    assert(d.id&&!ids.has(d.id),'a demo id is missing or used twice'+tag);ids.add(d.id);
+    assert(d.name&&d.blurb&&d.name!==d.blurb,'a demo needs a name and a line about it'+tag);
+    assert(!!Z.SCALES[d.scale],'demo scale '+d.scale+' does not exist'+tag);
+    assert(Number.isInteger(d.root)&&d.root>=0&&d.root<12,'demo key out of range'+tag);
+    assert(d.bpm>=60&&d.bpm<=180,'demo tempo outside the tempo slider'+tag);
+    assert(d.energy>=0&&d.energy<=100&&d.swing>=0&&d.swing<=60,'demo energy or swing outside its slider'+tag);
+    assert(d.gate>0&&d.gate<=1,'demo gate out of range'+tag);
+    assert(!!Z.KITS[d.kit],'demo kit '+d.kit+' does not exist'+tag);
+    assert(d.warmth>=0&&d.warmth<=100,'demo warmth outside its slider'+tag);
+    const P=Z.demoProject(d.id),S=P.state,cs=Z.chordScaleOf(d.scale);
+    assert(P.app==='zinth'&&!!S,'a demo does not open as a Zinth project'+tag);
+    FIELDS.forEach(k=>assert(S[k]!==undefined,'demo project carries no '+k+tag));
+    Z.LAYERS.forEach(L=>assert(typeof S.seeds[L]==='string'&&!!S.seeds[L],'demo has no '+L+' seed'+tag));
+    assert(Z.normArp(S.arp).mode===S.arp.mode,'demo arp mode is not one the arp knows'+tag);
+    // the form: sections the arranger itself could have made
+    assert(S.sections.length>=4,'a demo song has fewer than four sections'+tag);
+    S.sections.forEach((sec,i)=>{
+      const st=' · section '+(i+1)+' '+sec.type+tag;
+      assert(!!Z.SEC_TYPES[sec.type],'unknown section type'+st);
+      assert(sec.part==='v'||sec.part==='c','section is neither an A nor a B part'+st);
+      assert([4,8,16].indexOf(sec.bars)>=0,'section is not 4, 8 or 16 bars'+st);
+      assert(Z.SWEEP_MODES.indexOf(sec.sweep)>=0&&Z.FADE_MODES.indexOf(sec.fade)>=0,'section sweep or fade is not a mode'+st);
+      Z.LAYERS.forEach(L=>assert(sec.layers[L]!==undefined,'section has no switch for the '+L+st));
+    });
+    // the chords: degrees of the chord scale, and not one of them diminished
+    for(const p of ['v','c']){
+      assert(Array.isArray(S.prog[p])&&S.prog[p].length>0,'demo has no '+p+' progression'+tag);
+      (S.prog[p]||[]).forEach(e=>{
+        assert(Number.isInteger(e.d)&&e.d>=0&&e.d<cs.steps.length,'progression degree '+e.d+' is not a degree of the chord scale'+tag);
+        [3,4].forEach(size=>assert(Z.chordInfo(Z.buildChord(cs.steps,e.d,size,60)).quality!=='dim',
+          'demo chord on degree '+(e.d+1)+' is diminished'+tag));
+      });
+    }
+    // the drums it was written with: six rows of sixteen, every hit a real velocity, and a kick in there
+    for(const p of ['v','c']){
+      const D=S.drumEdits[p];assert(!!D,'demo has no '+p+' drum pattern'+tag);
+      Z.DRUM_KINDS.forEach(k=>{
+        assert(Array.isArray(D&&D[k])&&D[k].length===16,'demo drum row '+k+' is not sixteen steps'+tag);
+        (D&&D[k]||[]).forEach(v=>assert(v>=0&&v<=1,'demo drum velocity out of range in '+k+tag));
+      });
+      assert(!!D&&D.kick.some(v=>v>0),'demo '+p+' pattern has no kick in it'+tag);
+    }
+    // and the song itself, section by section, exactly as the app would build it
+    S.sections.forEach((sec,i)=>{
+      const root=(d.root+(sec.transpose||0)+120)%12,melPcs=pcsOf(root,Z.SCALES[d.scale].steps),chPcs=pcsOf(root,cs.steps);
+      const st=' · section '+(i+1)+' '+sec.type+tag;
+      const cfg={root,transpose:sec.transpose||0,scale:d.scale,energy:d.energy+sec.energy,
+        leadEnergy:d.energy+(sec.part==='c'?10:0),evolve:true,sevenths:d.sevenths,gate:d.gate,arp:S.arp,hook:!!sec.hook,
+        prog:S.prog[sec.part],drumPattern:S.drumEdits[sec.part],
+        leadEvents:S.leadEdits[sec.part],arpEvents:S.arpEdits[sec.part],bassEvents:S.bassEdits[sec.part]};
+      const t=Z.generateTrack(cfg,S.seeds,sec.part,0);tracks++;
+      t.chords.forEach(c=>c.notes.forEach(m=>assert(chPcs.has(((m%12)+12)%12),'demo chord tone outside the scale'+st)));
+      assert(t.chords.reduce((a,c)=>a+c.bars,0)===Z.BARS,'demo chords do not cover 8 bars'+st);
+      t.lead.forEach(e=>assert(melPcs.has(((e.midi%12)+12)%12),'demo lead note outside the scale'+st));
+      t.arp.forEach(e=>assert(chPcs.has(((e.midi%12)+12)%12),'demo arp note outside the scale'+st));
+      t.bass.forEach(e=>{assert(chPcs.has(((e.midi%12)+12)%12),'demo bass note outside the scale'+st);
+        assert(e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'demo bass note out of register'+st)});
+      t.drums.forEach(h=>assert(h.step>=0&&h.step<Z.TOTAL,'demo drum hit outside the loop'+st));
+      // a hook is played back note for note, on rows the roll itself draws
+      for(const L of ['lead','arp','bass']){
+        const own=S[L+'Edits'][sec.part];if(!own)continue;
+        const rows=new Set(Z.lanePitches(L,root,d.scale).map(p=>p.midi));
+        assert(t[L].length===own.length,'demo '+L+' hook lost notes on the way to playback'+st);
+        own.forEach((e,k)=>{
+          assert(e.step>=0&&e.step<Z.TOTAL&&e.dur>=1&&e.vel>0&&e.vel<=1,'demo '+L+' hook note '+(k+1)+' is malformed'+st);
+          assert(e.step+e.dur<=Z.TOTAL,'demo '+L+' hook note '+(k+1)+' runs past the loop'+st);
+        });
+        t[L].forEach(e=>assert(rows.has(e.midi),'demo '+L+' hook note '+e.midi+' is not a pitch row of that lane'+st));
+      }
+    });
+  }
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -849,7 +936,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

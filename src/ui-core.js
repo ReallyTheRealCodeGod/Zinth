@@ -41,27 +41,15 @@ const PATCHES={
   Keys:{wave:'triangle',cutoff:65,reso:10,attack:1,release:40,spread:8},Strings:{wave:'saw',cutoff:48,reso:5,attack:55,release:75,spread:30},
   Brass:{wave:'saw',cutoff:58,reso:40,attack:12,release:28,spread:15},Hollow:{wave:'square',cutoff:42,reso:30,attack:25,release:60,spread:25},
 };
-// Section types: the arranger's building blocks. part 'v' uses the A chords, 'c' the B chords.
-// A section can also sweep the whole mix through a master filter: 'up' opens it over the section,
-// 'down' closes it over the last bar. And it can fade: 'in' rises from silence over its first two bars,
-// 'out' falls to silence over its last two. The types that want either by ear get it from the start.
-const SEC_TYPES={
-  'Intro':     {part:'v',energy:-15,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'up'},
-  'Verse':     {part:'v',energy:-5, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1}},
-  'Pre-chorus':{part:'v',energy:5,  bars:4,layers:{lead:0,arp:1,chords:1,bass:1,drums:1},sweep:'up'},
-  'Chorus':    {part:'c',energy:12, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true},
-  'Bridge':    {part:'c',energy:-8, bars:8,layers:{lead:1,arp:0,chords:1,bass:1,drums:'lite'}},
-  'Break':     {part:'c',energy:-10,bars:4,layers:{lead:1,arp:0,chords:1,bass:0,drums:0},hook:true,sweep:'up'},
-  'Drop':      {part:'c',energy:20, bars:8,layers:{lead:1,arp:1,chords:1,bass:1,drums:1},hook:true,double:true},
-  'Outro':     {part:'v',energy:-20,bars:8,layers:{lead:0,arp:1,chords:1,bass:0,drums:'lite'},sweep:'down',fade:'out'},
-};
+// Section types and the form a fresh track opens with live in theory.js, so the arranger, the demo songs
+// and the theory check all build a section from one table.
+const SEC_TYPES=Z.SEC_TYPES;
 const SWEEP_MARK={up:'↗',down:'↘'};
 const SWEEP_SAYS={none:'plays open, no sweep',up:'starts dark and opens up over the whole section',down:'plays open and closes down over its last bar'};
 const sweepOf=sec=>Z.SWEEP_MODES.indexOf(sec&&sec.sweep)>0?sec.sweep:'none';
 const FADE_MARK={in:'◢',out:'◣'};
 const FADE_SAYS={none:'plays at full level, no fade',in:'rises from silence over its first two bars',out:'falls away to silence over its last two bars'};
 const fadeOf=sec=>Z.FADE_MODES.indexOf(sec&&sec.fade)>0?sec.fade:'none';
-const DEFAULT_FORM=['Intro','Verse','Chorus','Verse','Chorus','Break','Drop','Outro'];
 const FX=[['lp','Z','Low sweep'],['hp','X','High sweep'],['gate8','C','Gate ⅛'],['gate16','V','Gate ⅟₁₆'],['crush','B','Crush'],['throw','N','Delay throw'],['wash','M','Wash']];
 const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
@@ -72,8 +60,8 @@ const state={
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
-function newSection(type){const t=SEC_TYPES[type]||SEC_TYPES.Verse;return {id:secId++,type,part:t.part,bars:t.bars,energy:t.energy,transpose:0,layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'}}
-function defaultSections(){return DEFAULT_FORM.map(newSection)}
+function newSection(type){return Object.assign({id:secId++},Z.sectionOf(type))}
+function defaultSections(){return Z.DEFAULT_FORM.map(newSection)}
 
 /* ---------- populate controls ---------- */
 Z.NOTE_NAMES.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent=n;$('root').appendChild(o)});
@@ -175,7 +163,7 @@ function applyMood(seed){
   for(const L in m.sound)for(const k in m.sound[L])E.setParam(L,k,m.sound[L][k]);
 }
 function syncControls(){
-  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;
+  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('kit').value=state.kit;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
   state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
@@ -362,13 +350,7 @@ $('addSec').addEventListener('click',()=>{const s=newSection('Verse');state.sect
 const canvas=$('rollCanvas'),ctx2=canvas.getContext('2d');
 let rollBars=8;
 // an editable lane is one row per pitch of the key, in the register that layer's generator writes in
-function lanePitches(L,sec){
-  const root=(state.root+(sec.transpose||0)+120)%12;
-  if(L==='lead'){const lo=64+(root>=6?-6:0);return Z.scalePitches({root,scale:state.scale},lo,lo+22)}
-  const scale=Z.SCALES[state.scale].chord||state.scale; // arp and bass follow the chord scale, as their generators do
-  if(L==='bass')return Z.scalePitches({root,scale},Z.BASS_LO,Z.BASS_HI);
-  const r=Z.arpRange(root);return Z.scalePitches({root,scale},r[0],r[1]);
-}
+const lanePitches=(L,sec)=>Z.lanePitches(L,(state.root+(sec.transpose||0)+120)%12,state.scale);
 // what a stored note sounds like in this section: the key shift, and the bass folded into its register
 const soundOf=(L,midi,tr)=>{const m=midi+tr;return L==='bass'?Z.bassRegister(m):m};
 function syncLanes(){

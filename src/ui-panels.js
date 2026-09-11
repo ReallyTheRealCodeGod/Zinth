@@ -385,13 +385,38 @@ function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textC
 function showSheet(on){$('sheet').hidden=!on;if(on)$('sheetClose').focus()}
 $('helpBtn').addEventListener('click',()=>showSheet(true));$('sheetClose').addEventListener('click',()=>showSheet(false));
 $('sheet').addEventListener('click',e=>{if(e.target===$('sheet'))showSheet(false)});
+/* ---------- demo songs ---------- */
+/* Six finished songs at the top of the help sheet. A demo is a project snapshot like any other, so loading
+   one goes through restore(): it autosaves, it undoes, and every note of it is yours to change. Playback
+   starts on the press, because the point of a demo is to hear it. */
+const DEMO_C={chill:'var(--teal)',drive:'var(--amber)',dark:'var(--rose)',retro:'var(--sand)',uplift:'var(--lav)',odd:'#7ea8ff'};
+function renderDemos(){
+  $('demos').innerHTML=Z.DEMOS.map((d,i)=>{
+    const m=MOODS[d.mood]||MOODS.chill,sc=Z.SCALES[d.scale];
+    const meta=m.label+' · '+Z.NOTE_NAMES[d.root]+' '+sc.name+' · '+d.bpm+' bpm · '+d.kit;
+    return '<button class="demo" data-i="'+i+'" style="--c:'+(DEMO_C[d.id]||'var(--teal)')+'" title="'+d.name+' — '+d.blurb+
+      '. Loads the whole project and plays it; press '+(i+1)+' in this sheet for the same thing, and Ctrl+Z brings your own track back.'+
+      '"><b>'+d.name+'<span class="k">'+(i+1)+'</span></b><span class="d">'+d.blurb+'</span><em>'+meta+'</em></button>';
+  }).join('');
+}
+function loadDemo(i){
+  const d=Z.DEMOS[i];if(!d)return;
+  try{U.restore(Z.demoProject(d.id))}catch(err){U.setStatus('Could not load '+d.name+': '+(err&&err.message||err));return}
+  showSheet(false);
+  E.loopSection=false;$('loopSec').classList.remove('on');$('loopSec').setAttribute('aria-pressed',false);
+  state.loop=0;U.viewSection=state.sel;E.start(state.sel);setPlaying(true);
+  U.setStatus('“'+d.name+'” · '+d.blurb+' · it is your project now — reroll it, draw in it, export it. Ctrl+Z brings your own track back.');
+}
+$('demos').addEventListener('click',e=>{const b=e.target.closest('.demo');if(b)loadDemo(+b.dataset.i)});
+renderDemos();
 const typing=e=>!!(e.target&&e.target.matches&&e.target.matches('input,select,textarea'));
 document.addEventListener('keydown',e=>{
   if(typing(e))return;
   const k=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
   if(e.key==='Escape'){if(!$('sheet').hidden)showSheet(false);else if(!U.closeChordEdit())chordOff();return}
   if(e.key==='?'){showSheet($('sheet').hidden);return}
-  if(!$('sheet').hidden)return;
+  // while the sheet is open the number keys are the demo songs, not the chord pads
+  if(!$('sheet').hidden){const di='123456789'.indexOf(e.key);if(di>=0&&di<Z.DEMOS.length){e.preventDefault();loadDemo(di)}return}
   if(mod&&k==='z'){e.preventDefault();if(e.shiftKey)U.redoStep();else U.undoStep();return}
   if(mod&&k==='y'){e.preventDefault();U.redoStep();return}
   if(mod)return;
