@@ -98,14 +98,24 @@ $('countBtn').addEventListener('click',()=>{state.countIn=!state.countIn;renderR
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
-const PARAMS=['cutoff','reso','attack','release','spread','drift','glide','vibrato','vibRate','chorus','delay','reverb','pump','level'];
+const PARAMS=['cutoff','reso','attack','decay','sustain','release','spread','fenv','drive','fmIndex','drift','glide','vibrato','vibRate','chorus','delay','reverb','pump','level'];
 // drift reads as the cents a note may stray either way: the knob's own units are meaningless, the wander is not
 const driftFmt=v=>v>0?'± '+(Math.round(Z.driftCents(v,1)*10)/10)+' ct':'off';
 const glideFmt=v=>v>0?Math.round(Z.glideSec(v)*1000)+' ms':'off';
 const vibFmt=v=>v>0?'± '+Math.round(Z.vibCents(v))+' ct':'off';
-const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
-const PKEYS=['wave','cutoff','reso','attack','release','spread'];
+const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',decay:v=>Math.round(Z.decaySec(v)*1000)+' ms',sustain:v=>Math.round(Z.sustainLvl(v)*100)+' %',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',fenv:v=>v?'+'+v+' %':'off',drive:v=>v?v+' %':'clean',fmIndex:v=>v+' %',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
+const PKEYS=['wave','cutoff','reso','attack','decay','sustain','release','spread','fenv','drive','slope','fmRatio','fmIndex'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
+Z.FM_RATIOS.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r+' ×';$('fmRatio').appendChild(o)});
+function renderVoiceFields(p){
+  document.querySelectorAll('.row2[data-wave],.field[data-wave]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.wave!==p.wave});
+  $('slopeSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.v===(p.slope||12)));
+  $('fmRatio').value=String(p.fmRatio||2);
+}
+$('slopeSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;E.setParam(state.layer,'slope',+b.dataset.v);renderSound();U.persist();
+  U.setStatus(+b.dataset.v===24?state.layer+' filter at 24 dB per octave: two poles in series, steeper and darker, the ladder sound':state.layer+' filter at 12 dB per octave: gentler, brighter, more open')});
+$('fmRatio').addEventListener('change',e=>{E.setParam(state.layer,'fmRatio',+e.target.value);renderSound();U.persist();
+  U.setStatus('FM ratio '+e.target.value+' ×: whole numbers sound like keys and organs, odd fractions like bells and metal')});
 // the master tab is the whole mix rather than a layer: the pump belongs to the drums bus wherever its
 // slider is shown, and the Level fader there is the master volume the top bar carries
 const onMaster=()=>state.layer==='master';
@@ -123,7 +133,7 @@ function renderSound(){
   document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
   // and one that belongs to a single layer — the arp's own figure — shows only on that layer's tab
   document.querySelectorAll('[data-layer]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.layer!==L});
-  renderArpFields();
+  renderArpFields();if(synth)renderVoiceFields(p);
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
   if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq()}
@@ -196,7 +206,7 @@ $('arpGate').addEventListener('change',e=>{const v=+e.target.value;
 $('patch').addEventListener('change',e=>{const P=PATCHES[e.target.value];if(!P)return;for(const k in P)E.setParam(state.layer,k,P[k]);renderSound();U.persist();U.setStatus(state.layer+' → '+e.target.value)});
 $('patchDice').addEventListener('click',()=>{
   const r=(a,b)=>Math.round(a+Math.random()*(b-a)),L=state.layer;
-  const P={wave:['sine','triangle','saw','square','super'][r(0,4)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
+  const P={wave:['sine','triangle','saw','square','super','fm'][r(0,5)],cutoff:r(25,90),reso:r(0,60),attack:L==='bass'||L==='arp'?r(0,10):r(0,60),decay:r(15,70),sustain:L==='arp'?r(10,50):r(30,95),release:r(10,90),spread:L==='bass'?r(0,20):r(0,70),fenv:r(0,80),drive:L==='bass'?r(10,55):r(0,35),slope:Math.random()<0.5?12:24,fmRatio:Z.FM_RATIOS[r(0,Z.FM_RATIOS.length-1)],fmIndex:r(15,75),drift:L==='bass'?r(0,20):r(0,55),chorus:L==='bass'?r(0,15):r(0,65)};
   if(L==='bass')P.glide=r(0,55);
   if(L==='lead'){P.vibrato=r(0,70);P.vibRate=r(20,80)}
   for(const k in P)E.setParam(L,k,P[k]);

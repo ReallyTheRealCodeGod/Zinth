@@ -5,34 +5,47 @@ const LAYERS=['lead','arp','chords','bass','drums'];
 const DEFAULTS={
   // vibrato and vibRate belong to the lead and glide to the bass: the layers that sing a line and the one
   // that walks between notes. A parameter a layer does not have simply has no control in the Sound panel.
-  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, release:35,spread:25,drift:28,vibrato:30,vibRate:45,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
-  arp:   {wave:'square',cutoff:55,reso:30,attack:1, release:20,spread:10,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
-  chords:{wave:'super', cutoff:40,reso:10,attack:45,release:60,spread:40,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
-  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, release:25,spread:0, drift:12,glide:18,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
+  // Every synth layer is a full voice: ADSR, a 12 or 24 dB filter with its own envelope, drive, and a
+  // two-operator FM mode (fmRatio is the modulator's ratio to the note, fmIndex how hard it modulates).
+  lead:  {wave:'saw',   cutoff:62,reso:25,attack:3, decay:35,sustain:70,release:35,spread:25,fenv:40,drive:15,slope:24,fmRatio:2,fmIndex:40,drift:28,vibrato:30,vibRate:45,chorus:22,delay:35,reverb:30,level:75,mute:false,solo:false},
+  arp:   {wave:'square',cutoff:55,reso:30,attack:1, decay:25,sustain:45,release:20,spread:10,fenv:55,drive:10,slope:12,fmRatio:2,fmIndex:35,drift:24,chorus:18,delay:45,reverb:25,level:55,mute:false,solo:false},
+  chords:{wave:'super', cutoff:40,reso:10,attack:45,decay:60,sustain:85,release:60,spread:40,fenv:20,drive:8, slope:12,fmRatio:1,fmIndex:30,drift:32,chorus:38,delay:10,reverb:55,level:50,mute:false,solo:false},
+  bass:  {wave:'saw',   cutoff:35,reso:20,attack:2, decay:30,sustain:75,release:25,spread:0, fenv:50,drive:30,slope:24,fmRatio:1,fmIndex:25,drift:12,glide:18,chorus:0, delay:0, reverb:5, level:80,mute:false,solo:false},
   drums: {level:75,delay:10,reverb:20,pump:35,mute:false,solo:false},
 };
 // drum machines: each kit is a different set of synthesis recipes. Every kit also names the voice its perc
 // row plays — a rim, a shaker or a cowbell — so the same row sounds like it belongs to whichever kit is on.
+// kick.drive soft-clips the body the way an 808 does, kick.punch adds a short second-harmonic knock the way
+// a 909 does; hat.metal builds the hat from six square waves through a bandpass, the classic metallic
+// recipe, instead of plain noise; snare bodies are two tuned oscillators plus noise.
 const KITS={
-  '808':   {kick:{f0:150,f1:42,decay:0.55,click:0.05},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22},clap:{bp:1300,decay:0.18},
+  '808':   {kick:{f0:150,f1:42,decay:0.55,click:0.05,drive:0.5},snare:{tone:190,noise:0.5,bp:1700,decay:0.2},hat:{hp:8000,decay:0.045,open:0.3,level:0.22,metal:true,tone:1},clap:{bp:1300,decay:0.18},
             perc:{voice:'cowbell',f1:540,f2:800,decay:0.3,level:0.32}},
-  '909':   {kick:{f0:190,f1:50,decay:0.32,click:0.14},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2},clap:{bp:1600,decay:0.15},
+  '909':   {kick:{f0:190,f1:50,decay:0.32,click:0.14,punch:0.5},snare:{tone:230,noise:0.65,bp:2400,decay:0.17},hat:{hp:9500,decay:0.035,open:0.25,level:0.2,metal:true,tone:1.12},clap:{bp:1600,decay:0.15},
             perc:{voice:'rim',f:1800,bp:2600,decay:0.05,level:0.42}},
-  'Lo-fi': {kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2},
+  'Lo-fi': {kick:{f0:120,f1:40,decay:0.4,click:0.02,lp:2200,drive:0.3},snare:{tone:170,noise:0.35,bp:1100,decay:0.16},hat:{hp:6000,decay:0.05,open:0.2,level:0.15},clap:{bp:900,decay:0.2},
             perc:{voice:'shaker',hp:5200,decay:0.085,level:0.2}},
-  'Trap':  {kick:{f0:140,f1:38,decay:0.9,click:0.06},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22},clap:{bp:1400,decay:0.2},
+  'Trap':  {kick:{f0:140,f1:38,decay:0.9,click:0.06,drive:0.65},snare:{tone:210,noise:0.6,bp:2100,decay:0.22},hat:{hp:10500,decay:0.028,open:0.22,level:0.22,metal:true,tone:1.2},clap:{bp:1400,decay:0.2},
             perc:{voice:'rim',f:2100,bp:3000,decay:0.04,level:0.38}},
   // House: a short punchy kick, a crisp snare and hats that stay open and bright
-  'House': {kick:{f0:180,f1:52,decay:0.3,click:0.1},snare:{tone:225,noise:0.55,bp:2300,decay:0.15},hat:{hp:10000,decay:0.042,open:0.36,level:0.26},clap:{bp:1500,decay:0.16},
+  'House': {kick:{f0:180,f1:52,decay:0.3,click:0.1,punch:0.4},snare:{tone:225,noise:0.55,bp:2300,decay:0.15},hat:{hp:10000,decay:0.042,open:0.36,level:0.26,metal:true,tone:1.05},clap:{bp:1500,decay:0.16},
             perc:{voice:'shaker',hp:7200,decay:0.06,level:0.26}},
   // Breaks: a dusty low kick under a lowpass, softer hats, and a snare with a room tail behind it
-  'Breaks':{kick:{f0:128,f1:44,decay:0.36,click:0.03,lp:3200},snare:{tone:180,noise:0.72,bp:1500,decay:0.28,tail:0.42},hat:{hp:6800,decay:0.055,open:0.3,level:0.18},clap:{bp:1050,decay:0.24},
+  'Breaks':{kick:{f0:128,f1:44,decay:0.36,click:0.03,lp:3200,drive:0.2},snare:{tone:180,noise:0.72,bp:1500,decay:0.28,tail:0.42},hat:{hp:6800,decay:0.055,open:0.3,level:0.18},clap:{bp:1050,decay:0.24},
             perc:{voice:'rim',f:1500,bp:2000,decay:0.07,level:0.34}},
 };
+// the six partials of a metallic hat, in Hz: the ratios every classic drum machine used
+const HAT_PARTIALS=[205,304,369,522,540,800];
+const FM_RATIOS=[0.5,1,1.5,2,3,3.5,4,5,7];
 const cutoffHz=v=>80*Math.pow(150,v/100);
 const qOf=v=>0.5+Math.pow(v/100,1.6)*13;
 const attackSec=v=>0.002+Math.pow(v/100,2)*1.2;
 const releaseSec=v=>0.03+Math.pow(v/100,1.8)*2.5;
+const decaySec=v=>0.02+Math.pow(v/100,2)*2.0;
+const sustainLvl=v=>Math.pow(v/100,1.2);
+// drive: a soft clip that stays at unity at full scale and pushes the middle harder as it is turned up
+function driveCurve(amt){const n=1024,c=new Float32Array(n),k=1+amt*7;for(let i=0;i<n;i++){const x=i/(n-1)*2-1;c[i]=(x*k)/(1+Math.abs(x)*(k-1))}return c}
+const driveTrim=amt=>1/(1+amt*1.4);
 const sendGain=v=>Math.pow(v/100,1.4)*0.9;
 const levelGain=v=>Math.pow(v/100,1.5);
 const midiHz=m=>440*Math.pow(2,(m-69)/12);
@@ -126,22 +139,41 @@ class Engine{
     this.chorusOut.connect(this.master);
     // layer buses
     this.bus={};
+    // every melodic layer but the bass enters its bus through a gentle high-pass: mix hygiene, so pads and
+    // leads never pile mud under the kick and the bass, the way a mix engineer would high-pass them
+    const busIn=(L,g)=>{if(L==='bass'||L==='drums')return g;const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=L==='chords'?110:90;hp.Q.value=0.7;hp.connect(g);return hp};
     for(const L of LAYERS){
       const p=this.params[L],g=ctx.createGain(),ds=ctx.createGain(),rs=ctx.createGain();
       ds.gain.value=sendGain(p.delay);rs.gain.value=sendGain(p.reverb);
       g.connect(L==='drums'?this.master:this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);
-      this.bus[L]={g,ds,rs};
+      this.bus[L]={g,ds,rs,in:busIn(L,g)};
       if(p.chorus!==undefined){const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);this.bus[L].cs=cs}
     }
     {const p=this.params.chords,g=ctx.createGain();g.gain.value=levelGain(p.level);const ds=ctx.createGain();ds.gain.value=sendGain(p.delay);const rs=ctx.createGain();rs.gain.value=sendGain(p.reverb);
      const cs=ctx.createGain();cs.gain.value=sendGain(p.chorus);g.connect(cs);cs.connect(this.chorusIn);
-     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs}}
+     g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs,in:busIn('chords',g)}}
     this.updateGains(true);
     this.noise=this.makeNoise(2);
   }
+  // the reverb impulse: a short pre-delay, a handful of early reflections, then a diffuse tail whose highs
+  // die faster than its lows, the way a real room does. Left and right are different noise, so the tail
+  // is wide, and the whole thing is levelled so the sends stay where they were tuned.
   makeIR(seconds,decay){
     const ctx=this.ctx,sr=ctx.sampleRate,n=Math.floor(sr*seconds),buf=ctx.createBuffer(2,n,sr);
-    for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<n;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/n,decay)*(i<sr*0.01?i/(sr*0.01):1)}}
+    const pre=Math.floor(sr*0.014),taps=[[0.009,0.55],[0.017,0.42],[0.026,0.36],[0.038,0.3],[0.051,0.22],[0.067,0.16]];
+    for(let c=0;c<2;c++){
+      const d=buf.getChannelData(c);let lp=0,lp2=0;
+      for(let i=pre;i<n;i++){
+        const t=(i-pre)/sr,life=Math.max(0,1-(i-pre)/(n-pre));
+        const env=Math.pow(life,decay)*(t<0.02?t/0.02:1);
+        const a=0.12+0.72*Math.min(1,t/seconds); // more smoothing as the tail ages: highs go first
+        lp+=((Math.random()*2-1)-lp)*(1-a);lp2+=(lp-lp2)*(1-a*0.6);
+        d[i]=lp2*env;
+      }
+      for(const [tt,g] of taps){const j=pre+Math.floor(sr*tt*(c?1.07:1));if(j<n)d[j]+=(c?-1:1)*g*(Math.random()<0.5?-1:1)}
+      let s=0;for(let i=0;i<n;i++)s+=d[i]*d[i];const norm=0.2/Math.max(1e-6,Math.sqrt(s/n));
+      for(let i=0;i<n;i++)d[i]*=norm;
+    }
     return buf;
   }
   makeNoise(seconds){
@@ -256,34 +288,67 @@ class Engine{
     lfo.start(time);return lfo;
   }
 
-  /* ---- synth voice ---- */
+  /* ---- synth voice ----
+     oscillators (or an FM pair) -> per-side filter chains (12 or 24 dB, with their own envelope)
+     -> stereo placement -> drive -> ADSR amp -> the layer bus (through its high-pass).
+     Unison voices are split left and right before the filters, so a wide patch is genuinely wide. */
   playNote(L,midi,vel,time,durSec,pan,busName){
     const ctx=this.ctx,p=this.params[L],freq=midiHz(midi),dr=p.drift||0;
     const slide=this.glideFrom_(L,midi,time,durSec);
-    const out=ctx.createGain();out.gain.setValueAtTime(0,time);
-    const filt=ctx.createBiquadFilter();filt.type='lowpass';filt.Q.value=qOf(p.reso);
-    // the filter opens a shade differently on every note, the way a warm analog one does
-    const cut=cutoffHz(p.cutoff)*Z.driftCutoff(dr,Math.random()),atk=attackSec(p.attack),rel=releaseSec(p.release);
-    const pluck=L==='bass'||L==='arp'||(L==='lead'&&p.attack<15);
-    if(pluck){filt.frequency.setValueAtTime(Math.min(16000,cut*3.2),time);filt.frequency.exponentialRampToValueAtTime(cut,time+0.05+atk+0.12)}
-    else{filt.frequency.setValueAtTime(cut*0.6,time);filt.frequency.exponentialRampToValueAtTime(cut,time+atk+0.1)}
-    const oscs=[],spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
+    const atk=attackSec(p.attack),dec=decaySec(p.decay===undefined?30:p.decay),sus=sustainLvl(p.sustain===undefined?75:p.sustain),rel=releaseSec(p.release);
+    // the filter follows the key and the velocity a little, opens a shade differently on every note (drift),
+    // and its own envelope opens it further on the attack and lets it settle over the decay
+    const keyTrack=Math.pow(2,(midi-60)/12*0.25),velTrack=0.65+0.5*Math.min(1,vel);
+    const cut=Math.min(18000,cutoffHz(p.cutoff)*Z.driftCutoff(dr,Math.random())*keyTrack*velTrack);
+    const fenv=(p.fenv===undefined?40:p.fenv)/100,peakCut=Math.min(18000,cut*(1+fenv*5)),floorCut=Math.max(40,cut*(fenv>0?0.85:1));
+    const filterEnv=f=>{
+      if(atk>0.05){f.frequency.setValueAtTime(Math.max(40,cut*0.5),time);f.frequency.linearRampToValueAtTime(peakCut,time+atk)}
+      else f.frequency.setValueAtTime(peakCut,time);
+      f.frequency.setTargetAtTime(floorCut,time+atk,Math.max(0.03,dec/3));
+    };
+    const mkChain=()=>{
+      const f1=ctx.createBiquadFilter();f1.type='lowpass';f1.Q.value=qOf(p.reso);filterEnv(f1);
+      if(p.slope===24){const f2=ctx.createBiquadFilter();f2.type='lowpass';f2.Q.value=0.7;filterEnv(f2);f1.connect(f2);return {in:f1,out:f2}}
+      return {in:f1,out:f1};
+    };
     // a sliding voice starts on the note before and ramps to its own; every other voice starts on pitch
     const tune=(o,hz,ratio)=>{
       if(!slide){o.frequency.value=hz;return}
       o.frequency.setValueAtTime(slide.freq*ratio,time);o.frequency.exponentialRampToValueAtTime(hz,time+slide.sec);
     };
-    const mk=(type,det)=>{const o=ctx.createOscillator();o.type=type;tune(o,freq,1);this.driftOsc(o,det,dr,time,durSec);o.connect(filt);o.start(time);oscs.push(o)};
-    if(p.wave==='super'){mk('sawtooth',-spread-5);mk('sawtooth',0);mk('sawtooth',spread+5);mk('sawtooth',-spread*0.4);mk('sawtooth',spread*0.4)}
-    else if(spread>0){mk(wave,-spread/2);mk(wave,spread/2)}
-    else mk(wave,0);
-    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';tune(sub,freq/2,0.5);this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7;sub.connect(sg);sg.connect(filt);sub.start(time);oscs.push(sub)}
+    const spread=p.spread*0.32,wave=p.wave==='saw'?'sawtooth':p.wave;
+    // the voices of this note: what they play, how far they are detuned, how loud, and which side they sit
+    let voices;
+    if(p.wave==='super'){voices=[-1,-0.66,-0.33,0,0.33,0.66,1].map(d=>({type:'sawtooth',det:d*(spread+4),gain:d===0?1:0.78,side:d<0?-1:d>0?1:0}))}
+    else if(spread>0){voices=[{type:wave,det:-spread/2,gain:1,side:-1},{type:wave,det:spread/2,gain:1,side:1}]}
+    else voices=[{type:wave,det:0,gain:1,side:0}];
+    if(L==='bass')voices.forEach(v=>v.side=0); // the bass stays in the middle, where a bass belongs
+    const stereo=!!ctx.createStereoPanner&&voices.some(v=>v.side!==0);
+    const norm=1/Math.sqrt(voices.reduce((a,v)=>a+v.gain*v.gain,0));
+    const chains={},chain=side=>{const k=side<0?'L':side>0?'R':'C';if(!chains[k])chains[k]=mkChain();return chains[k]};
+    const oscs=[];
+    for(const v of voices){
+      const g=ctx.createGain();g.gain.value=v.gain*norm*(stereo&&v.side===0?0.71:1);
+      if(p.wave==='fm'){const pair=this.fmVoice_(p,freq,v.det,time,dec,sus,dr,durSec,tune);pair.car.connect(g);oscs.push(pair.car,pair.mod)}
+      else{const o=ctx.createOscillator();o.type=v.type;tune(o,freq,1);this.driftOsc(o,v.det,dr,time,durSec);o.connect(g);o.start(time);oscs.push(o)}
+      if(stereo&&v.side===0){g.connect(chain(-1).in);g.connect(chain(1).in)}
+      else g.connect(chain(stereo?v.side:0).in);
+    }
+    if(L==='bass'){const sub=ctx.createOscillator();sub.type='sine';tune(sub,freq/2,0.5);this.driftOsc(sub,0,dr,time,durSec);const sg=ctx.createGain();sg.gain.value=0.7*norm;sub.connect(sg);sg.connect(chain(0).in);sub.start(time);oscs.push(sub)}
     const vib=this.vibrato_(L,oscs,time,durSec);
-    const peak=(vel*0.32)/Math.sqrt(oscs.length)*(L==='chords'?0.75:1);
+    // the sides come together in front of the drive, each placed in the field
+    const mix=ctx.createGain();
+    for(const k in chains){const c=chains[k];
+      if(k!=='C'){const pn=ctx.createStereoPanner();pn.pan.value=(k==='L'?-1:1)*(L==='chords'?0.7:0.55);c.out.connect(pn);pn.connect(mix)}
+      else c.out.connect(mix)}
+    let stage=mix;const drv=(p.drive||0)/100;
+    if(drv>0){const ws=ctx.createWaveShaper();ws.curve=driveCurve(drv);ws.oversample='2x';const trim=ctx.createGain();trim.gain.value=driveTrim(drv);mix.connect(ws);ws.connect(trim);stage=trim}
+    // the amp envelope: up over the attack, down to the sustain level over the decay, out over the release
+    const out=ctx.createGain();out.gain.setValueAtTime(0,time);stage.connect(out);
+    const peak=(vel*0.32)*(L==='chords'?0.75:1);
     out.gain.linearRampToValueAtTime(peak,time+atk);
-    if(durSec===undefined||durSec>0.25)out.gain.setTargetAtTime(peak*0.72,time+atk,0.18);
-    filt.connect(out);
-    const dest=(this.bus[busName]||this.bus[L]).g;
+    out.gain.setTargetAtTime(peak*sus,time+atk,Math.max(0.01,dec/3));
+    const bus=this.bus[busName]||this.bus[L],dest=bus.in||bus.g;
     if(pan&&ctx.createStereoPanner){const pn=ctx.createStereoPanner();pn.pan.value=Math.max(-1,Math.min(1,pan));out.connect(pn);pn.connect(dest)}
     else out.connect(dest);
     let released=false;
@@ -294,6 +359,18 @@ class Engine{
     };
     if(durSec!==undefined)release(time+durSec);
     return release;
+  }
+  // two-operator FM: a sine modulator at a ratio of the note bends a sine carrier's frequency. The
+  // modulation depth falls over the decay towards a floor set by the sustain, so a note starts bright and
+  // settles, the way a struck bell or an electric piano does. The carrier is the note, so it stays in key.
+  fmVoice_(p,freq,det,time,dec,sus,dr,durSec,tune){
+    const ctx=this.ctx,car=ctx.createOscillator(),mod=ctx.createOscillator(),mg=ctx.createGain();
+    car.type='sine';mod.type='sine';const ratio=FM_RATIOS.includes(p.fmRatio)?p.fmRatio:2,idx=(p.fmIndex===undefined?40:p.fmIndex)/100;
+    tune(car,freq,1);tune(mod,freq*ratio,ratio);this.driftOsc(car,det,dr,time,durSec);this.driftOsc(mod,det,dr,time,durSec);
+    const depth=freq*ratio*idx*2.2;
+    mg.gain.setValueAtTime(depth,time);mg.gain.setTargetAtTime(depth*(0.2+0.5*sus),time+0.01,Math.max(0.03,dec/2));
+    mod.connect(mg);mg.connect(car.frequency);car.start(time);mod.start(time);
+    return {car,mod};
   }
 
   /* ---- drums ---- */
@@ -306,14 +383,23 @@ class Engine{
       o.frequency.setValueAtTime(k.f0,time);o.frequency.exponentialRampToValueAtTime(k.f1,time+0.09);
       g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
       let dest=bus;if(k.lp){const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=k.lp;f.connect(bus);dest=f}
+      // an 808-style body is driven into a soft clip, which is where its weight and growl come from
+      if(k.drive>0){const ws=ctx.createWaveShaper();ws.curve=driveCurve(k.drive);ws.oversample='2x';const tr=ctx.createGain();tr.gain.value=driveTrim(k.drive)*1.15;ws.connect(tr);tr.connect(dest);dest=ws}
       o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay+0.05);
+      // a 909-style knock: a short burst an octave and a bit above the body, gone in thirty milliseconds
+      if(k.punch>0){const po=ctx.createOscillator(),pg=ctx.createGain();po.type='sine';po.frequency.setValueAtTime(k.f0*2.4,time);po.frequency.exponentialRampToValueAtTime(k.f1*2,time+0.03);
+        pg.gain.setValueAtTime(vel*k.punch,time);pg.gain.exponentialRampToValueAtTime(0.001,time+0.035);po.connect(pg);pg.connect(bus);po.start(time);po.stop(time+0.04)}
       if(k.click>0){const c=ctx.createOscillator(),cg=ctx.createGain();c.type='square';c.frequency.value=1400;cg.gain.setValueAtTime(vel*k.click,time);cg.gain.exponentialRampToValueAtTime(0.001,time+0.012);c.connect(cg);cg.connect(bus);c.start(time);c.stop(time+0.02)}
     }else if(kind==='snare'){
+      // the rattle: noise through a bandpass for the crack and a high-pass so it never muddies the body
       const k=K.snare,n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=0.7;
-      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
-      n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
-      const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(k.tone,time);o.frequency.exponentialRampToValueAtTime(k.tone*0.65,time+0.08);
-      og.gain.setValueAtTime(vel*0.35,time);og.gain.exponentialRampToValueAtTime(0.001,time+0.11);o.connect(og);og.connect(bus);o.start(time);o.stop(time+0.12);
+      const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=900;
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise*1.15,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+      n.connect(f);f.connect(hp);hp.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
+      // the body: two tuned oscillators, the fundamental and the shell's overtone, both dropping in pitch
+      [[k.tone,0.35,0.11],[k.tone*1.83,0.18,0.07]].forEach(([hz,lv,dur])=>{
+        const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(hz*1.25,time);o.frequency.exponentialRampToValueAtTime(hz*0.8,time+0.06);
+        og.gain.setValueAtTime(vel*lv,time);og.gain.exponentialRampToValueAtTime(0.001,time+dur);o.connect(og);og.connect(bus);o.start(time);o.stop(time+dur+0.01)});
       // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
       // It hangs off the drum bus like everything else, so muting the drums silences it too.
       if(k.tail>0){
@@ -350,10 +436,18 @@ class Engine{
         const g=ctx.createGain(),last=i===3,t0=time+off;g.gain.setValueAtTime(vel*0.4,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(last?k.decay:0.012));
         n.connect(f);f.connect(g);g.connect(bus);n.start(t0);n.stop(t0+(last?k.decay:0.015)+0.01)});
     }else{
-      const k=K.hat,open=kind==='ohat',n=ctx.createBufferSource();n.buffer=this.noise;
-      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;
-      const g=ctx.createGain();g.gain.setValueAtTime(vel*(open?k.level*1.2:k.level),time);g.gain.exponentialRampToValueAtTime(0.001,time+(open?k.open:k.decay));
-      n.connect(f);f.connect(g);g.connect(bus);n.start(time);n.stop(time+(open?k.open:k.decay)+0.02);
+      const k=K.hat,open=kind==='ohat',dur=open?k.open:k.decay;
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*(open?k.level*1.2:k.level),time);g.gain.exponentialRampToValueAtTime(0.001,time+dur);g.connect(bus);
+      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;f.connect(g);
+      if(k.metal){
+        // the metallic recipe: six square waves at inharmonic ratios through a bandpass, plus a little noise
+        const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=Math.min(16000,k.hp*1.3);bp.Q.value=1.1;
+        const mg=ctx.createGain();mg.gain.value=0.85;bp.connect(mg);mg.connect(f);
+        for(const hz of HAT_PARTIALS){const o=ctx.createOscillator();o.type='square';o.frequency.value=hz*(k.tone||1);o.connect(bp);o.start(time);o.stop(time+dur+0.02)}
+        const n=ctx.createBufferSource();n.buffer=this.noise;const ng=ctx.createGain();ng.gain.value=0.4;n.connect(ng);ng.connect(f);n.start(time);n.stop(time+dur+0.02);
+      }else{
+        const n=ctx.createBufferSource();n.buffer=this.noise;n.connect(f);n.start(time);n.stop(time+dur+0.02);
+      }
     }
   }
 
@@ -531,5 +625,6 @@ function stemPlan(song,params,base){
   return LAYERS.filter(L=>heard(L)&&stemPlays(song,L)).map((L,i)=>({layer:L,name:stemName(base,i,L)}));
 }
 Z.LAYERS=LAYERS;Z.DEFAULTS=DEFAULTS;Z.KITS=KITS;Z.Engine=Engine;Z.engine=new Engine();Z.cutoffHz=cutoffHz;Z.attackSec=attackSec;Z.releaseSec=releaseSec;
+Z.decaySec=decaySec;Z.sustainLvl=sustainLvl;Z.FM_RATIOS=FM_RATIOS;
 Z.STEMS=STEMS;Z.stemSafe=stemSafe;Z.stemName=stemName;Z.stemPlays=stemPlays;Z.stemPlan=stemPlan;
 })();

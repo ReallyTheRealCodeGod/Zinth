@@ -116,14 +116,31 @@
       <div class="tabs" id="tabs" role="tablist"></div>
       <div class="stack" id="sndFields">
         <div class="field" data-synth><label for="patch">Patch</label><div class="patch"><select id="patch"></select><button class="btn icon" id="patchDice" title="Random patch">🎲</button></div></div>
-        <div class="field" data-synth><label>Wave</label><div class="waves" id="waves"></div></div>
-        <div class="field" data-synth><label for="p-cutoff">Filter cutoff <output id="o-cutoff"></output></label><input type="range" id="p-cutoff" min="0" max="100" value="60"></div>
-        <div class="field" data-synth><label for="p-reso">Resonance <output id="o-reso"></output></label><input type="range" id="p-reso" min="0" max="100" value="20"></div>
-        <div class="row2" data-synth>
-          <div class="field"><label for="p-attack">Attack <output id="o-attack"></output></label><input type="range" id="p-attack" min="0" max="100" value="5"></div>
-          <div class="field"><label for="p-release">Release <output id="o-release"></output></label><input type="range" id="p-release" min="0" max="100" value="30"></div>
+        <div class="field" data-synth><label>Wave</label><div class="waves" id="waves" title="Sine, triangle, saw, square, a seven-voice stereo supersaw, or FM: a sine bent by a second sine for bells, keys and electric pianos"></div></div>
+        <div class="row2" data-synth data-wave="fm">
+          <div class="field"><label for="fmRatio">FM ratio</label><select id="fmRatio" class="sm" title="How fast the modulator runs against the note. Whole numbers give keys and organs, odd fractions give bells and metal. The carrier is the note, so FM never leaves the key."></select></div>
+          <div class="field"><label for="p-fmIndex">FM amount <output id="o-fmIndex"></output></label><input type="range" id="p-fmIndex" min="0" max="100" value="40" title="How hard the modulator bends the carrier: low is a soft sine, high is bright and clangorous. It starts bright and settles over the decay, like something struck."></div>
         </div>
-        <div class="field" data-synth><label for="p-spread">Detune spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20"></div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-cutoff">Filter cutoff <output id="o-cutoff"></output></label><input type="range" id="p-cutoff" min="0" max="100" value="60" title="Where the low-pass filter closes. It follows the key a little and opens with velocity, so hard notes are brighter."></div>
+          <div class="field"><label for="p-reso">Resonance <output id="o-reso"></output></label><input type="range" id="p-reso" min="0" max="100" value="20" title="The peak at the cutoff: a little gives focus, a lot squelches."></div>
+        </div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-fenv">Filter envelope <output id="o-fenv"></output></label><input type="range" id="p-fenv" min="0" max="100" value="40" title="How far the filter opens on each note before settling back over the decay: the pluck and the bite of a sound. Off leaves the filter still."></div>
+          <div class="field"><label>Slope</label><div class="seg" id="slopeSeg" role="group" aria-label="Filter slope" title="12 dB per octave is gentle and bright; 24 dB is two poles in series, steeper and darker, the classic ladder sound"><button data-v="12">12 dB</button><button data-v="24">24 dB</button></div></div>
+        </div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-attack">Attack <output id="o-attack"></output></label><input type="range" id="p-attack" min="0" max="100" value="5" title="How long a note takes to reach full level"></div>
+          <div class="field"><label for="p-decay">Decay <output id="o-decay"></output></label><input type="range" id="p-decay" min="0" max="100" value="35" title="How long the note takes to fall from its peak to the sustain level"></div>
+        </div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-sustain">Sustain <output id="o-sustain"></output></label><input type="range" id="p-sustain" min="0" max="100" value="70" title="The level a held note settles at. Low makes plucks and stabs, high makes pads and organs."></div>
+          <div class="field"><label for="p-release">Release <output id="o-release"></output></label><input type="range" id="p-release" min="0" max="100" value="30" title="How long a note rings on after it ends"></div>
+        </div>
+        <div class="row2" data-synth>
+          <div class="field"><label for="p-spread">Unison spread <output id="o-spread"></output></label><input type="range" id="p-spread" min="0" max="100" value="20" title="Detune between the voices of a note. Above zero the voices split left and right through their own filters, so the sound is genuinely wide. The bass always stays in the middle."></div>
+          <div class="field"><label for="p-drive">Drive <output id="o-drive"></output></label><input type="range" id="p-drive" min="0" max="100" value="15" title="Push the filtered sound into a soft clip: a little is warmth and weight, a lot is growl. Levelled so it never gets louder, only harder."></div>
+        </div>
         <div class="field" data-synth><label for="p-drift">Analog drift <output id="o-drift"></output></label><input type="range" id="p-drift" min="0" max="100" value="28" title="Analog drift: every note of this layer wanders a few cents in pitch and opens its filter a shade differently, so repeated notes never sound identical. Always far under a semitone, so the note never changes."></div>
         <div class="field" data-synth data-param="glide"><label for="p-glide">Glide <output id="o-glide"></output></label><input type="range" id="p-glide" min="0" max="100" value="18" title="Glide: the bass slides up or down into each note from the one before, the way a finger slides along a string. Only notes close together slide, the slide never takes more than part of the note, and it always lands exactly on the note — so the bass still never leaves the key."></div>
         <div class="row2" data-synth data-param="vibrato">

@@ -248,7 +248,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 .tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
 .tab{flex:1 1 52px;height:32px;padding:0 2px;border-radius:var(--r);font:600 10px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);background:var(--panel-2)}
 .tab.on{color:var(--c);border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
-.waves{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.waves{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
 .wave{height:34px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2);display:flex;align-items:center;justify-content:center;color:var(--ink-dim)}
 .wave.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .wave svg{width:26px;height:14px}
