@@ -38,7 +38,14 @@
           <div class="field"><label for="root">Key</label><select id="root"></select></div>
           <div class="field"><label for="scale">Scale</label><select id="scale"></select></div>
         </div>
-        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112"></div>
+        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112">
+          <div class="tempo">
+            <button class="btn sm" id="bpmDown" aria-label="One bpm slower" title="One bpm slower. The − key does the same.">−</button>
+            <button class="btn sm tap" id="tapTempo" title="Tap tempo: tap in time with the pulse in your head — from the second tap Zinth follows you, and four taps settle it. Tap half or double speed and it still lands in range. Shift+T taps too.">Tap</button>
+            <button class="btn sm" id="bpmUp" aria-label="One bpm faster" title="One bpm faster. The + key does the same.">+</button>
+            <span class="taphint" id="tapHint">tap four times</span>
+          </div>
+        </div>
         <div class="field"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55"></div>
         <div class="field"><label for="swing">Swing <output id="swingVal">12 %</output></label><input type="range" id="swing" min="0" max="60" value="12"></div>
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
@@ -157,6 +164,7 @@
           <button data-v="bass" aria-pressed="false" title="Record into the bass: the letter keys drop into the bass register (I)">bass</button>
         </div>
         <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
+        <button class="opt on" id="countBtn" aria-pressed="true" title="Count-in: pressing Rec from stopped gives you one bar of clicks before the song comes in, so you can hear the tempo and come in on the one. Nothing of the count reaches the song or the exports.">Count-in</button>
         <button class="opt" id="clearMel" title="Remove your own melody for this part, recorded or drawn in the roll, and bring the generated one back">Clear melody</button>
         <span class="recinfo" id="recInfo"></span>
       </div>
@@ -196,6 +204,7 @@
       <li><b>Pick a scale, get a mood.</b> The <b>Scale</b> menu holds eighteen, grouped so you can read it: the <b>modes</b> you already know, five-note scales that cannot clash, and a shelf of <b>exotic</b> ones — <b>Lydian dominant</b> sunlit and slippery, <b>Dorian ♭2</b> smoky, <b>Hungarian minor</b> all drama, <b>Phrygian dominant</b> flamenco and desert, <b>Neapolitan minor</b> solemn and cinematic. Hover any of them and it tells you what it sounds like. Whichever you choose, the chords Zinth rolls come from a pool picked by hand for that scale, so there is never a sour chord under the tune, and the pads, the keys and every generated layer move with you.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
       <li><b>Shape the chords.</b> Click a chord card above the arrangement to open it: pick another degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. The progression always fills eight bars, so what no longer fits steps aside. Split a card in two to add a chord, and ↺ Generated brings the rolled progression back. <kbd>←</kbd> <kbd>→</kbd> step between chords, <kbd>Esc</kbd> closes.</li>
+      <li><b>Find the tempo, then count yourself in.</b> Under the tempo slider are three little buttons. <b>Tap</b> takes the tempo from you: tap it in time with the pulse in your head and from the second tap Zinth is already following, four taps settle it — and if you tap half speed or double speed it folds back into range, so whatever you tap it lands on a tempo the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps without reaching for the mouse. Beside it, <b>−</b> and <b>+</b> nudge the tempo one beat a minute at a time, and so do the <kbd>−</kbd> and <kbd>+</kbd> keys. Then, when you press <b>Rec</b> from a standing start, <b>Count-in</b> gives you one bar of clicks first — four beats counting down where the bar and beat usually are, so you can hear the tempo and come in on the one instead of scrambling at the top of the loop. It is a way into a take, not part of the song: nothing of the count reaches the song, the WAV or the MIDI. Switch it off next to Click if you would rather start straight away.</li>
       <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
@@ -212,6 +221,7 @@
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>
       <div><kbd>I</kbd> record into: lead → arp → bass</div><div><kbd>?</kbd> this sheet</div>
+      <div><kbd>Shift</kbd>+<kbd>T</kbd> tap tempo</div><div><kbd>−</kbd> <kbd>+</kbd> tempo one bpm slower / faster</div>
       <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
       <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> close the chord editor · release held chords</div>
       <div><kbd>←</kbd> <kbd>→</kbd> step between chord cards while editing</div>

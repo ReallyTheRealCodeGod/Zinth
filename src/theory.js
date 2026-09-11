@@ -625,6 +625,42 @@ function fadeGain(plan,t){
   }
   return plan[plan.length-1].g;
 }
+/* Tap tempo. You tap the pulse you have in your head and Zinth takes the tempo from you. Only the gaps that
+   could be a pulse count — a tap after a long pause starts a fresh set rather than averaging across the
+   pause — and only the last few of them, so speeding up or slowing down is followed rather than averaged
+   away. A pulse tapped at half or double the speed of the slider's range is folded back into it, so tapping
+   slow half-notes or fast eighths still lands on a tempo the app can play. The answer is always a whole
+   number of beats per minute inside the slider, which is the only thing that reaches the song. */
+const TAP={min:60,max:180,keep:5,gap:2.5,minGap:0.1};
+const bpmIn=b=>Math.max(TAP.min,Math.min(TAP.max,Math.round(b)));
+function tapBpm(times){
+  if(!Array.isArray(times)||times.length<2)return 0;
+  const gaps=[];
+  for(let i=1;i<times.length;i++){const g=+times[i]-+times[i-1];if(g>=TAP.minGap&&g<=TAP.gap)gaps.push(g)}
+  if(!gaps.length)return 0;
+  const use=gaps.slice(-TAP.keep),avg=use.reduce((a,b)=>a+b,0)/use.length;
+  if(!(avg>0))return 0;
+  let bpm=60/avg;
+  // a pulse tapped half or double time is folded back into the range rather than refused
+  for(let i=0;i<8&&bpm<TAP.min;i++)bpm*=2;
+  for(let i=0;i<8&&bpm>TAP.max;i++)bpm/=2;
+  return bpmIn(bpm);
+}
+const nudgeBpm=(bpm,by)=>bpmIn((+bpm||TAP.min)+(+by||0));
+/* Count-in. Arming Rec from a standing start gives you one bar of clicks before the song comes in, so you
+   can hear the tempo and come in on the one. It is one bar at the current tempo exactly — the clicks land on
+   the beats and the last of them is a beat before the song starts, so nothing of the count-in overlaps the
+   first step of the song. It is a way into a take, not part of the song: no note comes from it, and neither
+   the WAV nor the MIDI export has any of it in them. */
+const COUNTIN={beats:4,steps:STEPS};
+function countInPlan(stepSec){
+  const d=+stepSec;
+  if(!(d>0))return null;
+  const beats=[];
+  for(let b=0;b<COUNTIN.beats;b++)beats.push({beat:b,step:b*4,t:b*4*d});
+  return {beats,dur:COUNTIN.steps*d};
+}
+
 /* ================= shareable links =================
    A whole song in a URL. The hash carries the very same project snapshot Save writes, as JSON in base64url:
    no compression, no library, nothing to install, and nothing between the link and the song but the address
@@ -731,7 +767,7 @@ function linkNorm(p){
     warmth:linkNum(s.warmth,0,100,D.warmth),eq:normEq(s.eq),arp:normArp(s.arp),
     prog:pair(s.prog,x=>normProg(x,n)),
     drumEdits:pair(s.drumEdits,x=>{if(!x)return null;const P=normDrumPattern(x);for(const k of DRUM_KINDS)P[k]=P[k].map(r4);return P}),
-    kit:txt(s.kit,D.kit),transitions:s.transitions!==false,sections,
+    kit:txt(s.kit,D.kit),transitions:s.transitions!==false,countIn:s.countIn!==false,sections,
     sel:linkInt(s.sel,0,sections.length-1,D.sel),
     layer:(L.indexOf(s.layer)>=0||s.layer==='master')?s.layer:D.layer,
     recTarget:LINK.lanes.indexOf(s.recTarget)>=0?s.recTarget:D.recTarget};
@@ -779,6 +815,7 @@ function linkSlim(p){
   if(!s.evolve)st.evolve=false;
   if(s.sevenths)st.sevenths=true;
   if(!s.transitions)st.transitions=false;
+  if(!s.countIn)st.countIn=false;
   if(!eqFlat(s.eq))st.eq=s.eq;
   const A=normArp(null);if(s.arp.mode!==A.mode||s.arp.octaves!==A.octaves||s.arp.gate!==A.gate)st.arp=s.arp;
   const pair=(o,f)=>{const r={};if(o.v)r.v=f(o.v);if(o.c)r.c=f(o.c);return Object.keys(r).length?r:null};
@@ -852,6 +889,6 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
-  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,
+  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,TAP,tapBpm,nudgeBpm,COUNTIN,countInPlan,
   LINK,normNotes,normSection,linkNorm,linkSlim,linkFat,linkEncode,linkDecode,linkPayload,linkHash});
 })();

@@ -45,6 +45,8 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // the moment the count-in ends and the song comes in; 0 whenever nothing is counting in
+    this.countInEnd=0;
     // the note a glideing layer played last, so the next one can slide out of it
     this.glideFrom={};
   }
@@ -401,13 +403,25 @@ class Engine{
   nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
 
   /* ---- transport & scheduler ---- */
-  start(section){
+  // start(section,countIn): with a count-in, one bar of clicks is scheduled first and the song's own grid
+  // starts a bar later, so the count lands on the beats and the first step of the song follows the last
+  // click by exactly one beat. Nothing of the count reaches the song — it is clicks and silence.
+  start(section,countIn){
     this.init();if(this.ctx.resume)this.ctx.resume();
     this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];this.glideFrom={};
-    this.grid=this.ctx.currentTime+0.08;
+    this.grid=this.ctx.currentTime+0.08;this.countInEnd=0;
+    const plan=countIn?Z.countInPlan(this.stepSec()):null;
+    if(plan){for(const b of plan.beats)this.click(b.step,this.grid+b.t);this.grid+=plan.dur;this.countInEnd=this.grid}
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  // how many beats of the count-in are still to come: 4 down to 1 while it counts, 0 the rest of the time
+  countdown(){
+    if(!this.ctx||!this.playing||!this.countInEnd)return 0;
+    const left=this.countInEnd-this.ctx.currentTime;
+    if(left<=0)return 0;
+    return Math.max(1,Math.min(Z.COUNTIN.beats,Math.ceil(left/(this.stepSec()*4))));
+  }
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;

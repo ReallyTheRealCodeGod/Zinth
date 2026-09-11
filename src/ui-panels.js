@@ -7,8 +7,15 @@ const song=()=>U.song;
 /* ---------- animation ---------- */
 let lastKey=-1,lastCol=-1;
 function raf(){
-  const p=E.currentPos(),key=p?p.section*100000+p.step:-1;
-  if(key!==lastKey){lastKey=key;const s=p?p.step:-1;U.drawFrame(s);
+  // while a count-in is running there is no position yet: the readout counts the beats down instead, and
+  // the LEDs walk the bar, so you can see the count as well as hear it
+  const p=E.currentPos(),cd=p?0:E.countdown(),key=p?p.section*100000+p.step:(cd?-1-cd:-1);
+  if(cd){
+    if(key!==lastKey){lastKey=key;U.drawFrame(-1);
+      $('posOut').textContent=String(cd);$('posLabel').textContent='count-in';
+      $('leds').querySelectorAll('.led').forEach((l,i)=>l.classList.toggle('on',i===Z.COUNTIN.beats-cd));
+    }
+  }else if(key!==lastKey){lastKey=key;const s=p?p.step:-1;U.drawFrame(s);
     const bar=s<0?0:Math.floor(s/16),beat=s<0?0:Math.floor((s%16)/4);
     $('posOut').textContent=(bar+1)+'.'+(beat+1);
     const sec=p?song()[p.section]:null;$('posLabel').textContent=sec?sec.type:'bar . beat';
@@ -49,6 +56,7 @@ function renderRecInfo(){
   $('clearMel').textContent='Clear '+(L==='lead'?'melody':L);
   $('clearMel').title='Remove your own '+LANE_NAME[L]+' for this part, recorded or drawn in the roll, and bring the generated one back';
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
+  $('countBtn').classList.toggle('on',state.countIn);$('countBtn').setAttribute('aria-pressed',state.countIn);
 }
 function setRecTarget(L){
   if(!U.EDITS[L]||state.recTarget===L)return;
@@ -58,10 +66,14 @@ function setRecTarget(L){
 }
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
-  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;E.start(state.sel);setPlaying(true)}
+  // arming Rec from a standing start counts you in: one bar of clicks at this tempo, then the song comes in
+  let counted=false;
+  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;
+    counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
   U.rebuild();renderKeys();
   const L=state.recTarget,sec=song()[state.sel];
   let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
+  if(counted)msg=Z.COUNTIN.beats+' beats of count-in, then '+msg.charAt(0).toLowerCase()+msg.slice(1);
   if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
@@ -80,6 +92,9 @@ $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
 $('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});
 function cycleRecTarget(){setRecTarget(REC_ORDER[(REC_ORDER.indexOf(state.recTarget)+1)%REC_ORDER.length])}
 $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecInfo()});
+$('countBtn').addEventListener('click',()=>{state.countIn=!state.countIn;renderRecInfo();U.persist();
+  U.setStatus(state.countIn?'Count-in on: pressing Rec from stopped gives you a bar of clicks first, so you can come in on the one. None of it reaches the song or the exports.'
+    :'Count-in off: Rec starts the section straight away')});
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
@@ -416,7 +431,40 @@ $('seed').addEventListener('focus',e=>e.target.select());
 $('root').addEventListener('change',e=>{state.root=+e.target.value;U.regenerate()});
 $('scale').addEventListener('change',e=>{state.scale=e.target.value;U.regenerate()});
 $('energy').addEventListener('input',e=>{state.energy=+e.target.value;syncLabels();U.regenerate()});
-$('bpm').addEventListener('input',e=>{state.bpm=+e.target.value;E.setBpm(state.bpm);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();U.persist()});
+/* the tempo, from the slider, the nudge buttons or a tap. Everything that moves it goes through applyBpm,
+   so the readouts, the track code, the song length, the engine's own clock and the autosave all follow it
+   however it was moved — and because it is state.bpm, it undoes, saves and travels in a link like the rest. */
+function applyBpm(v,msg){
+  const b=Z.nudgeBpm(v,0);
+  state.bpm=b;$('bpm').value=b;U.fill($('bpm'));E.setBpm(b);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();tapHint();U.persist();
+  if(msg)U.setStatus(msg);
+}
+$('bpm').addEventListener('input',e=>applyBpm(+e.target.value));
+/* tap tempo: tap the pulse you have in your head and Zinth takes the tempo from it. A tap after a long
+   pause starts a fresh set, only the last few gaps count, and a pulse tapped half or double time is folded
+   back into the slider's range — so whatever you tap, the tempo lands somewhere the song can play. */
+const tap={times:[]};
+function tapHint(){
+  const n=tap.times.length;
+  $('tapHint').textContent=n<2?'tap four times':n+' tap'+(n===1?'':'s')+' · '+state.bpm+' bpm';
+}
+function nudgeTempo(by){
+  const b=Z.nudgeBpm(state.bpm,by);
+  if(b===state.bpm){U.setStatus('Tempo is already at its '+(by<0?'slowest':'fastest')+': '+b+' bpm');return}
+  applyBpm(b,'Tempo '+b+' bpm');
+}
+function tapTempo(){
+  const now=performance.now()/1000,last=tap.times[tap.times.length-1];
+  if(last===undefined||now-last>Z.TAP.gap)tap.times=[];
+  tap.times.push(now);if(tap.times.length>Z.TAP.keep+1)tap.times.shift();
+  const btn=$('tapTempo');btn.classList.add('lit');clearTimeout(tap.flash);tap.flash=setTimeout(()=>btn.classList.remove('lit'),110);
+  const bpm=Z.tapBpm(tap.times);
+  if(!bpm){tapHint();U.setStatus('Tap tempo: keep tapping in time — from the second tap Zinth follows you');return}
+  applyBpm(bpm,'Tap tempo: '+bpm+' bpm from '+tap.times.length+' taps · keep tapping to settle it, or nudge it with − and +');
+}
+$('tapTempo').addEventListener('click',tapTempo);
+$('bpmDown').addEventListener('click',()=>nudgeTempo(-1));
+$('bpmUp').addEventListener('click',()=>nudgeTempo(1));
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
 $('master').addEventListener('input',e=>{const v=+e.target.value;E.setMaster(v);
   if(onMaster()){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()});
@@ -472,6 +520,10 @@ document.addEventListener('keydown',e=>{
   if(e.repeat)return;
   if(k==='l'){$('loopSec').click();return}
   if(k==='i'){cycleRecTarget();return}
+  // the tempo from the keyboard: Shift+T taps it, − and + nudge it a beat at a time
+  if(e.shiftKey&&k==='t'){e.preventDefault();tapTempo();return}
+  if(e.key==='-'||e.key==='_'){nudgeTempo(-1);return}
+  if(e.key==='='||e.key==='+'){nudgeTempo(1);return}
   if(FXKEYS[k]){fxDown(FXKEYS[k]);return}
   const ci='123456789'.indexOf(e.key);if(ci>=0&&ci<padDefs.length){chordOn(ci);return}
   const ni=KEYMAP.indexOf(e.key.toUpperCase());if(ni>=0)keyOn(ni);

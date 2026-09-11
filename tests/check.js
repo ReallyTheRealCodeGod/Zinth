@@ -1066,6 +1066,72 @@ for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<
   }
 }
 
+/* ---- tap tempo and the count-in ----
+   Neither writes a note, but the tempo they set is the clock every note is played against, and a count-in
+   sits in front of a take, so both have to be exact: a tap can only ever land on a whole tempo the slider
+   holds, and a count-in is one bar at that tempo and not a step more. */
+{
+  const tag=' [tap tempo]';
+  const inRange=b=>b===Math.round(b)&&b>=Z.TAP.min&&b<=Z.TAP.max;
+  // a pulse tapped cleanly comes back exactly, at every tempo the slider holds
+  for(let bpm=Z.TAP.min;bpm<=Z.TAP.max;bpm++){
+    const gap=60/bpm,times=[0,gap,gap*2,gap*3,gap*4];
+    assert(Z.tapBpm(times)===bpm,'tapping '+bpm+' bpm gave '+Z.tapBpm(times)+tag);
+    // tapped at half and at double speed it still lands inside the slider, on the same pulse
+    [0.5,2].forEach(f=>{const t=times.map(x=>x*f),b=Z.tapBpm(t);
+      assert(inRange(b),'a pulse tapped at '+f+'× speed left the slider: '+b+tag)});
+  }
+  // a human hand is not a clock: a few milliseconds either way must not move the tempo far
+  {
+    const rng=new Z.Rng('tap:jitter');
+    for(let bpm=70;bpm<=170;bpm+=10){
+      const gap=60/bpm;let t=0;const times=[0];
+      for(let i=0;i<5;i++){t+=gap+(rng.next()-0.5)*0.016;times.push(t)}
+      const b=Z.tapBpm(times);
+      assert(inRange(b)&&Math.abs(b-bpm)<=4,'jittery taps at '+bpm+' bpm gave '+b+tag);
+    }
+  }
+  // nothing you can tap — one tap, a pause in the middle, the same instant twice, a wild sequence — can put
+  // the tempo outside the slider or leave it a fraction of a beat
+  assert(Z.tapBpm([])===0&&Z.tapBpm([1])===0&&Z.tapBpm(null)===0,'a tap that says nothing still gave a tempo'+tag);
+  assert(Z.tapBpm([0,0,0])===0,'taps at the same instant gave a tempo'+tag);
+  assert(Z.tapBpm([0,10,20])===0,'taps a pause apart were averaged into a tempo'+tag);
+  {
+    const rng=new Z.Rng('tap:wild');
+    for(let i=0;i<400;i++){
+      const n=2+Math.floor(rng.next()*6),times=[];let t=rng.next()*100;
+      for(let k=0;k<n;k++){t+=rng.next()*3.2;times.push(t)}
+      const b=Z.tapBpm(times);
+      assert(b===0||inRange(b),'a wild tap sequence gave '+b+tag);
+    }
+  }
+  // the nudge buttons move one beat at a time and stop at the ends of the slider
+  assert(Z.nudgeBpm(112,1)===113&&Z.nudgeBpm(112,-1)===111,'a nudge did not move one bpm'+tag);
+  assert(Z.nudgeBpm(Z.TAP.min,-1)===Z.TAP.min&&Z.nudgeBpm(Z.TAP.max,1)===Z.TAP.max,'a nudge walked off the slider'+tag);
+  assert(Z.nudgeBpm('x',0)===Z.TAP.min&&inRange(Z.nudgeBpm(1e6,0)),'a nudge from nonsense left the slider'+tag);
+  // the count-in: one bar of beats at the tempo, the first on the downbeat and the last a whole beat before
+  // the song comes in, so nothing of the count overlaps the first step of the take
+  for(let bpm=Z.TAP.min;bpm<=Z.TAP.max;bpm+=1){
+    const stepSec=60/bpm/4,plan=Z.countInPlan(stepSec),ct=' [count-in · '+bpm+' bpm]';
+    assert(!!plan&&plan.beats.length===Z.COUNTIN.beats,'the count-in is not '+Z.COUNTIN.beats+' beats'+ct);
+    assert(Math.abs(plan.dur-stepSec*Z.STEPS)<1e-9,'the count-in is not exactly one bar'+ct);
+    plan.beats.forEach((b,i)=>{
+      assert(b.step===i*4&&b.t>=0&&b.t<plan.dur,'count-in beat '+(i+1)+' is not inside the bar'+ct);
+      if(i)assert(Math.abs((b.t-plan.beats[i-1].t)-stepSec*4)<1e-9,'count-in beat '+(i+1)+' is not a beat after the one before'+ct);
+    });
+    assert(plan.dur-plan.beats[Z.COUNTIN.beats-1].t>=stepSec*4-1e-9,'the last count-in click runs into the song'+ct);
+  }
+  assert(Z.countInPlan(0)===null&&Z.countInPlan(-1)===null&&Z.countInPlan('x')===null,'a count-in was planned without a tempo'+tag);
+  // and like every other setting, whether you want a count-in travels with the song
+  {
+    const off=Z.demoProject('chill');off.state.countIn=false;
+    const back=Z.linkDecode(Z.linkHash(off));
+    assert(!!back&&back.state.countIn===false,'count-in switched off did not survive a link'+tag);
+    const on=Z.linkDecode(Z.linkHash(Z.demoProject('chill')));
+    assert(!!on&&on.state.countIn===true,'count-in did not come back on from a link that never mentioned it'+tag);
+  }
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -1075,7 +1141,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

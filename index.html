@@ -98,6 +98,13 @@ kbd{font:500 11px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 select{height:34px;padding:0 28px 0 10px;background:var(--panel-2) url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%226%22%3E%3Cpath d=%22M1 1l4 4 4-4%22 stroke=%22%23a3a8bf%22 fill=%22none%22 stroke-width=%221.5%22/%3E%3C/svg%3E") no-repeat right 10px center;
   border:1px solid var(--line-2);border-radius:var(--r);appearance:none;-webkit-appearance:none;max-width:100%}
 select.sm{height:28px;font-size:12px;padding:0 24px 0 8px}
+/* tap tempo: the nudge buttons and the tap pad under the tempo slider */
+.tempo{display:flex;align-items:center;gap:6px;margin-top:1px}
+.tempo .btn{min-width:30px;justify-content:center;text-align:center;font:500 14px var(--mono)}
+.tempo .tap{font:600 11px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);border-color:rgba(79,209,197,.5)}
+.tempo .tap:hover{border-color:var(--teal);color:#fff}
+.tempo .tap.lit{background:var(--teal-soft);border-color:var(--teal);color:#fff}
+.tempo .taphint{margin-left:auto;font:400 11px var(--mono);color:var(--ink-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 
@@ -352,7 +359,14 @@ input[type=range].bip::-moz-range-progress{background:transparent}
           <div class="field"><label for="root">Key</label><select id="root"></select></div>
           <div class="field"><label for="scale">Scale</label><select id="scale"></select></div>
         </div>
-        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112"></div>
+        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112">
+          <div class="tempo">
+            <button class="btn sm" id="bpmDown" aria-label="One bpm slower" title="One bpm slower. The − key does the same.">−</button>
+            <button class="btn sm tap" id="tapTempo" title="Tap tempo: tap in time with the pulse in your head — from the second tap Zinth follows you, and four taps settle it. Tap half or double speed and it still lands in range. Shift+T taps too.">Tap</button>
+            <button class="btn sm" id="bpmUp" aria-label="One bpm faster" title="One bpm faster. The + key does the same.">+</button>
+            <span class="taphint" id="tapHint">tap four times</span>
+          </div>
+        </div>
         <div class="field"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55"></div>
         <div class="field"><label for="swing">Swing <output id="swingVal">12 %</output></label><input type="range" id="swing" min="0" max="60" value="12"></div>
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
@@ -471,6 +485,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
           <button data-v="bass" aria-pressed="false" title="Record into the bass: the letter keys drop into the bass register (I)">bass</button>
         </div>
         <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
+        <button class="opt on" id="countBtn" aria-pressed="true" title="Count-in: pressing Rec from stopped gives you one bar of clicks before the song comes in, so you can hear the tempo and come in on the one. Nothing of the count reaches the song or the exports.">Count-in</button>
         <button class="opt" id="clearMel" title="Remove your own melody for this part, recorded or drawn in the roll, and bring the generated one back">Clear melody</button>
         <span class="recinfo" id="recInfo"></span>
       </div>
@@ -510,6 +525,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
       <li><b>Pick a scale, get a mood.</b> The <b>Scale</b> menu holds eighteen, grouped so you can read it: the <b>modes</b> you already know, five-note scales that cannot clash, and a shelf of <b>exotic</b> ones — <b>Lydian dominant</b> sunlit and slippery, <b>Dorian ♭2</b> smoky, <b>Hungarian minor</b> all drama, <b>Phrygian dominant</b> flamenco and desert, <b>Neapolitan minor</b> solemn and cinematic. Hover any of them and it tells you what it sounds like. Whichever you choose, the chords Zinth rolls come from a pool picked by hand for that scale, so there is never a sour chord under the tune, and the pads, the keys and every generated layer move with you.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
       <li><b>Shape the chords.</b> Click a chord card above the arrangement to open it: pick another degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. The progression always fills eight bars, so what no longer fits steps aside. Split a card in two to add a chord, and ↺ Generated brings the rolled progression back. <kbd>←</kbd> <kbd>→</kbd> step between chords, <kbd>Esc</kbd> closes.</li>
+      <li><b>Find the tempo, then count yourself in.</b> Under the tempo slider are three little buttons. <b>Tap</b> takes the tempo from you: tap it in time with the pulse in your head and from the second tap Zinth is already following, four taps settle it — and if you tap half speed or double speed it folds back into range, so whatever you tap it lands on a tempo the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps without reaching for the mouse. Beside it, <b>−</b> and <b>+</b> nudge the tempo one beat a minute at a time, and so do the <kbd>−</kbd> and <kbd>+</kbd> keys. Then, when you press <b>Rec</b> from a standing start, <b>Count-in</b> gives you one bar of clicks first — four beats counting down where the bar and beat usually are, so you can hear the tempo and come in on the one instead of scrambling at the top of the loop. It is a way into a take, not part of the song: nothing of the count reaches the song, the WAV or the MIDI. Switch it off next to Click if you would rather start straight away.</li>
       <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
@@ -526,6 +542,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>
       <div><kbd>I</kbd> record into: lead → arp → bass</div><div><kbd>?</kbd> this sheet</div>
+      <div><kbd>Shift</kbd>+<kbd>T</kbd> tap tempo</div><div><kbd>−</kbd> <kbd>+</kbd> tempo one bpm slower / faster</div>
       <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
       <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> close the chord editor · release held chords</div>
       <div><kbd>←</kbd> <kbd>→</kbd> step between chord cards while editing</div>
@@ -1162,6 +1179,42 @@ function fadeGain(plan,t){
   }
   return plan[plan.length-1].g;
 }
+/* Tap tempo. You tap the pulse you have in your head and Zinth takes the tempo from you. Only the gaps that
+   could be a pulse count — a tap after a long pause starts a fresh set rather than averaging across the
+   pause — and only the last few of them, so speeding up or slowing down is followed rather than averaged
+   away. A pulse tapped at half or double the speed of the slider's range is folded back into it, so tapping
+   slow half-notes or fast eighths still lands on a tempo the app can play. The answer is always a whole
+   number of beats per minute inside the slider, which is the only thing that reaches the song. */
+const TAP={min:60,max:180,keep:5,gap:2.5,minGap:0.1};
+const bpmIn=b=>Math.max(TAP.min,Math.min(TAP.max,Math.round(b)));
+function tapBpm(times){
+  if(!Array.isArray(times)||times.length<2)return 0;
+  const gaps=[];
+  for(let i=1;i<times.length;i++){const g=+times[i]-+times[i-1];if(g>=TAP.minGap&&g<=TAP.gap)gaps.push(g)}
+  if(!gaps.length)return 0;
+  const use=gaps.slice(-TAP.keep),avg=use.reduce((a,b)=>a+b,0)/use.length;
+  if(!(avg>0))return 0;
+  let bpm=60/avg;
+  // a pulse tapped half or double time is folded back into the range rather than refused
+  for(let i=0;i<8&&bpm<TAP.min;i++)bpm*=2;
+  for(let i=0;i<8&&bpm>TAP.max;i++)bpm/=2;
+  return bpmIn(bpm);
+}
+const nudgeBpm=(bpm,by)=>bpmIn((+bpm||TAP.min)+(+by||0));
+/* Count-in. Arming Rec from a standing start gives you one bar of clicks before the song comes in, so you
+   can hear the tempo and come in on the one. It is one bar at the current tempo exactly — the clicks land on
+   the beats and the last of them is a beat before the song starts, so nothing of the count-in overlaps the
+   first step of the song. It is a way into a take, not part of the song: no note comes from it, and neither
+   the WAV nor the MIDI export has any of it in them. */
+const COUNTIN={beats:4,steps:STEPS};
+function countInPlan(stepSec){
+  const d=+stepSec;
+  if(!(d>0))return null;
+  const beats=[];
+  for(let b=0;b<COUNTIN.beats;b++)beats.push({beat:b,step:b*4,t:b*4*d});
+  return {beats,dur:COUNTIN.steps*d};
+}
+
 /* ================= shareable links =================
    A whole song in a URL. The hash carries the very same project snapshot Save writes, as JSON in base64url:
    no compression, no library, nothing to install, and nothing between the link and the song but the address
@@ -1268,7 +1321,7 @@ function linkNorm(p){
     warmth:linkNum(s.warmth,0,100,D.warmth),eq:normEq(s.eq),arp:normArp(s.arp),
     prog:pair(s.prog,x=>normProg(x,n)),
     drumEdits:pair(s.drumEdits,x=>{if(!x)return null;const P=normDrumPattern(x);for(const k of DRUM_KINDS)P[k]=P[k].map(r4);return P}),
-    kit:txt(s.kit,D.kit),transitions:s.transitions!==false,sections,
+    kit:txt(s.kit,D.kit),transitions:s.transitions!==false,countIn:s.countIn!==false,sections,
     sel:linkInt(s.sel,0,sections.length-1,D.sel),
     layer:(L.indexOf(s.layer)>=0||s.layer==='master')?s.layer:D.layer,
     recTarget:LINK.lanes.indexOf(s.recTarget)>=0?s.recTarget:D.recTarget};
@@ -1316,6 +1369,7 @@ function linkSlim(p){
   if(!s.evolve)st.evolve=false;
   if(s.sevenths)st.sevenths=true;
   if(!s.transitions)st.transitions=false;
+  if(!s.countIn)st.countIn=false;
   if(!eqFlat(s.eq))st.eq=s.eq;
   const A=normArp(null);if(s.arp.mode!==A.mode||s.arp.octaves!==A.octaves||s.arp.gate!==A.gate)st.arp=s.arp;
   const pair=(o,f)=>{const r={};if(o.v)r.v=f(o.v);if(o.c)r.c=f(o.c);return Object.keys(r).length?r:null};
@@ -1389,7 +1443,7 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
-  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,
+  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,TAP,tapBpm,nudgeBpm,COUNTIN,countInPlan,
   LINK,normNotes,normSection,linkNorm,linkSlim,linkFat,linkEncode,linkDecode,linkPayload,linkHash});
 })();
 </script>
@@ -1643,6 +1697,8 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // the moment the count-in ends and the song comes in; 0 whenever nothing is counting in
+    this.countInEnd=0;
     // the note a glideing layer played last, so the next one can slide out of it
     this.glideFrom={};
   }
@@ -1999,13 +2055,25 @@ class Engine{
   nearestStep(t){let best=null,bd=1e9;for(const q of this.queue){const d=Math.abs(q.time-t);if(d<bd){bd=d;best=q}}return best}
 
   /* ---- transport & scheduler ---- */
-  start(section){
+  // start(section,countIn): with a count-in, one bar of clicks is scheduled first and the song's own grid
+  // starts a bar later, so the count lands on the beats and the first step of the song follows the last
+  // click by exactly one beat. Nothing of the count reaches the song — it is clicks and silence.
+  start(section,countIn){
     this.init();if(this.ctx.resume)this.ctx.resume();
     this.playing=true;this.step=0;this.section=section||0;this.loop=0;this.queue=[];this.glideFrom={};
-    this.grid=this.ctx.currentTime+0.08;
+    this.grid=this.ctx.currentTime+0.08;this.countInEnd=0;
+    const plan=countIn?Z.countInPlan(this.stepSec()):null;
+    if(plan){for(const b of plan.beats)this.click(b.step,this.grid+b.t);this.grid+=plan.dur;this.countInEnd=this.grid}
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  // how many beats of the count-in are still to come: 4 down to 1 while it counts, 0 the rest of the time
+  countdown(){
+    if(!this.ctx||!this.playing||!this.countInEnd)return 0;
+    const left=this.countInEnd-this.ctx.currentTime;
+    if(left<=0)return 0;
+    return Math.max(1,Math.min(Z.COUNTIN.beats,Math.ceil(left/(this.stepSec()*4))));
+  }
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -2125,7 +2193,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
-  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
+  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -2189,7 +2257,7 @@ function restore(p){
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
     warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,countIn:s.countIn!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
@@ -2581,8 +2649,15 @@ const song=()=>U.song;
 /* ---------- animation ---------- */
 let lastKey=-1,lastCol=-1;
 function raf(){
-  const p=E.currentPos(),key=p?p.section*100000+p.step:-1;
-  if(key!==lastKey){lastKey=key;const s=p?p.step:-1;U.drawFrame(s);
+  // while a count-in is running there is no position yet: the readout counts the beats down instead, and
+  // the LEDs walk the bar, so you can see the count as well as hear it
+  const p=E.currentPos(),cd=p?0:E.countdown(),key=p?p.section*100000+p.step:(cd?-1-cd:-1);
+  if(cd){
+    if(key!==lastKey){lastKey=key;U.drawFrame(-1);
+      $('posOut').textContent=String(cd);$('posLabel').textContent='count-in';
+      $('leds').querySelectorAll('.led').forEach((l,i)=>l.classList.toggle('on',i===Z.COUNTIN.beats-cd));
+    }
+  }else if(key!==lastKey){lastKey=key;const s=p?p.step:-1;U.drawFrame(s);
     const bar=s<0?0:Math.floor(s/16),beat=s<0?0:Math.floor((s%16)/4);
     $('posOut').textContent=(bar+1)+'.'+(beat+1);
     const sec=p?song()[p.section]:null;$('posLabel').textContent=sec?sec.type:'bar . beat';
@@ -2623,6 +2698,7 @@ function renderRecInfo(){
   $('clearMel').textContent='Clear '+(L==='lead'?'melody':L);
   $('clearMel').title='Remove your own '+LANE_NAME[L]+' for this part, recorded or drawn in the roll, and bring the generated one back';
   $('clearMel').disabled=!list;$('clickBtn').classList.toggle('on',E.metronome);$('clickBtn').setAttribute('aria-pressed',E.metronome);
+  $('countBtn').classList.toggle('on',state.countIn);$('countBtn').setAttribute('aria-pressed',state.countIn);
 }
 function setRecTarget(L){
   if(!U.EDITS[L]||state.recTarget===L)return;
@@ -2632,10 +2708,14 @@ function setRecTarget(L){
 }
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
-  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;E.start(state.sel);setPlaying(true)}
+  // arming Rec from a standing start counts you in: one bar of clicks at this tempo, then the song comes in
+  let counted=false;
+  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;
+    counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
   U.rebuild();renderKeys();
   const L=state.recTarget,sec=song()[state.sel];
   let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
+  if(counted)msg=Z.COUNTIN.beats+' beats of count-in, then '+msg.charAt(0).toLowerCase()+msg.slice(1);
   if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
@@ -2654,6 +2734,9 @@ $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
 $('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});
 function cycleRecTarget(){setRecTarget(REC_ORDER[(REC_ORDER.indexOf(state.recTarget)+1)%REC_ORDER.length])}
 $('clickBtn').addEventListener('click',()=>{E.metronome=!E.metronome;renderRecInfo()});
+$('countBtn').addEventListener('click',()=>{state.countIn=!state.countIn;renderRecInfo();U.persist();
+  U.setStatus(state.countIn?'Count-in on: pressing Rec from stopped gives you a bar of clicks first, so you can come in on the one. None of it reaches the song or the exports.'
+    :'Count-in off: Rec starts the section straight away')});
 $('clearMel').addEventListener('click',()=>{const L=state.recTarget,part=partOfSel();state[U.EDITS[L]][part]=null;U.rebuild();renderRecInfo();U.setStatus('Generated '+LANE_NAME[L]+' is back for the '+partLabel(part)+' sections')});
 
 /* ---------- sound panel ---------- */
@@ -2990,7 +3073,40 @@ $('seed').addEventListener('focus',e=>e.target.select());
 $('root').addEventListener('change',e=>{state.root=+e.target.value;U.regenerate()});
 $('scale').addEventListener('change',e=>{state.scale=e.target.value;U.regenerate()});
 $('energy').addEventListener('input',e=>{state.energy=+e.target.value;syncLabels();U.regenerate()});
-$('bpm').addEventListener('input',e=>{state.bpm=+e.target.value;E.setBpm(state.bpm);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();U.persist()});
+/* the tempo, from the slider, the nudge buttons or a tap. Everything that moves it goes through applyBpm,
+   so the readouts, the track code, the song length, the engine's own clock and the autosave all follow it
+   however it was moved — and because it is state.bpm, it undoes, saves and travels in a link like the rest. */
+function applyBpm(v,msg){
+  const b=Z.nudgeBpm(v,0);
+  state.bpm=b;$('bpm').value=b;U.fill($('bpm'));E.setBpm(b);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();tapHint();U.persist();
+  if(msg)U.setStatus(msg);
+}
+$('bpm').addEventListener('input',e=>applyBpm(+e.target.value));
+/* tap tempo: tap the pulse you have in your head and Zinth takes the tempo from it. A tap after a long
+   pause starts a fresh set, only the last few gaps count, and a pulse tapped half or double time is folded
+   back into the slider's range — so whatever you tap, the tempo lands somewhere the song can play. */
+const tap={times:[]};
+function tapHint(){
+  const n=tap.times.length;
+  $('tapHint').textContent=n<2?'tap four times':n+' tap'+(n===1?'':'s')+' · '+state.bpm+' bpm';
+}
+function nudgeTempo(by){
+  const b=Z.nudgeBpm(state.bpm,by);
+  if(b===state.bpm){U.setStatus('Tempo is already at its '+(by<0?'slowest':'fastest')+': '+b+' bpm');return}
+  applyBpm(b,'Tempo '+b+' bpm');
+}
+function tapTempo(){
+  const now=performance.now()/1000,last=tap.times[tap.times.length-1];
+  if(last===undefined||now-last>Z.TAP.gap)tap.times=[];
+  tap.times.push(now);if(tap.times.length>Z.TAP.keep+1)tap.times.shift();
+  const btn=$('tapTempo');btn.classList.add('lit');clearTimeout(tap.flash);tap.flash=setTimeout(()=>btn.classList.remove('lit'),110);
+  const bpm=Z.tapBpm(tap.times);
+  if(!bpm){tapHint();U.setStatus('Tap tempo: keep tapping in time — from the second tap Zinth follows you');return}
+  applyBpm(bpm,'Tap tempo: '+bpm+' bpm from '+tap.times.length+' taps · keep tapping to settle it, or nudge it with − and +');
+}
+$('tapTempo').addEventListener('click',tapTempo);
+$('bpmDown').addEventListener('click',()=>nudgeTempo(-1));
+$('bpmUp').addEventListener('click',()=>nudgeTempo(1));
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
 $('master').addEventListener('input',e=>{const v=+e.target.value;E.setMaster(v);
   if(onMaster()){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()});
@@ -3046,6 +3162,10 @@ document.addEventListener('keydown',e=>{
   if(e.repeat)return;
   if(k==='l'){$('loopSec').click();return}
   if(k==='i'){cycleRecTarget();return}
+  // the tempo from the keyboard: Shift+T taps it, − and + nudge it a beat at a time
+  if(e.shiftKey&&k==='t'){e.preventDefault();tapTempo();return}
+  if(e.key==='-'||e.key==='_'){nudgeTempo(-1);return}
+  if(e.key==='='||e.key==='+'){nudgeTempo(1);return}
   if(FXKEYS[k]){fxDown(FXKEYS[k]);return}
   const ci='123456789'.indexOf(e.key);if(ci>=0&&ci<padDefs.length){chordOn(ci);return}
   const ni=KEYMAP.indexOf(e.key.toUpperCase());if(ni>=0)keyOn(ni);

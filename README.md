@@ -27,6 +27,7 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Shape the arp.** The arp tab of the Sound panel decides what the arp plays, not just how it sounds: **Arp pattern** is the order it walks the chord in — up, down, up-down, random, block **chord** stabs, or a repeating **pattern** figure — with **Auto** to let every roll of the arp deal one. **Arp octaves** sets how far up it reaches, one to three, and **Arp gate** how much of its step each note holds, from a staccato tick to a legato run into the next note. Every mood deals a figure that suits it. Whatever you pick, every note is a tone of the chord playing under it, so the arp can never leave the key.
 - **Chorus and warmth.** A **Chorus** amount per layer sends it into a stereo chorus — three short delay lines drifting under their own slow LFOs — so pads spread out and leads sound like more than one player. **Warmth** beside the volume drives the whole mix into a soft clip with the top end rolled off a shade, the way tape or a valve does. Both are in the WAV export, and the MIDI carries the chorus as CC93.
 - **Transitions.** Risers into louder sections and a crash on their first beat.
+- **Tap the tempo, count yourself in.** Under the tempo slider are **−**, **Tap** and **+**: tap the pulse you have in your head and the track takes it from the second tap on, or nudge the tempo a beat at a time. A pulse tapped at half or double speed is folded back into the slider's range, so whatever you tap lands somewhere the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps, <kbd>−</kbd> and <kbd>+</kbd> nudge. And pressing **Rec** from stopped gives you a **Count-in** first — one bar of clicks at the tempo, counted down in the transport, so you can come in on the one. None of it reaches the song or the exports; switch it off beside Click.
 - **Send it in a link.** **Copy link** puts the whole song into a URL — key, scale, tempo, arrangement, your chords, every note you drew or recorded, the drum grid, the sound of every layer, the EQ and the master. The song travels inside the link as JSON in base64url, so nothing is uploaded and nothing can go stale; it goes to the clipboard and the address bar at once. Opening a link restores the song, and the track you already had stays one <kbd>Ctrl</kbd>+<kbd>Z</kbd> away. Only what you changed is written, so a fresh track is a couple of hundred characters and a whole demo song about 2.5 KB.
 - **Leaves Zinth.** Export the whole song as WAV or as a MIDI file with one track per layer and drums on channel 10. Save and open projects as JSON. Everything autosaves in the browser, with undo and redo.
 
@@ -37,6 +38,8 @@ No build tools or dependencies. Open `index.html` in a browser.
 | Space | Play / stop |
 | L | Loop the selected section |
 | I | Record into: lead → arp → bass |
+| Shift+T | Tap tempo |
+| − / + | Tempo one bpm slower / faster |
 | 1–6 | Load a demo song (while the help sheet is open) |
 | 1–7 | Chords |
 | A–J, Q–U | Notes, two octaves |
