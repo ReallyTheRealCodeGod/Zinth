@@ -322,9 +322,36 @@ function renderArr(){
       (SWEEP_MARK[sw]?'<b class="sw">'+SWEEP_MARK[sw]+'</b>':'')+(FADE_MARK[fd]?'<b class="fd">'+FADE_MARK[fd]+'</b>':'')+'</span>'+
       (s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>';
   }).join('');
-  const bars=song.reduce((a,s)=>a+s.bars,0),secs=bars*4*60/state.bpm;
-  $('songLen').textContent=bars+' bars · '+Math.floor(secs/60)+':'+String(Math.round(secs%60)).padStart(2,'0');
+  const bars=song.reduce((a,s)=>a+s.bars,0);
+  $('songLen').textContent=bars+' bars · '+Z.clockOf(bars*4*60/state.bpm);
+  renderLengths(bars);
 }
+/* Song length. Short, Radio and Extended rebuild the arrangement into a whole song of about that long at
+   the tempo you are on, and nothing else: the chords, every note you drew or recorded, the drum grid and
+   the sound of every layer live outside the section list, so they come through a rebuild untouched. A
+   preset lights up when the arrangement is exactly the one it would build, which is worked out here rather
+   than remembered, so it stays honest when you edit a section or move the tempo. */
+function renderLengths(bars){
+  $('songLength').innerHTML=Z.SONG_LENGTHS.map(p=>{
+    const form=Z.songForm(p.seconds,state.bpm),fb=Z.formBars(form),on=fb===bars;
+    return '<button data-v="'+p.id+'" class="'+(on?'on':'')+'" aria-pressed="'+on+'" title="'+p.label+
+      ': a whole song of '+p.says+'. At '+state.bpm+' bpm that is '+form.length+' sections, '+fb+' bars, '+
+      Z.clockOf(Z.formSeconds(form,state.bpm))+'. Your chords, your notes, the drums and every sound stay as they are; Ctrl+Z brings this arrangement back.">'+
+      p.label+'</button>';
+  }).join('');
+}
+function applyLength(id){
+  const p=Z.songLengthOf(id);if(!p)return;
+  const form=Z.songForm(p.seconds,state.bpm);
+  closeChordEdit();
+  state.sections=Z.formSections(form).map(sec=>Object.assign({id:secId++},sec));
+  state.sel=0;viewSection=0;state.loop=0;
+  if(E.playing&&E.section>=state.sections.length)E.jump(0);
+  regenerate();
+  setStatus(p.label+' · '+form.length+' sections, '+Z.formBars(form)+' bars, '+Z.clockOf(Z.formSeconds(form,state.bpm))+
+    ' at '+state.bpm+' bpm · your chords, notes and sounds are untouched (Ctrl+Z to undo)');
+}
+$('songLength').addEventListener('click',e=>{const b=e.target.closest('button');if(b)applyLength(b.dataset.v)});
 function selectSection(i,jump){
   state.sel=i;viewSection=i;
   if(E.playing&&(jump||E.loopSection))E.jump(i);

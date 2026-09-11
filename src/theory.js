@@ -466,6 +466,74 @@ function sectionOf(type){
     layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'};
 }
 
+/* Song length. Three presets — Short, Radio and Extended — that rebuild the arrangement into a whole song
+   of about that long. A form is a list of section types, so how long one runs depends on the tempo: the
+   eight sections a fresh track opens with are 2:00 at 120 bpm and 2:40 at 90, which is why a preset picks
+   its form at the tempo you are on rather than from a fixed number of bars.
+
+   FORM_STAGES is the order a song grows in, and every rung of it is a whole song: it opens, it has a
+   chorus, it ends, and it is longer than the rung under it. Past the top of the ladder a song grows by
+   another verse-and-chorus cycle before the break, which is how a long track is built anyway. None of this
+   touches the chords, the notes, the drum grid or the sounds — a preset only says which sections there
+   are, so everything that makes the song what it is comes through unchanged. */
+const SONG_LENGTHS=[
+  {id:'short',label:'Short',   seconds:90, says:'about a minute and a half'},
+  {id:'radio',label:'Radio',   seconds:180,says:'about three minutes'},
+  {id:'long', label:'Extended',seconds:300,says:'about five minutes'},
+];
+/* A rung is a list of sections: a plain type name, or [type, bars] where that section is shorter than its
+   type usually runs — the short songs open and close on four bars rather than eight, the way a short song
+   does. Everything else about a section still comes from its type. */
+const FORM_STAGES=[
+  [['Intro',4],'Verse','Chorus',['Outro',4]],                                                          // 24 bars
+  [['Intro',4],'Verse','Chorus','Outro'],                                                              // 28
+  ['Intro','Verse','Chorus','Outro'],                                                                  // 32
+  ['Intro','Verse','Pre-chorus','Chorus','Outro'],                                                     // 36
+  ['Intro','Verse','Chorus','Break','Chorus','Outro'],                                                 // 44
+  ['Intro','Verse','Chorus','Verse','Chorus','Outro'],                                                 // 48
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Outro'],                                    // 52
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Break','Drop','Outro'],                     // 64
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Outro'],        // 68
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Bridge','Chorus','Outro'], // 84
+];
+const FORM_CYCLE=['Verse','Pre-chorus','Chorus'];   // what another 20 bars of song looks like
+const FORM_MAX_STAGE=60;                            // far beyond any song anyone would ask Zinth for
+const formType=e=>{const t=Array.isArray(e)?e[0]:e;return SEC_TYPES[t]?t:'Verse'};
+const formBarsOf=e=>{const b=Array.isArray(e)?Math.round(+e[1]):0;return b>0?b:SEC_TYPES[formType(e)].bars};
+// the form at rung n of the ladder: the table while it lasts, then a cycle more of it each rung
+function formAt(n){
+  n=Math.max(0,Math.round(+n||0));
+  if(n<FORM_STAGES.length)return FORM_STAGES[n].slice();
+  const f=FORM_STAGES[FORM_STAGES.length-1].slice(),at=f.indexOf('Break'),extra=[];
+  for(let i=FORM_STAGES.length-1;i<n;i++)extra.push.apply(extra,FORM_CYCLE);
+  f.splice(at<0?f.length-1:at,0,...extra);
+  return f;
+}
+const formBars=form=>form.reduce((a,e)=>a+formBarsOf(e),0);
+// a form as sections the arranger can hold: everything a section of that type is, at that many bars
+const formSections=form=>form.map(e=>Object.assign(sectionOf(formType(e)),{bars:formBarsOf(e)}));
+// how long a form runs, in seconds, at a tempo: four beats to the bar, and the tempo the slider can hold
+const formSeconds=(form,bpm)=>formBars(form)*4*60/Math.max(60,Math.min(180,Math.round(+bpm)||120));
+/* The form for a target length at a tempo: the rung of the ladder that comes out closest to it. The ladder
+   only ever gets longer, so once a rung turns away from the target every rung above it does too — the first
+   turn is the answer, and ties keep the shorter song. */
+function songForm(seconds,bpm){
+  const want=Math.max(1,+seconds||0);
+  let best=formAt(0),err=Math.abs(formSeconds(best,bpm)-want);
+  for(let n=1;n<=FORM_MAX_STAGE;n++){
+    const f=formAt(n),e=Math.abs(formSeconds(f,bpm)-want);
+    if(e>=err)break;
+    best=f;err=e;
+  }
+  return best;
+}
+const songLengthOf=id=>SONG_LENGTHS.filter(p=>p.id===id)[0]||null;
+// m:ss, the way a transport reads — rounded as one number so 1:59.7 never comes out as "1:60"
+function clockOf(seconds){
+  const t=Math.max(0,Math.round(+seconds||0));
+  return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+}
+
 /* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
    and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
    of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
@@ -929,7 +997,7 @@ function generateTrack(cfg,seeds,part,loop){
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,lanePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
-  SEC_TYPES,DEFAULT_FORM,sectionOf,
+  SEC_TYPES,DEFAULT_FORM,sectionOf,SONG_LENGTHS,FORM_STAGES,FORM_MAX_STAGE,formAt,formType,formBarsOf,formBars,formSections,formSeconds,songForm,songLengthOf,clockOf,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,

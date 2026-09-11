@@ -469,6 +469,74 @@ function sectionOf(type){
     layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'};
 }
 
+/* Song length. Three presets — Short, Radio and Extended — that rebuild the arrangement into a whole song
+   of about that long. A form is a list of section types, so how long one runs depends on the tempo: the
+   eight sections a fresh track opens with are 2:00 at 120 bpm and 2:40 at 90, which is why a preset picks
+   its form at the tempo you are on rather than from a fixed number of bars.
+
+   FORM_STAGES is the order a song grows in, and every rung of it is a whole song: it opens, it has a
+   chorus, it ends, and it is longer than the rung under it. Past the top of the ladder a song grows by
+   another verse-and-chorus cycle before the break, which is how a long track is built anyway. None of this
+   touches the chords, the notes, the drum grid or the sounds — a preset only says which sections there
+   are, so everything that makes the song what it is comes through unchanged. */
+const SONG_LENGTHS=[
+  {id:'short',label:'Short',   seconds:90, says:'about a minute and a half'},
+  {id:'radio',label:'Radio',   seconds:180,says:'about three minutes'},
+  {id:'long', label:'Extended',seconds:300,says:'about five minutes'},
+];
+/* A rung is a list of sections: a plain type name, or [type, bars] where that section is shorter than its
+   type usually runs — the short songs open and close on four bars rather than eight, the way a short song
+   does. Everything else about a section still comes from its type. */
+const FORM_STAGES=[
+  [['Intro',4],'Verse','Chorus',['Outro',4]],                                                          // 24 bars
+  [['Intro',4],'Verse','Chorus','Outro'],                                                              // 28
+  ['Intro','Verse','Chorus','Outro'],                                                                  // 32
+  ['Intro','Verse','Pre-chorus','Chorus','Outro'],                                                     // 36
+  ['Intro','Verse','Chorus','Break','Chorus','Outro'],                                                 // 44
+  ['Intro','Verse','Chorus','Verse','Chorus','Outro'],                                                 // 48
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Outro'],                                    // 52
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Break','Drop','Outro'],                     // 64
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Outro'],        // 68
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Bridge','Chorus','Outro'], // 84
+];
+const FORM_CYCLE=['Verse','Pre-chorus','Chorus'];   // what another 20 bars of song looks like
+const FORM_MAX_STAGE=60;                            // far beyond any song anyone would ask Zinth for
+const formType=e=>{const t=Array.isArray(e)?e[0]:e;return SEC_TYPES[t]?t:'Verse'};
+const formBarsOf=e=>{const b=Array.isArray(e)?Math.round(+e[1]):0;return b>0?b:SEC_TYPES[formType(e)].bars};
+// the form at rung n of the ladder: the table while it lasts, then a cycle more of it each rung
+function formAt(n){
+  n=Math.max(0,Math.round(+n||0));
+  if(n<FORM_STAGES.length)return FORM_STAGES[n].slice();
+  const f=FORM_STAGES[FORM_STAGES.length-1].slice(),at=f.indexOf('Break'),extra=[];
+  for(let i=FORM_STAGES.length-1;i<n;i++)extra.push.apply(extra,FORM_CYCLE);
+  f.splice(at<0?f.length-1:at,0,...extra);
+  return f;
+}
+const formBars=form=>form.reduce((a,e)=>a+formBarsOf(e),0);
+// a form as sections the arranger can hold: everything a section of that type is, at that many bars
+const formSections=form=>form.map(e=>Object.assign(sectionOf(formType(e)),{bars:formBarsOf(e)}));
+// how long a form runs, in seconds, at a tempo: four beats to the bar, and the tempo the slider can hold
+const formSeconds=(form,bpm)=>formBars(form)*4*60/Math.max(60,Math.min(180,Math.round(+bpm)||120));
+/* The form for a target length at a tempo: the rung of the ladder that comes out closest to it. The ladder
+   only ever gets longer, so once a rung turns away from the target every rung above it does too — the first
+   turn is the answer, and ties keep the shorter song. */
+function songForm(seconds,bpm){
+  const want=Math.max(1,+seconds||0);
+  let best=formAt(0),err=Math.abs(formSeconds(best,bpm)-want);
+  for(let n=1;n<=FORM_MAX_STAGE;n++){
+    const f=formAt(n),e=Math.abs(formSeconds(f,bpm)-want);
+    if(e>=err)break;
+    best=f;err=e;
+  }
+  return best;
+}
+const songLengthOf=id=>SONG_LENGTHS.filter(p=>p.id===id)[0]||null;
+// m:ss, the way a transport reads — rounded as one number so 1:59.7 never comes out as "1:60"
+function clockOf(seconds){
+  const t=Math.max(0,Math.round(+seconds||0));
+  return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+}
+
 /* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
    and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
    of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
@@ -932,7 +1000,7 @@ function generateTrack(cfg,seeds,part,loop){
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,lanePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
-  SEC_TYPES,DEFAULT_FORM,sectionOf,
+  SEC_TYPES,DEFAULT_FORM,sectionOf,SONG_LENGTHS,FORM_STAGES,FORM_MAX_STAGE,formAt,formType,formBarsOf,formBars,formSections,formSeconds,songForm,songLengthOf,clockOf,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
@@ -2884,6 +2952,106 @@ for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<
   }
 }
 
+// song-length presets: Short, Radio and Extended rebuild the arrangement into a whole song of about that
+// long at the tempo you are on. A preset may only ever build a song — one that opens, has a verse and a
+// chorus and ends — out of the rungs of the ladder; it must take the rung that lands closest to the length
+// it promises, come near that length at every tempo the slider can reach, and never build a shorter song
+// than the preset below it. And because it swaps nothing but the sections, every note generated over the
+// new form must still be in key, and the form must come back from a link exactly as it went in.
+{
+  const tag=' [song length]';
+  const ids={};
+  Z.SONG_LENGTHS.forEach((p,i)=>{
+    assert(!!(p.id&&p.label&&p.says),'a song-length preset is missing its name'+tag);
+    assert(!ids[p.id],'two song-length presets share the id '+p.id+tag);ids[p.id]=1;
+    assert(p.seconds>=30&&p.seconds<=600,'song-length preset '+p.id+' asks for '+p.seconds+' s'+tag);
+    if(i)assert(p.seconds>Z.SONG_LENGTHS[i-1].seconds,'the song-length presets are out of order'+tag);
+    assert(Z.songLengthOf(p.id)===p,'song-length preset '+p.id+' cannot be looked up'+tag);
+  });
+  assert(!Z.songLengthOf('nonsense'),'a song length that does not exist was found anyway'+tag);
+  // the clock a length is read off: always m:ss, and never the 1:60 that rounding alone would give
+  assert(Z.clockOf(0)==='0:00'&&Z.clockOf(59.4)==='0:59'&&Z.clockOf(119.7)==='2:00'&&Z.clockOf(305)==='5:05','the song clock does not read m:ss'+tag);
+  // every rung of the ladder is a whole song, longer than the rung under it, made of real sections
+  let prevBars=0;
+  for(let n=0;n<=Z.FORM_MAX_STAGE;n++){
+    const form=Z.formAt(n),bars=Z.formBars(form),t=' [form rung '+n+']';
+    assert(form.length>=4,'a form of '+form.length+' sections is not a song'+t);
+    form.forEach(e=>{
+      const b=Z.formBarsOf(e);
+      assert(!!Z.SEC_TYPES[Z.formType(e)],'a form asks for a section type that does not exist'+t);
+      assert(b>0&&b%4===0&&b<=16,'a form asks for a section of '+b+' bars'+t);
+    });
+    const types=form.map(Z.formType);
+    assert(types[0]==='Intro','a form does not open with an intro'+t);
+    assert(types[types.length-1]==='Outro','a form does not end with an outro'+t);
+    assert(types.indexOf('Verse')>0,'a form has no verse'+t);
+    assert(types.indexOf('Chorus')>0,'a form has no chorus'+t);
+    assert(bars>prevBars,'rung '+n+' of the ladder is not longer than the one under it'+t);
+    prevBars=bars;
+    // and the sections it builds are sections the arranger itself could hold
+    const secs=Z.formSections(form);
+    assert(secs.length===form.length,'a form built '+secs.length+' sections out of '+form.length+t);
+    assert(secs.reduce((a,s)=>a+s.bars,0)===bars,'the sections of a form do not come to its length'+t);
+    secs.forEach((s,i)=>{
+      const base=Z.sectionOf(Z.formType(form[i]));
+      assert(s.type===base.type&&s.part===base.part&&s.energy===base.energy&&s.sweep===base.sweep&&s.fade===base.fade,
+        'a built section is not its type'+t);
+      assert(s.bars===Z.formBarsOf(form[i]),'a built section is '+s.bars+' bars, not '+Z.formBarsOf(form[i])+t);
+      assert(JSON.stringify(Z.normSection(s))===JSON.stringify(s),'a built section is not one the arranger holds'+t);
+    });
+  }
+  // at every tempo the slider can reach: the closest rung there is, near the length it promises, and always
+  // longer than the preset below it
+  for(let bpm=60;bpm<=180;bpm++){
+    let last=0;
+    for(const p of Z.SONG_LENGTHS){
+      const form=Z.songForm(p.seconds,bpm),bars=Z.formBars(form),secs=Z.formSeconds(form,bpm),
+        mine=JSON.stringify(form),t=' ['+p.id+' at '+bpm+' bpm]';
+      let best=Infinity,found=-1;
+      for(let n=0;n<=Z.FORM_MAX_STAGE;n++){
+        const f=Z.formAt(n),e=Math.abs(Z.formSeconds(f,bpm)-p.seconds);
+        if(JSON.stringify(f)===mine)found=e;
+        if(e<best)best=e;
+      }
+      assert(found>=0,'a song length built a form that is not on the ladder'+t);
+      assert(found<=best+1e-9,'a song length picked a form '+Math.round(found)+' s out when one '+Math.round(best)+' s out was there'+t);
+      assert(Math.abs(secs-p.seconds)<=p.seconds*0.15,'a '+p.label+' song came to '+Z.clockOf(secs)+t);
+      assert(bars>last,'a '+p.label+' song is no longer than the preset below it'+t);
+      last=bars;
+      assert(Z.clockOf(secs).indexOf(':6')<0,'a song length reads '+Z.clockOf(secs)+t);
+    }
+  }
+  // the scale lock holds over a rebuilt arrangement: a preset only swaps the sections, so every section of
+  // every form still generates chords, a melody, an arp and a bass line that are all in the key
+  for(const scale of ['dorian','major','hungMinor'])for(const root of [0,7]){
+    const sc=Z.SCALES[scale],cs=Z.chordScaleOf(scale);
+    const melPcs=pcsOf(root,sc.steps),chPcs=pcsOf(root,cs.steps);
+    for(const p of Z.SONG_LENGTHS){
+      const S={chords:'FORM01',lead:'FORM01l',arp:'FORM01a',bass:'FORM01b',drums:'FORM01d'};
+      Z.formSections(Z.songForm(p.seconds,124)).forEach((s,i)=>{
+        const t=' ['+Z.NOTE_NAMES[root]+' '+sc.name+' · '+p.id+' · '+s.type+' '+i+']';
+        const cfg={root,scale,energy:55+s.energy,leadEnergy:55,evolve:true,sevenths:true,gate:0.7,hook:!!s.hook};
+        const tr=Z.generateTrack(cfg,S,s.part,0);tracks++;
+        assert(tr.chords.reduce((a,c)=>a+c.bars,0)===Z.BARS,'a section of a rebuilt song does not fill its chord loop'+t);
+        tr.chords.forEach(c=>c.notes.forEach(m=>assert(chPcs.has(((m%12)+12)%12),'chord tone outside scale'+t)));
+        tr.lead.forEach(e=>assert(melPcs.has(((e.midi%12)+12)%12),'lead note outside scale'+t));
+        tr.arp.forEach(e=>assert(Z.chordAt(tr.chords,e.step).pcs.has(((e.midi%12)+12)%12),'arp note not in the chord under it'+t));
+        tr.bass.forEach(e=>{assert(chPcs.has(((e.midi%12)+12)%12),'bass note outside scale'+t);
+          assert(e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'bass note '+e.midi+' out of register'+t)});
+      });
+    }
+  }
+  // and a rebuilt arrangement travels with the song like everything else
+  {
+    const p=Z.demoProject('chill'),form=Z.songForm(300,128);
+    p.state.bpm=128;p.state.sections=Z.formSections(form);p.state.sel=0;
+    const want=p.state.sections.map(s=>s.type+':'+s.bars).join(','),hash=Z.linkHash(p),back=Z.linkDecode(hash);
+    assert(!!back,'a rebuilt arrangement did not survive a link'+tag);
+    assert(back&&back.state.sections.map(s=>s.type+':'+s.bars).join(',')===want,'a rebuilt arrangement came back changed'+tag);
+    assert(hash.length<Z.LINK.maxBytes,'a five-minute song made a link of '+hash.length+' characters'+tag);
+  }
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -2893,7 +3061,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li><li>Humanize loosens the groove without ever moving a note out of its own step, changing which note is played or making one silent: the kick never moves at all, every other note stays inside a fraction of a step of where it was written, every velocity stays audible and under full scale, and the nudges come from the song\'s seed, so the playback and both exports are one performance.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li><li>Humanize loosens the groove without ever moving a note out of its own step, changing which note is played or making one silent: the kick never moves at all, every other note stays inside a fraction of a step of where it was written, every velocity stays audible and under full scale, and the nudges come from the song\'s seed, so the playback and both exports are one performance.</li><li>Every song-length preset builds a whole song — it opens, it has a verse and a chorus, it ends — of about the length it promises at every tempo the slider can reach, out of sections the arranger itself could hold; and every note generated over a rebuilt arrangement is still in the key.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

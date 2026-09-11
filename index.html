@@ -183,6 +183,9 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 /* arranger */
 .arr-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .arr-head .lbl{flex:1}
+.arr-head .slen{font:400 11px var(--mono);color:var(--ink-mute)}
+.arr-head .seg{height:26px}
+.arr-head .seg button{flex:0 0 auto;height:24px;padding:0 9px}
 .arr{display:flex;gap:4px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px}
 .sec{flex:1 0 auto;min-width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);display:flex;flex-direction:column;gap:4px;text-align:left;transition:border-color .12s,background .12s;position:relative}
 .sec:hover{border-color:var(--ink-mute)}
@@ -399,6 +402,8 @@ input[type=range].bip::-moz-range-progress{background:transparent}
       </div>
       <div class="arr-head">
         <span class="lbl">Arrangement <output id="songLen"></output></span>
+        <span class="slen">Length</span>
+        <div class="seg" id="songLength" role="group" aria-label="Song length" title="Rebuild the arrangement into a whole song of about this length at the current tempo. Your chords, your notes, the drum grid and every sound stay exactly as they are — only the sections change, and Ctrl+Z brings the old arrangement back."></div>
         <button class="btn sm" id="addSec" title="Add a section after the selected one">+ Section</button>
       </div>
       <div class="arr" id="arr" aria-label="Arrangement"></div>
@@ -530,6 +535,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
       <li><b>Let it breathe.</b> Under Swing in the Track panel is <b>Humanize</b>: how much like a player and how little like a machine the track plays. Turn it up and every note gets its own small nudge off the grid and its own change of velocity, so a pattern stops sounding typed in and starts sounding played — except the <b>kick</b>, which never moves and never changes level, so the pulse stays exactly where it is and everything else leans around it. The readout tells you what it is doing at this tempo, in milliseconds. A nudge is always well under half a step, so the rhythm you wrote is still the rhythm you hear, and every one of them comes from the track's own seed rather than a die thrown as it plays — which means a song always plays the same way twice and the WAV and MIDI exports are exactly the performance you heard. Right down is machine-tight, for chiptune and anything else that wants to be a machine; every mood already comes set the way it plays, from Retro dead on the grid to Chill leaning right back off it.</li>
       <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
+      <li><b>Say how long it should be.</b> Beside the arrangement is <b>Length</b>: <b>Short</b>, <b>Radio</b> and <b>Extended</b> — about a minute and a half, about three minutes, about five. Press one and Zinth rebuilds the arrangement into a whole song of about that long at the tempo you are on: a short song opens on four bars and gets to the chorus quickly, a long one takes a pre-chorus, a break, a drop and a bridge on the way. Because a bar lasts longer at 90 bpm than at 160, the sections you get follow the tempo rather than a fixed count. Nothing else moves — your chords, every note you drew or recorded, the drum grid and the sound of every layer come through exactly as they were, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old arrangement back. A preset lights up when the arrangement is the one it would build, so you can always see where you are.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
       <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
       <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
@@ -1022,6 +1028,74 @@ function sectionOf(type){
     layers:Object.assign({},t.layers),hook:!!t.hook,double:!!t.double,sweep:t.sweep||'none',fade:t.fade||'none'};
 }
 
+/* Song length. Three presets — Short, Radio and Extended — that rebuild the arrangement into a whole song
+   of about that long. A form is a list of section types, so how long one runs depends on the tempo: the
+   eight sections a fresh track opens with are 2:00 at 120 bpm and 2:40 at 90, which is why a preset picks
+   its form at the tempo you are on rather than from a fixed number of bars.
+
+   FORM_STAGES is the order a song grows in, and every rung of it is a whole song: it opens, it has a
+   chorus, it ends, and it is longer than the rung under it. Past the top of the ladder a song grows by
+   another verse-and-chorus cycle before the break, which is how a long track is built anyway. None of this
+   touches the chords, the notes, the drum grid or the sounds — a preset only says which sections there
+   are, so everything that makes the song what it is comes through unchanged. */
+const SONG_LENGTHS=[
+  {id:'short',label:'Short',   seconds:90, says:'about a minute and a half'},
+  {id:'radio',label:'Radio',   seconds:180,says:'about three minutes'},
+  {id:'long', label:'Extended',seconds:300,says:'about five minutes'},
+];
+/* A rung is a list of sections: a plain type name, or [type, bars] where that section is shorter than its
+   type usually runs — the short songs open and close on four bars rather than eight, the way a short song
+   does. Everything else about a section still comes from its type. */
+const FORM_STAGES=[
+  [['Intro',4],'Verse','Chorus',['Outro',4]],                                                          // 24 bars
+  [['Intro',4],'Verse','Chorus','Outro'],                                                              // 28
+  ['Intro','Verse','Chorus','Outro'],                                                                  // 32
+  ['Intro','Verse','Pre-chorus','Chorus','Outro'],                                                     // 36
+  ['Intro','Verse','Chorus','Break','Chorus','Outro'],                                                 // 44
+  ['Intro','Verse','Chorus','Verse','Chorus','Outro'],                                                 // 48
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Outro'],                                    // 52
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Chorus','Break','Drop','Outro'],                     // 64
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Outro'],        // 68
+  ['Intro','Verse','Pre-chorus','Chorus','Verse','Pre-chorus','Chorus','Break','Drop','Bridge','Chorus','Outro'], // 84
+];
+const FORM_CYCLE=['Verse','Pre-chorus','Chorus'];   // what another 20 bars of song looks like
+const FORM_MAX_STAGE=60;                            // far beyond any song anyone would ask Zinth for
+const formType=e=>{const t=Array.isArray(e)?e[0]:e;return SEC_TYPES[t]?t:'Verse'};
+const formBarsOf=e=>{const b=Array.isArray(e)?Math.round(+e[1]):0;return b>0?b:SEC_TYPES[formType(e)].bars};
+// the form at rung n of the ladder: the table while it lasts, then a cycle more of it each rung
+function formAt(n){
+  n=Math.max(0,Math.round(+n||0));
+  if(n<FORM_STAGES.length)return FORM_STAGES[n].slice();
+  const f=FORM_STAGES[FORM_STAGES.length-1].slice(),at=f.indexOf('Break'),extra=[];
+  for(let i=FORM_STAGES.length-1;i<n;i++)extra.push.apply(extra,FORM_CYCLE);
+  f.splice(at<0?f.length-1:at,0,...extra);
+  return f;
+}
+const formBars=form=>form.reduce((a,e)=>a+formBarsOf(e),0);
+// a form as sections the arranger can hold: everything a section of that type is, at that many bars
+const formSections=form=>form.map(e=>Object.assign(sectionOf(formType(e)),{bars:formBarsOf(e)}));
+// how long a form runs, in seconds, at a tempo: four beats to the bar, and the tempo the slider can hold
+const formSeconds=(form,bpm)=>formBars(form)*4*60/Math.max(60,Math.min(180,Math.round(+bpm)||120));
+/* The form for a target length at a tempo: the rung of the ladder that comes out closest to it. The ladder
+   only ever gets longer, so once a rung turns away from the target every rung above it does too — the first
+   turn is the answer, and ties keep the shorter song. */
+function songForm(seconds,bpm){
+  const want=Math.max(1,+seconds||0);
+  let best=formAt(0),err=Math.abs(formSeconds(best,bpm)-want);
+  for(let n=1;n<=FORM_MAX_STAGE;n++){
+    const f=formAt(n),e=Math.abs(formSeconds(f,bpm)-want);
+    if(e>=err)break;
+    best=f;err=e;
+  }
+  return best;
+}
+const songLengthOf=id=>SONG_LENGTHS.filter(p=>p.id===id)[0]||null;
+// m:ss, the way a transport reads — rounded as one number so 1:59.7 never comes out as "1:60"
+function clockOf(seconds){
+  const t=Math.max(0,Math.round(+seconds||0));
+  return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+}
+
 /* Analog drift. A real analog synth never plays the same note twice: its oscillators wander a few cents
    and its filter opens a shade differently every time. Each synth voice gets both, from a "Drift" amount
    of 0 to 100 per layer. The pitch offset is measured in cents and capped well under a semitone, so a
@@ -1485,7 +1559,7 @@ function generateTrack(cfg,seeds,part,loop){
   return {chords,lead,arp,chordEvs,bass,drums,drumPattern,byStep};
 }
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,lanePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
-  SEC_TYPES,DEFAULT_FORM,sectionOf,
+  SEC_TYPES,DEFAULT_FORM,sectionOf,SONG_LENGTHS,FORM_STAGES,FORM_MAX_STAGE,formAt,formType,formBarsOf,formBars,formSections,formSeconds,songForm,songLengthOf,clockOf,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
@@ -2512,9 +2586,36 @@ function renderArr(){
       (SWEEP_MARK[sw]?'<b class="sw">'+SWEEP_MARK[sw]+'</b>':'')+(FADE_MARK[fd]?'<b class="fd">'+FADE_MARK[fd]+'</b>':'')+'</span>'+
       (s.transpose?'<span class="tp">'+(s.transpose>0?'+':'')+s.transpose+'</span>':'')+'</button>';
   }).join('');
-  const bars=song.reduce((a,s)=>a+s.bars,0),secs=bars*4*60/state.bpm;
-  $('songLen').textContent=bars+' bars · '+Math.floor(secs/60)+':'+String(Math.round(secs%60)).padStart(2,'0');
+  const bars=song.reduce((a,s)=>a+s.bars,0);
+  $('songLen').textContent=bars+' bars · '+Z.clockOf(bars*4*60/state.bpm);
+  renderLengths(bars);
 }
+/* Song length. Short, Radio and Extended rebuild the arrangement into a whole song of about that long at
+   the tempo you are on, and nothing else: the chords, every note you drew or recorded, the drum grid and
+   the sound of every layer live outside the section list, so they come through a rebuild untouched. A
+   preset lights up when the arrangement is exactly the one it would build, which is worked out here rather
+   than remembered, so it stays honest when you edit a section or move the tempo. */
+function renderLengths(bars){
+  $('songLength').innerHTML=Z.SONG_LENGTHS.map(p=>{
+    const form=Z.songForm(p.seconds,state.bpm),fb=Z.formBars(form),on=fb===bars;
+    return '<button data-v="'+p.id+'" class="'+(on?'on':'')+'" aria-pressed="'+on+'" title="'+p.label+
+      ': a whole song of '+p.says+'. At '+state.bpm+' bpm that is '+form.length+' sections, '+fb+' bars, '+
+      Z.clockOf(Z.formSeconds(form,state.bpm))+'. Your chords, your notes, the drums and every sound stay as they are; Ctrl+Z brings this arrangement back.">'+
+      p.label+'</button>';
+  }).join('');
+}
+function applyLength(id){
+  const p=Z.songLengthOf(id);if(!p)return;
+  const form=Z.songForm(p.seconds,state.bpm);
+  closeChordEdit();
+  state.sections=Z.formSections(form).map(sec=>Object.assign({id:secId++},sec));
+  state.sel=0;viewSection=0;state.loop=0;
+  if(E.playing&&E.section>=state.sections.length)E.jump(0);
+  regenerate();
+  setStatus(p.label+' · '+form.length+' sections, '+Z.formBars(form)+' bars, '+Z.clockOf(Z.formSeconds(form,state.bpm))+
+    ' at '+state.bpm+' bpm · your chords, notes and sounds are untouched (Ctrl+Z to undo)');
+}
+$('songLength').addEventListener('click',e=>{const b=e.target.closest('button');if(b)applyLength(b.dataset.v)});
 function selectSection(i,jump){
   state.sel=i;viewSection=i;
   if(E.playing&&(jump||E.loopSection))E.jump(i);
