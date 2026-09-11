@@ -92,6 +92,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 input[type=range]::-moz-range-track{height:4px;background:var(--line-2);border-radius:2px}
 input[type=range]::-moz-range-progress{height:4px;background:var(--accent,var(--teal));border-radius:2px}
 input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#e8e2d3;border:2px solid var(--panel)}
+/* a centre-detented slider — the master EQ's bands — fills out from the middle, so flat looks flat and a
+   cut reads as a cut. --lo and --hi are the two ends of the filled part, set alongside --pct. */
+input[type=range].bip::-webkit-slider-runnable-track,
+input[type=range].bip::-moz-range-track{height:4px;border-radius:2px;
+  background:linear-gradient(to right,var(--line-2) var(--lo,50%),var(--accent,var(--teal)) var(--lo,50%),var(--accent,var(--teal)) var(--hi,50%),var(--line-2) var(--hi,50%))}
+input[type=range].bip::-moz-range-progress{background:transparent}
 
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{padding:6px 10px;border:1px solid var(--line-2);border-radius:999px;font-size:12px;color:var(--ink-dim);background:var(--panel-2);transition:border-color .12s,color .12s}
@@ -217,8 +223,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .hint{margin-top:8px;font-size:12px;color:var(--ink-mute);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
 /* sound panel */
-.tabs{display:flex;gap:4px;margin-bottom:12px}
-.tab{flex:1;height:32px;border-radius:var(--r);font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);background:var(--panel-2)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.tab{flex:1 1 52px;height:32px;padding:0 2px;border-radius:var(--r);font:600 10px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);background:var(--panel-2)}
 .tab.on{color:var(--c);border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
 .waves{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
 .wave{height:34px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2);display:flex;align-items:center;justify-content:center;color:var(--ink-dim)}
@@ -228,6 +234,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 /* a segmented choice in the Sound panel wears the colour of the layer it belongs to, like everything else there */
 .snd .seg button{height:28px}
 .snd .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
+/* the master strip: the EQ's Flat button beside the line that says what the three bands are doing */
+.eqbar{display:flex;align-items:center;gap:8px;margin-top:-4px}
+.snd .note{font-size:11px;line-height:1.35;color:var(--ink-mute)}
 .patch{display:flex;gap:6px}
 .patch select{flex:1;min-width:0}
 .meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}

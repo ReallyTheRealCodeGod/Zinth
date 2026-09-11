@@ -482,6 +482,76 @@ function warmthCurve(v){
 const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
 const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
 
+/* Master EQ. Three bands across the whole mix — a low shelf under it, a peak through the middle, a shelf
+   over the top — each a knob from −100 (a full cut) through 0 (flat) to +100 (a full boost). A tone control
+   is only worth having if it cannot wreck the mix, so the EQ keeps its own headroom: a modest move is
+   exactly what you asked for, and past EQ.headDb of boost anywhere it takes the difference straight back off
+   the level. However hard the three bands are pushed, the mix can never come out more than those few
+   decibels louder than flat — which the limiter already has in hand — and reaching for a band past that
+   point shapes the mix instead of just turning it up. Flat across all three is a true bypass: a biquad at
+   0 dB has the same numerator and denominator, so it passes a signal through untouched. */
+const EQ={bands:['low','mid','high'],
+  TYPE:{low:'lowshelf',mid:'peaking',high:'highshelf'},
+  HZ:{low:160,mid:1000,high:4200},Q:{mid:0.9},
+  LABEL:{low:'Low',mid:'Mid',high:'High'},
+  SAYS:{low:'the weight underneath — the kick and the bass',mid:'the body, where the chords and the lead sing',high:'the air on top — hats, and the shine on the lead'},
+  maxDb:9,headDb:3,slack:0.01,sr:48000,probes:192,refine:64};
+const eqAmt=v=>{v=Math.round(+v);return isNaN(v)?0:Math.max(-100,Math.min(100,v))};
+const eqDb=v=>eqAmt(v)/100*EQ.maxDb;
+function normEq(e){const o={};for(const b of EQ.bands)o[b]=eqAmt(e&&e[b]);return o}
+const eqFlat=e=>EQ.bands.every(b=>eqDb(e&&e[b])===0);
+// One band as its biquad coefficients — the same ones the Web Audio filter of that type uses (RBJ cookbook,
+// shelves at S=1) — so what the check measures here is what the master bus actually does to the mix.
+function eqCoefs(band,db,sr){
+  const w=2*Math.PI*EQ.HZ[band]/(sr||EQ.sr),cw=Math.cos(w),sw=Math.sin(w),A=Math.pow(10,db/40);
+  if(EQ.TYPE[band]==='peaking'){const al=sw/(2*EQ.Q[band]);
+    return {b0:1+al*A,b1:-2*cw,b2:1-al*A,a0:1+al/A,a1:-2*cw,a2:1-al/A}}
+  const al=sw/2*Math.SQRT2,ap=A+1,am=A-1,ta=2*Math.sqrt(A)*al;
+  if(EQ.TYPE[band]==='lowshelf')
+    return {b0:A*(ap-am*cw+ta),b1:2*A*(am-ap*cw),b2:A*(ap-am*cw-ta),a0:ap+am*cw+ta,a1:-2*(am+ap*cw),a2:ap+am*cw-ta};
+  return {b0:A*(ap+am*cw+ta),b1:-2*A*(am+ap*cw),b2:A*(ap+am*cw-ta),a0:ap-am*cw+ta,a1:2*(am-ap*cw),a2:ap-am*cw-ta};
+}
+// the magnitude of one band at a frequency, in dB: |H(e^jw)| of its biquad
+function biquadDb(c,w){
+  const c1=Math.cos(w),s1=Math.sin(w),c2=Math.cos(2*w),s2=Math.sin(2*w);
+  const nr=c.b0+c.b1*c1+c.b2*c2,ni=-(c.b1*s1+c.b2*s2),dr=c.a0+c.a1*c1+c.a2*c2,di=-(c.a1*s1+c.a2*s2);
+  return 20*Math.log10(Math.max(1e-9,Math.sqrt(nr*nr+ni*ni))/Math.max(1e-9,Math.sqrt(dr*dr+di*di)));
+}
+// the bands that are actually doing something, as coefficients worked out once and then swept across the
+// spectrum: a band sitting at 0 dB is left out entirely, which is what makes a flat EQ an exact bypass
+function eqCurve(e,sr){const out=[];for(const b of EQ.bands){const db=eqDb(e&&e[b]);if(db)out.push(eqCoefs(b,db,sr))}return out}
+const curveDb=(cs,hz,sr)=>{const w=2*Math.PI*hz/(sr||EQ.sr);let db=0;for(const c of cs)db+=biquadDb(c,w);return db};
+function eqBandDb(band,v,hz,sr){const db=eqDb(v);return db?biquadDb(eqCoefs(band,db,sr),2*Math.PI*hz/(sr||EQ.sr)):0}
+const eqBandsDb=(e,hz,sr)=>curveDb(eqCurve(e,sr),hz,sr);
+// the most the three bands together add at any one frequency: a sweep of everything you can hear, then a
+// closer look either side of the loudest point, so the answer is the real peak and not a grid's nearest
+// guess — the trim below is built on it, and a peak read low would let the mix through louder than promised
+const eqHzAt=x=>20*Math.pow(1000,x);
+const EQ_PROBES=(()=>{const a=[];for(let i=0;i<=EQ.probes;i++)a.push(eqHzAt(i/EQ.probes));return a})();
+// the sweep is the same answer for the same three knobs, and the UI asks for it on every drag of a slider,
+// so the last one is kept: a pure function, memoised, nothing more
+let eqMemo={key:null,sr:0,db:0};
+function eqPeakDb(e,sr){
+  const rate=sr||EQ.sr,key=EQ.bands.map(b=>eqAmt(e&&e[b])).join(',');
+  if(eqMemo.key===key&&eqMemo.sr===rate)return eqMemo.db;
+  const cs=eqCurve(e,rate);
+  let peak=0,best=0;
+  if(cs.length){
+    for(let i=0;i<EQ_PROBES.length;i++){const db=curveDb(cs,EQ_PROBES[i],rate);if(db>peak){peak=db;best=i/EQ.probes}}
+    if(peak>0){
+      const lo=Math.max(0,best-1/EQ.probes),hi=Math.min(1,best+1/EQ.probes),m=EQ.refine;
+      for(let i=0;i<=m;i++)peak=Math.max(peak,curveDb(cs,eqHzAt(lo+(hi-lo)*i/m),rate));
+    }else peak=0;
+  }
+  eqMemo={key,sr:rate,db:peak};return peak;
+}
+// the level taken back off the master after the bands: whatever the boost is past the headroom the EQ keeps,
+// plus a hair for the sweep's own margin of error, so the promise holds at every frequency and not just the
+// ones that were looked at. Below that there is no trim at all — a modest move is exactly what was asked for.
+const eqTrimDb=(e,sr)=>-Math.max(0,eqPeakDb(e,sr)+EQ.slack-EQ.headDb);
+const eqTrim=(e,sr)=>Math.pow(10,eqTrimDb(e,sr)/20);
+const eqNetDb=(e,hz,sr)=>eqBandsDb(e,hz,sr)+eqTrimDb(e,sr);
+
 /* Glide. The bass can slide from the note before into the note it is playing — portamento, the sound of a
    finger sliding up a string or a mono synth being played legato. A slide bends pitch, so the scale lock
    sets its terms: it always arrives exactly on the note it was heading for, it is never longer than
@@ -549,5 +619,6 @@ function generateTrack(cfg,seeds,part,loop){
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
+  EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();

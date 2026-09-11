@@ -95,6 +95,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 input[type=range]::-moz-range-track{height:4px;background:var(--line-2);border-radius:2px}
 input[type=range]::-moz-range-progress{height:4px;background:var(--accent,var(--teal));border-radius:2px}
 input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#e8e2d3;border:2px solid var(--panel)}
+/* a centre-detented slider — the master EQ's bands — fills out from the middle, so flat looks flat and a
+   cut reads as a cut. --lo and --hi are the two ends of the filled part, set alongside --pct. */
+input[type=range].bip::-webkit-slider-runnable-track,
+input[type=range].bip::-moz-range-track{height:4px;border-radius:2px;
+  background:linear-gradient(to right,var(--line-2) var(--lo,50%),var(--accent,var(--teal)) var(--lo,50%),var(--accent,var(--teal)) var(--hi,50%),var(--line-2) var(--hi,50%))}
+input[type=range].bip::-moz-range-progress{background:transparent}
 
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{padding:6px 10px;border:1px solid var(--line-2);border-radius:999px;font-size:12px;color:var(--ink-dim);background:var(--panel-2);transition:border-color .12s,color .12s}
@@ -220,8 +226,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .hint{margin-top:8px;font-size:12px;color:var(--ink-mute);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
 /* sound panel */
-.tabs{display:flex;gap:4px;margin-bottom:12px}
-.tab{flex:1;height:32px;border-radius:var(--r);font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);background:var(--panel-2)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.tab{flex:1 1 52px;height:32px;padding:0 2px;border-radius:var(--r);font:600 10px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);background:var(--panel-2)}
 .tab.on{color:var(--c);border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
 .waves{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
 .wave{height:34px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel-2);display:flex;align-items:center;justify-content:center;color:var(--ink-dim)}
@@ -231,6 +237,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 /* a segmented choice in the Sound panel wears the colour of the layer it belongs to, like everything else there */
 .snd .seg button{height:28px}
 .snd .seg button.on{color:var(--c);background:var(--panel-3);box-shadow:inset 0 -2px 0 var(--c)}
+/* the master strip: the EQ's Flat button beside the line that says what the three bands are doing */
+.eqbar{display:flex;align-items:center;gap:8px;margin-top:-4px}
+.snd .note{font-size:11px;line-height:1.35;color:var(--ink-mute)}
 .patch{display:flex;gap:6px}
 .patch select{flex:1;min-width:0}
 .meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}
@@ -421,13 +430,17 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
           <div class="grid-head"><span class="lbl">Step grid <output id="gridLabel"></output></span><div class="opts"><button class="opt on" id="fillTgl" aria-pressed="true" title="Snare roll into the next section">Fill</button><button class="opt" id="gridReset" title="Back to the generated pattern">Reset</button></div></div>
           <div class="grid" id="grid"></div>
         </div>
-        <div class="field" data-drums><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35"></div>
+        <div class="field" data-master><label for="eq-high">High <output id="o-eq-high"></output></label><input class="bip" type="range" id="eq-high" min="-100" max="100" value="0" title="High shelf at 4.2 kHz: the air on top — the hats and the shine on the lead. Left for something soft and dusty, right to open it up. Centre is flat."></div>
+        <div class="field" data-master><label for="eq-mid">Mid <output id="o-eq-mid"></output></label><input class="bip" type="range" id="eq-mid" min="-100" max="100" value="0" title="Mid peak at 1 kHz: the body of the mix, where the chords and the lead sing. Left scoops it out, right pushes it forward. Centre is flat."></div>
+        <div class="field" data-master><label for="eq-low">Low <output id="o-eq-low"></output></label><input class="bip" type="range" id="eq-low" min="-100" max="100" value="0" title="Low shelf at 160 Hz: the weight underneath — the kick and the bass. Left thins it out, right fills it in. Centre is flat."></div>
+        <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
+        <div class="field" data-master><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35" title="Sidechain pump: every kick ducks the whole mix under it for a moment, so the kick punches through and the track breathes. Right down is no ducking at all."></div>
         <div class="field" data-synth><label for="p-chorus">Chorus <output id="o-chorus"></output></label><input type="range" id="p-chorus" min="0" max="100" value="22" title="Chorus: send this layer into a stereo chorus — three slowly drifting delay lines spread across the field — so it comes back wide, thick and moving. It never bends a note far enough to change it, and the WAV export is chorused too."></div>
-        <div class="row2">
+        <div class="row2" data-voice>
           <div class="field"><label for="p-delay">Delay <output id="o-delay"></output></label><input type="range" id="p-delay" min="0" max="100" value="20"></div>
           <div class="field"><label for="p-reverb">Reverb <output id="o-reverb"></output></label><input type="range" id="p-reverb" min="0" max="100" value="30"></div>
         </div>
-        <div class="field"><label for="p-level">Level <output id="o-level"></output></label><input type="range" id="p-level" min="0" max="100" value="80"><div class="meter"><i id="meter"></i></div></div>
+        <div class="field"><label for="p-level"><span id="levelName">Level</span> <output id="o-level"></output></label><input type="range" id="p-level" min="0" max="100" value="80"><div class="meter"><i id="meter"></i></div></div>
       </div>
     </section>
   </div>
@@ -487,6 +500,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <li><b>Let it slide and sing.</b> Pick the <b>bass</b> tab in the Sound panel and there is a <b>Glide</b> amount: the bass slides up or down into each note from the one before, the way a finger slides along a string, whenever the two notes are close enough together to belong to one phrase. Pick the <b>lead</b> tab and there is <b>Vibrato</b> and a rate beside it: a note you hold waits a moment and then comes alive, the way a singer leans into a long note, while short notes stay dead straight. Both come set gently, both are in the WAV export, and both are locked to the key — a slide always lands exactly on the note it was heading for, and vibrato is measured in cents, never a semitone.</li>
       <li><b>Tell the arp what to play.</b> Pick the <b>arp</b> tab in the Sound panel and there are three choices that change the notes rather than the tone. <b>Arp pattern</b> is the order it walks the chord in: up, down, up-down, random, <b>Chord</b> for block stabs of the whole chord, or <b>Pattern</b> for a little figure repeating the way an old arpeggiator does — and <b>Auto</b> lets every roll of the arp's 🎲 deal a new one. <b>Arp octaves</b> is how far up it reaches, from one octave sitting still to three sweeping up the chord, and <b>Arp gate</b> how much of its step each note holds: right down is a staccato tick, right up is a legato run straight into the next note. Every mood already deals a figure that suits it — Retro a one-octave chip pattern, Dreamy a long three-octave run — and whatever you choose, every note is a tone of the chord playing underneath, so the arp cannot leave the key.</li>
       <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
+      <li><b>Mix the whole thing.</b> The last tab in the Sound panel is <b>master</b>, and it holds the mix rather than a layer: a three-band EQ — <b>High</b> for the air on top, <b>Mid</b> for the body where the chords and the lead sing, <b>Low</b> for the weight underneath — each running from a full cut through flat in the middle to a full boost, with <b>Flat</b> to put all three back. Under them sits the <b>Sidechain pump</b> that ducks everything beneath each kick, and the master fader with its meter. The EQ keeps its own headroom: lean on all three bands at once and it quietly takes the difference back, so it can shape the mix but never make it clip. It is in the WAV export exactly as you hear it.</li>
       <li><b>Pick a kit and add some perc.</b> The Sound panel's drums tab has six kits — <b>808</b> deep and boomy, <b>909</b> punchy, <b>Lo-fi</b> soft and dusty, <b>Trap</b> long-tailed, <b>House</b> punchy with open bright hats, <b>Breaks</b> dusty with a room-y snare. Under the kit, the step grid's last row is <b>perc</b>, and the kit decides what it plays: a cowbell, a rim or a shaker. Busy sections come with a perc figure already, off the backbeat and behind it in level; click the row to write your own. It follows the kit into the WAV export and reaches your DAW as the matching GM percussion note.</li>
       <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV or MIDI and finish it anywhere.</li>
     </ol>
@@ -985,6 +999,76 @@ function warmthCurve(v){
 const warmthShelf=v=>warmthAmt(v)*WARMTH.shelfDb;      // dB on the high shelf: never boosts, only rolls off
 const warmthTrim=v=>1-warmthAmt(v)*WARMTH.trim;        // a little off the level, since the soft clip adds some
 
+/* Master EQ. Three bands across the whole mix — a low shelf under it, a peak through the middle, a shelf
+   over the top — each a knob from −100 (a full cut) through 0 (flat) to +100 (a full boost). A tone control
+   is only worth having if it cannot wreck the mix, so the EQ keeps its own headroom: a modest move is
+   exactly what you asked for, and past EQ.headDb of boost anywhere it takes the difference straight back off
+   the level. However hard the three bands are pushed, the mix can never come out more than those few
+   decibels louder than flat — which the limiter already has in hand — and reaching for a band past that
+   point shapes the mix instead of just turning it up. Flat across all three is a true bypass: a biquad at
+   0 dB has the same numerator and denominator, so it passes a signal through untouched. */
+const EQ={bands:['low','mid','high'],
+  TYPE:{low:'lowshelf',mid:'peaking',high:'highshelf'},
+  HZ:{low:160,mid:1000,high:4200},Q:{mid:0.9},
+  LABEL:{low:'Low',mid:'Mid',high:'High'},
+  SAYS:{low:'the weight underneath — the kick and the bass',mid:'the body, where the chords and the lead sing',high:'the air on top — hats, and the shine on the lead'},
+  maxDb:9,headDb:3,slack:0.01,sr:48000,probes:192,refine:64};
+const eqAmt=v=>{v=Math.round(+v);return isNaN(v)?0:Math.max(-100,Math.min(100,v))};
+const eqDb=v=>eqAmt(v)/100*EQ.maxDb;
+function normEq(e){const o={};for(const b of EQ.bands)o[b]=eqAmt(e&&e[b]);return o}
+const eqFlat=e=>EQ.bands.every(b=>eqDb(e&&e[b])===0);
+// One band as its biquad coefficients — the same ones the Web Audio filter of that type uses (RBJ cookbook,
+// shelves at S=1) — so what the check measures here is what the master bus actually does to the mix.
+function eqCoefs(band,db,sr){
+  const w=2*Math.PI*EQ.HZ[band]/(sr||EQ.sr),cw=Math.cos(w),sw=Math.sin(w),A=Math.pow(10,db/40);
+  if(EQ.TYPE[band]==='peaking'){const al=sw/(2*EQ.Q[band]);
+    return {b0:1+al*A,b1:-2*cw,b2:1-al*A,a0:1+al/A,a1:-2*cw,a2:1-al/A}}
+  const al=sw/2*Math.SQRT2,ap=A+1,am=A-1,ta=2*Math.sqrt(A)*al;
+  if(EQ.TYPE[band]==='lowshelf')
+    return {b0:A*(ap-am*cw+ta),b1:2*A*(am-ap*cw),b2:A*(ap-am*cw-ta),a0:ap+am*cw+ta,a1:-2*(am+ap*cw),a2:ap+am*cw-ta};
+  return {b0:A*(ap+am*cw+ta),b1:-2*A*(am+ap*cw),b2:A*(ap+am*cw-ta),a0:ap-am*cw+ta,a1:2*(am-ap*cw),a2:ap-am*cw-ta};
+}
+// the magnitude of one band at a frequency, in dB: |H(e^jw)| of its biquad
+function biquadDb(c,w){
+  const c1=Math.cos(w),s1=Math.sin(w),c2=Math.cos(2*w),s2=Math.sin(2*w);
+  const nr=c.b0+c.b1*c1+c.b2*c2,ni=-(c.b1*s1+c.b2*s2),dr=c.a0+c.a1*c1+c.a2*c2,di=-(c.a1*s1+c.a2*s2);
+  return 20*Math.log10(Math.max(1e-9,Math.sqrt(nr*nr+ni*ni))/Math.max(1e-9,Math.sqrt(dr*dr+di*di)));
+}
+// the bands that are actually doing something, as coefficients worked out once and then swept across the
+// spectrum: a band sitting at 0 dB is left out entirely, which is what makes a flat EQ an exact bypass
+function eqCurve(e,sr){const out=[];for(const b of EQ.bands){const db=eqDb(e&&e[b]);if(db)out.push(eqCoefs(b,db,sr))}return out}
+const curveDb=(cs,hz,sr)=>{const w=2*Math.PI*hz/(sr||EQ.sr);let db=0;for(const c of cs)db+=biquadDb(c,w);return db};
+function eqBandDb(band,v,hz,sr){const db=eqDb(v);return db?biquadDb(eqCoefs(band,db,sr),2*Math.PI*hz/(sr||EQ.sr)):0}
+const eqBandsDb=(e,hz,sr)=>curveDb(eqCurve(e,sr),hz,sr);
+// the most the three bands together add at any one frequency: a sweep of everything you can hear, then a
+// closer look either side of the loudest point, so the answer is the real peak and not a grid's nearest
+// guess — the trim below is built on it, and a peak read low would let the mix through louder than promised
+const eqHzAt=x=>20*Math.pow(1000,x);
+const EQ_PROBES=(()=>{const a=[];for(let i=0;i<=EQ.probes;i++)a.push(eqHzAt(i/EQ.probes));return a})();
+// the sweep is the same answer for the same three knobs, and the UI asks for it on every drag of a slider,
+// so the last one is kept: a pure function, memoised, nothing more
+let eqMemo={key:null,sr:0,db:0};
+function eqPeakDb(e,sr){
+  const rate=sr||EQ.sr,key=EQ.bands.map(b=>eqAmt(e&&e[b])).join(',');
+  if(eqMemo.key===key&&eqMemo.sr===rate)return eqMemo.db;
+  const cs=eqCurve(e,rate);
+  let peak=0,best=0;
+  if(cs.length){
+    for(let i=0;i<EQ_PROBES.length;i++){const db=curveDb(cs,EQ_PROBES[i],rate);if(db>peak){peak=db;best=i/EQ.probes}}
+    if(peak>0){
+      const lo=Math.max(0,best-1/EQ.probes),hi=Math.min(1,best+1/EQ.probes),m=EQ.refine;
+      for(let i=0;i<=m;i++)peak=Math.max(peak,curveDb(cs,eqHzAt(lo+(hi-lo)*i/m),rate));
+    }else peak=0;
+  }
+  eqMemo={key,sr:rate,db:peak};return peak;
+}
+// the level taken back off the master after the bands: whatever the boost is past the headroom the EQ keeps,
+// plus a hair for the sweep's own margin of error, so the promise holds at every frequency and not just the
+// ones that were looked at. Below that there is no trim at all — a modest move is exactly what was asked for.
+const eqTrimDb=(e,sr)=>-Math.max(0,eqPeakDb(e,sr)+EQ.slack-EQ.headDb);
+const eqTrim=(e,sr)=>Math.pow(10,eqTrimDb(e,sr)/20);
+const eqNetDb=(e,hz,sr)=>eqBandsDb(e,hz,sr)+eqTrimDb(e,sr);
+
 /* Glide. The bass can slide from the note before into the note it is playing — portamento, the sound of a
    finger sliding up a string or a mono synth being played legato. A slide bends pitch, so the scale lock
    sets its terms: it always arrives exactly on the note it was heading for, it is never longer than
@@ -1052,6 +1136,7 @@ function generateTrack(cfg,seeds,part,loop){
 window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROUPS,STEPS,BARS,TOTAL,DRUM_KINDS,PERC,PERC_VOICES,PERC_GM,normDrumPattern,BASS_LO,BASS_HI,generateTrack,generateDrumPattern,scalePitches,chordAt,buildChord,chordInfo,romanFor,chordScaleOf,bassRegister,arpRange,recordPitch,normProg,
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
+  EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
 })();
 </script>
@@ -1100,7 +1185,7 @@ function identityCurve(){const c=new Float32Array(3);c[0]=-1;c[1]=0;c[2]=1;retur
 class Engine{
   constructor(){
     this.ctx=null;this.params=JSON.parse(JSON.stringify(DEFAULTS));this.kit='808';
-    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
+    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
     // the note a glideing layer played last, so the next one can slide out of it
@@ -1110,6 +1195,17 @@ class Engine{
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
     this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // the master EQ: three bands first in the master chain, so warmth, the sweep and the limiter all see a
+    // mix that is already shaped — a console strip running into tape. The trim after them keeps the EQ inside
+    // its headroom, so however hard the bands are pushed the mix never comes out loud enough to clip.
+    this.eqBands={};
+    let eqTail=this.master;
+    for(const b of Z.EQ.bands){
+      const f=ctx.createBiquadFilter();f.type=Z.EQ.TYPE[b];f.frequency.value=Z.EQ.HZ[b];
+      if(Z.EQ.Q[b])f.Q.value=Z.EQ.Q[b];
+      f.gain.value=0;eqTail.connect(f);eqTail=f;this.eqBands[b]=f;
+    }
+    this.eqTrim=ctx.createGain();eqTail.connect(this.eqTrim);
     // warmth: the whole mix through a soft clip and a gentle high shelf, before anything else touches it,
     // so a section sweep, a punch-in and the limiter all work on an already warmed signal
     this.warmShape=ctx.createWaveShaper();this.warmShape.oversample='2x';
@@ -1128,8 +1224,8 @@ class Engine{
     // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
     this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.master.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
-    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);
+    this.eqTrim.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);this.setEq(this.eq,true);
     this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
     this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
@@ -1193,6 +1289,17 @@ class Engine{
     this.warmShape.curve=Z.warmthCurve(this.warmth);
     if(now){this.warmTone.gain.value=sh;this.warmTrim.gain.value=tr}
     else{this.warmTone.gain.setTargetAtTime(sh,t,0.03);this.warmTrim.gain.setTargetAtTime(tr,t,0.03)}
+  }
+  // the master EQ: the three band gains and the trim that follows them. Flat is a true bypass — every band
+  // sits at 0 dB, which a biquad passes through untouched, and the trim is exactly unity.
+  setEq(eq,now){
+    this.eq=Z.normEq(eq);
+    if(!this.ctx||!this.eqBands)return;
+    const t=this.ctx.currentTime;
+    for(const b of Z.EQ.bands){const g=Z.eqDb(this.eq[b]),p=this.eqBands[b].gain;
+      if(now)p.value=g;else p.setTargetAtTime(g,t,0.03)}
+    const tr=Z.eqTrim(this.eq);
+    if(now)this.eqTrim.gain.value=tr;else this.eqTrim.gain.setTargetAtTime(tr,t,0.03);
   }
   anySolo(){return LAYERS.some(L=>this.params[L].solo)}
   audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}
@@ -1510,7 +1617,8 @@ Z.LAYERS=LAYERS;Z.DEFAULTS=DEFAULTS;Z.KITS=KITS;Z.Engine=Engine;Z.engine=new Eng
 const Z=window.Z,E=Z.engine,$=id=>document.getElementById(id),ZUI=window.ZUI=window.ZUI||{};
 // these live in the second UI script; delegate through the shared ZUI namespace
 const renderKeys=()=>ZUI.renderKeys(),renderPads=()=>ZUI.renderPads(),renderMixer=()=>ZUI.renderMixer(),renderFavs=()=>ZUI.renderFavs(),renderSound=()=>ZUI.renderSound(),renderGrid=()=>ZUI.renderGrid(),syncLabels=()=>ZUI.syncLabels();
-const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3'};
+// one colour per layer, and a cool blue for the master strip, which belongs to no single layer
+const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3',master:'#7ea8ff'};
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
@@ -1573,7 +1681,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -1611,9 +1719,23 @@ Z.LAYERS.forEach(L=>{
   $('lanes').appendChild(ln);
   const lb=document.createElement('button');lb.dataset.l=L;lb.textContent=L;lb.style.setProperty('--c',COLORS[L]);$('secLayers').appendChild(lb);
 });
+// and one more tab after the five layers: the master strip, where the EQ and the pump shape the whole mix
+{
+  const t=document.createElement('button');t.className='tab';t.setAttribute('role','tab');t.textContent='master';
+  t.style.setProperty('--c',COLORS.master);
+  t.title='The whole mix: a three-band EQ and the sidechain pump. Everything you hear passes through it, and so does the WAV export.';
+  t.addEventListener('click',()=>{state.layer='master';renderSound();
+    setStatus('Master: Low, Mid and High shape the whole mix, and the pump ducks it under every kick. The EQ only ever adds a few decibels however hard you push it, so it can never make the mix clip — and the WAV export is shaped the same.')});
+  $('tabs').appendChild(t);
+}
 WAVES.forEach(([w,d])=>{const b=document.createElement('button');b.className='wave';b.dataset.wave=w;b.title=w;b.innerHTML='<svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="'+d+'"/></svg>';
   b.addEventListener('click',()=>{E.setParam(state.layer,'wave',w);renderSound();persist()});$('waves').appendChild(b)});
-function fill(inp){inp.style.setProperty('--pct',((inp.value-inp.min)/(inp.max-inp.min)*100)+'%')}
+function fill(inp){
+  const pct=(inp.value-inp.min)/(inp.max-inp.min)*100;inp.style.setProperty('--pct',pct+'%');
+  // a slider that runs either side of zero — the EQ bands — is filled from its centre out instead
+  if(+inp.min<0){const z=(0-inp.min)/(inp.max-inp.min)*100;
+    inp.style.setProperty('--lo',Math.min(z,pct)+'%');inp.style.setProperty('--hi',Math.max(z,pct)+'%')}
+}
 document.querySelectorAll('input[type=range]').forEach(r=>{fill(r);r.addEventListener('input',()=>fill(r))});
 function setStatus(t){$('status').textContent=t;$('status').title=t;clearTimeout(statusTimer);statusTimer=setTimeout(()=>{$('status').textContent=''},7000)}
 
@@ -1623,8 +1745,8 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,arp:Z.normArp(s.arp),
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
@@ -1669,6 +1791,7 @@ function applyMood(seed){
 function syncControls(){
   $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
+  state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
   $('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);
@@ -2098,22 +2221,37 @@ const vibFmt=v=>v>0?'± '+Math.round(Z.vibCents(v))+' ct':'off';
 const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
+// the master tab is the whole mix rather than a layer: the pump belongs to the drums bus wherever its
+// slider is shown, and the Level fader there is the master volume the top bar carries
+const onMaster=()=>state.layer==='master';
+const paramLayer=k=>k==='pump'?'drums':state.layer;
 function renderSound(){
-  const L=state.layer,p=E.params[L],synth=L!=='drums';
+  const L=state.layer,master=L==='master',p=E.params[L]||{},synth=!master&&L!=='drums';
   document.querySelector('.snd').style.setProperty('--c',COLORS[L]);
   $('tabs').querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent===L));
   document.querySelectorAll('[data-synth]').forEach(el=>el.hidden=!synth);
-  document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
+  document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=master||synth);
+  document.querySelectorAll('[data-master]').forEach(el=>el.hidden=!master);
+  document.querySelectorAll('[data-voice]').forEach(el=>el.hidden=master);
+  $('levelName').textContent=master?'Master volume':'Level';
   // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
   document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
   // and one that belongs to a single layer — the arp's own figure — shows only on that layer's tab
   document.querySelectorAll('[data-layer]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.layer!==L});
   renderArpFields();
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
-  PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
-  if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
+  PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq()}
+  else if(synth)$('patch').value=patchName(p);
+  else{$('kit').value=state.kit;renderGrid()}
 }
-PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;E.setParam(state.layer,k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;
+  // on the master tab the Level fader is the master volume, the same one the top bar carries
+  if(k==='level'&&onMaster()){$('master').value=v;U.fill($('master'));E.setMaster(v);$('o-level').textContent=v+' %';U.persist();return}
+  E.setParam(paramLayer(k),k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+$('p-pump').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Sidechain pump '+v+' %: every kick ducks the whole mix under it for a moment, so the kick punches through and the track breathes. The WAV export pumps too.'
+    :'Pump off: the mix holds its level straight through every kick');});
 $('p-chorus').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?state.layer+' into the chorus at '+v+' %: three slowly drifting delay lines, spread across the stereo field, so it sounds wide and alive. It never moves a note far enough to change it, and the WAV export is chorused too.'
     :state.layer+' chorus off: dry and centred');});
@@ -2127,6 +2265,30 @@ $('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
     :'Lead vibrato off: every note is held dead straight');});
 $('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
+/* the master EQ: three bands across the whole mix. They shape sound rather than notes, so a move takes
+   effect at once without rebuilding the song — and because the EQ keeps its own headroom, you can push all
+   three bands and the mix still cannot clip. It lives in state.eq, so it autosaves, undoes, rides
+   along in a saved project and is rendered into the WAV export. */
+const eqFmt=v=>{const d=Z.eqDb(v);return d?(d>0?'+':'−')+(Math.round(Math.abs(d)*10)/10)+' dB':'flat'};
+const eqAt=b=>Math.round(Z.eqNetDb(state.eq,Z.EQ.HZ[b])*10)/10;
+function eqSays(){
+  if(Z.eqFlat(state.eq))return 'Flat: the mix passes through the EQ untouched.';
+  const moved=Z.EQ.bands.filter(b=>Z.eqDb(state.eq[b])!==0).map(b=>Z.EQ.LABEL[b]+' '+eqFmt(state.eq[b]));
+  const back=Math.round(-Z.eqTrimDb(state.eq)*10)/10;
+  return moved.join(' · ')+(back>0?' · '+back+' dB handed back, so the mix cannot clip':'');
+}
+function renderEq(){
+  Z.EQ.bands.forEach(b=>{const i=$('eq-'+b);i.value=state.eq[b];U.fill(i);$('o-eq-'+b).textContent=eqFmt(state.eq[b])});
+  $('eqNote').textContent=eqSays();$('eqFlat').disabled=Z.eqFlat(state.eq);
+}
+Z.EQ.bands.forEach(b=>{
+  $('eq-'+b).addEventListener('input',e=>{state.eq=Z.normEq(Object.assign({},state.eq,{[b]:+e.target.value}));E.setEq(state.eq);renderEq();U.persist()});
+  $('eq-'+b).addEventListener('change',()=>U.setStatus(Z.eqDb(state.eq[b])===0
+    ?Z.EQ.LABEL[b]+' back to flat · '+Z.EQ.SAYS[b]+' is left as it was'
+    :Z.EQ.LABEL[b]+' '+eqFmt(state.eq[b])+' at '+(Z.EQ.HZ[b]>=1000?Z.EQ.HZ[b]/1000+' kHz':Z.EQ.HZ[b]+' Hz')+': '+Z.EQ.SAYS[b]+'. You hear '+(eqAt(b)>=0?'+':'−')+Math.abs(eqAt(b))+' dB of it in the mix, and the WAV export is shaped the same.'));
+});
+$('eqFlat').addEventListener('click',()=>{state.eq=Z.normEq(null);E.setEq(state.eq);renderEq();U.persist();
+  U.setStatus('EQ flat: the whole mix passes through untouched')});
 /* the arp's own figure: the order it walks the chord in, how far up it reaches and how much of each step a
    note holds. These three make notes rather than shape a sound, so changing one rebuilds the song — and
    every one of them lives in state.arp, so it autosaves, undoes and goes out in the WAV and the MIDI. */
@@ -2256,7 +2418,7 @@ async function exportWav(){
   try{
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.init(off);
+    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;R.init(off);
     let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
@@ -2340,7 +2502,8 @@ $('scale').addEventListener('change',e=>{state.scale=e.target.value;U.regenerate
 $('energy').addEventListener('input',e=>{state.energy=+e.target.value;syncLabels();U.regenerate()});
 $('bpm').addEventListener('input',e=>{state.bpm=+e.target.value;E.setBpm(state.bpm);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();U.persist()});
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
-$('master').addEventListener('input',e=>{E.setMaster(+e.target.value);U.persist()});
+$('master').addEventListener('input',e=>{const v=+e.target.value;E.setMaster(v);
+  if(onMaster()){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()});
 $('warmth').addEventListener('input',e=>{state.warmth=+e.target.value;E.setWarmth(state.warmth);U.persist()});
 $('warmth').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Warmth '+v+' %: the whole mix through a soft clip with the top end rolled off a shade — the quiet half comes up, the peaks round over. The WAV export is warmed the same way.'

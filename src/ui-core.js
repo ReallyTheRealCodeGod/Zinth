@@ -3,7 +3,8 @@
 const Z=window.Z,E=Z.engine,$=id=>document.getElementById(id),ZUI=window.ZUI=window.ZUI||{};
 // these live in the second UI script; delegate through the shared ZUI namespace
 const renderKeys=()=>ZUI.renderKeys(),renderPads=()=>ZUI.renderPads(),renderMixer=()=>ZUI.renderMixer(),renderFavs=()=>ZUI.renderFavs(),renderSound=()=>ZUI.renderSound(),renderGrid=()=>ZUI.renderGrid(),syncLabels=()=>ZUI.syncLabels();
-const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3'};
+// one colour per layer, and a cool blue for the master strip, which belongs to no single layer
+const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3',master:'#7ea8ff'};
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
@@ -66,7 +67,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -104,9 +105,23 @@ Z.LAYERS.forEach(L=>{
   $('lanes').appendChild(ln);
   const lb=document.createElement('button');lb.dataset.l=L;lb.textContent=L;lb.style.setProperty('--c',COLORS[L]);$('secLayers').appendChild(lb);
 });
+// and one more tab after the five layers: the master strip, where the EQ and the pump shape the whole mix
+{
+  const t=document.createElement('button');t.className='tab';t.setAttribute('role','tab');t.textContent='master';
+  t.style.setProperty('--c',COLORS.master);
+  t.title='The whole mix: a three-band EQ and the sidechain pump. Everything you hear passes through it, and so does the WAV export.';
+  t.addEventListener('click',()=>{state.layer='master';renderSound();
+    setStatus('Master: Low, Mid and High shape the whole mix, and the pump ducks it under every kick. The EQ only ever adds a few decibels however hard you push it, so it can never make the mix clip — and the WAV export is shaped the same.')});
+  $('tabs').appendChild(t);
+}
 WAVES.forEach(([w,d])=>{const b=document.createElement('button');b.className='wave';b.dataset.wave=w;b.title=w;b.innerHTML='<svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="'+d+'"/></svg>';
   b.addEventListener('click',()=>{E.setParam(state.layer,'wave',w);renderSound();persist()});$('waves').appendChild(b)});
-function fill(inp){inp.style.setProperty('--pct',((inp.value-inp.min)/(inp.max-inp.min)*100)+'%')}
+function fill(inp){
+  const pct=(inp.value-inp.min)/(inp.max-inp.min)*100;inp.style.setProperty('--pct',pct+'%');
+  // a slider that runs either side of zero — the EQ bands — is filled from its centre out instead
+  if(+inp.min<0){const z=(0-inp.min)/(inp.max-inp.min)*100;
+    inp.style.setProperty('--lo',Math.min(z,pct)+'%');inp.style.setProperty('--hi',Math.max(z,pct)+'%')}
+}
 document.querySelectorAll('input[type=range]').forEach(r=>{fill(r);r.addEventListener('input',()=>fill(r))});
 function setStatus(t){$('status').textContent=t;$('status').title=t;clearTimeout(statusTimer);statusTimer=setTimeout(()=>{$('status').textContent=''},7000)}
 
@@ -116,8 +131,8 @@ function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,arp:Z.normArp(s.arp),
-    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:s.layer||'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
+    prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
@@ -162,6 +177,7 @@ function applyMood(seed){
 function syncControls(){
   $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
+  state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
   $('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);

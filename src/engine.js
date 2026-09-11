@@ -42,7 +42,7 @@ function identityCurve(){const c=new Float32Array(3);c[0]=-1;c[1]=0;c[2]=1;retur
 class Engine{
   constructor(){
     this.ctx=null;this.params=JSON.parse(JSON.stringify(DEFAULTS));this.kit='808';
-    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;
+    this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
     // the note a glideing layer played last, so the next one can slide out of it
@@ -52,6 +52,17 @@ class Engine{
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
     this.master=ctx.createGain();this.master.gain.value=this.masterLevel;
+    // the master EQ: three bands first in the master chain, so warmth, the sweep and the limiter all see a
+    // mix that is already shaped — a console strip running into tape. The trim after them keeps the EQ inside
+    // its headroom, so however hard the bands are pushed the mix never comes out loud enough to clip.
+    this.eqBands={};
+    let eqTail=this.master;
+    for(const b of Z.EQ.bands){
+      const f=ctx.createBiquadFilter();f.type=Z.EQ.TYPE[b];f.frequency.value=Z.EQ.HZ[b];
+      if(Z.EQ.Q[b])f.Q.value=Z.EQ.Q[b];
+      f.gain.value=0;eqTail.connect(f);eqTail=f;this.eqBands[b]=f;
+    }
+    this.eqTrim=ctx.createGain();eqTail.connect(this.eqTrim);
     // warmth: the whole mix through a soft clip and a gentle high shelf, before anything else touches it,
     // so a section sweep, a punch-in and the limiter all work on an already warmed signal
     this.warmShape=ctx.createWaveShaper();this.warmShape.oversample='2x';
@@ -70,8 +81,8 @@ class Engine{
     // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
     this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.master.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
-    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);
+    this.eqTrim.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);this.setEq(this.eq,true);
     this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
     this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
@@ -135,6 +146,17 @@ class Engine{
     this.warmShape.curve=Z.warmthCurve(this.warmth);
     if(now){this.warmTone.gain.value=sh;this.warmTrim.gain.value=tr}
     else{this.warmTone.gain.setTargetAtTime(sh,t,0.03);this.warmTrim.gain.setTargetAtTime(tr,t,0.03)}
+  }
+  // the master EQ: the three band gains and the trim that follows them. Flat is a true bypass — every band
+  // sits at 0 dB, which a biquad passes through untouched, and the trim is exactly unity.
+  setEq(eq,now){
+    this.eq=Z.normEq(eq);
+    if(!this.ctx||!this.eqBands)return;
+    const t=this.ctx.currentTime;
+    for(const b of Z.EQ.bands){const g=Z.eqDb(this.eq[b]),p=this.eqBands[b].gain;
+      if(now)p.value=g;else p.setTargetAtTime(g,t,0.03)}
+    const tr=Z.eqTrim(this.eq);
+    if(now)this.eqTrim.gain.value=tr;else this.eqTrim.gain.setTargetAtTime(tr,t,0.03);
   }
   anySolo(){return LAYERS.some(L=>this.params[L].solo)}
   audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}

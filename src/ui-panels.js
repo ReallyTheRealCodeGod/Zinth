@@ -91,22 +91,37 @@ const vibFmt=v=>v>0?'± '+Math.round(Z.vibCents(v))+' ct':'off';
 const fmt={cutoff:v=>Math.round(Z.cutoffHz(v))+' Hz',reso:v=>v+' %',attack:v=>Math.round(Z.attackSec(v)*1000)+' ms',release:v=>Math.round(Z.releaseSec(v)*1000)+' ms',spread:v=>Math.round(v*0.32)+' ct',drift:driftFmt,glide:glideFmt,vibrato:vibFmt,vibRate:v=>(Math.round(Z.vibRateHz(v)*10)/10)+' Hz',chorus:v=>v?v+' %':'off',delay:v=>v+' %',reverb:v=>v+' %',pump:v=>v+' %',level:v=>v+' %'};
 const PKEYS=['wave','cutoff','reso','attack','release','spread'];
 function patchName(p){for(const k in PATCHES)if(PKEYS.every(x=>PATCHES[k][x]===p[x]))return k;return ''}
+// the master tab is the whole mix rather than a layer: the pump belongs to the drums bus wherever its
+// slider is shown, and the Level fader there is the master volume the top bar carries
+const onMaster=()=>state.layer==='master';
+const paramLayer=k=>k==='pump'?'drums':state.layer;
 function renderSound(){
-  const L=state.layer,p=E.params[L],synth=L!=='drums';
+  const L=state.layer,master=L==='master',p=E.params[L]||{},synth=!master&&L!=='drums';
   document.querySelector('.snd').style.setProperty('--c',COLORS[L]);
   $('tabs').querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent===L));
   document.querySelectorAll('[data-synth]').forEach(el=>el.hidden=!synth);
-  document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=synth);
+  document.querySelectorAll('[data-drums]').forEach(el=>el.hidden=master||synth);
+  document.querySelectorAll('[data-master]').forEach(el=>el.hidden=!master);
+  document.querySelectorAll('[data-voice]').forEach(el=>el.hidden=master);
+  $('levelName').textContent=master?'Master volume':'Level';
   // a control for a parameter this layer does not have — glide on the bass, vibrato on the lead — stays away
   document.querySelectorAll('[data-param]').forEach(el=>{if(!el.hidden)el.hidden=p[el.dataset.param]===undefined});
   // and one that belongs to a single layer — the arp's own figure — shows only on that layer's tab
   document.querySelectorAll('[data-layer]').forEach(el=>{if(!el.hidden)el.hidden=el.dataset.layer!==L});
   renderArpFields();
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
-  PARAMS.forEach(k=>{if(p[k]===undefined)return;const i=$('p-'+k);i.value=p[k];U.fill(i);$('o-'+k).textContent=fmt[k](p[k])});
-  if(synth)$('patch').value=patchName(p);else{$('kit').value=state.kit;renderGrid()}
+  PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq()}
+  else if(synth)$('patch').value=patchName(p);
+  else{$('kit').value=state.kit;renderGrid()}
 }
-PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;E.setParam(state.layer,k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+PARAMS.forEach(k=>$('p-'+k).addEventListener('input',e=>{const v=+e.target.value;
+  // on the master tab the Level fader is the master volume, the same one the top bar carries
+  if(k==='level'&&onMaster()){$('master').value=v;U.fill($('master'));E.setMaster(v);$('o-level').textContent=v+' %';U.persist();return}
+  E.setParam(paramLayer(k),k,v);$('o-'+k).textContent=fmt[k](v);if(k==='level')renderMixer();if(PKEYS.includes(k))$('patch').value=patchName(E.params[state.layer]);U.persist()}));
+$('p-pump').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Sidechain pump '+v+' %: every kick ducks the whole mix under it for a moment, so the kick punches through and the track breathes. The WAV export pumps too.'
+    :'Pump off: the mix holds its level straight through every kick');});
 $('p-chorus').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?state.layer+' into the chorus at '+v+' %: three slowly drifting delay lines, spread across the stereo field, so it sounds wide and alive. It never moves a note far enough to change it, and the WAV export is chorused too.'
     :state.layer+' chorus off: dry and centred');});
@@ -120,6 +135,30 @@ $('p-vibrato').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Lead vibrato '+vibFmt(v)+' at '+fmt.vibRate(E.params.lead.vibRate)+': a held note waits a moment and then comes alive. Short notes stay straight, the swing never changes the note, and the WAV export sings the same.'
     :'Lead vibrato off: every note is held dead straight');});
 $('p-vibRate').addEventListener('change',e=>U.setStatus('Lead vibrato at '+fmt.vibRate(+e.target.value)+', fading in after '+Math.round(Z.VIB.onset*1000)+' ms of a held note'));
+/* the master EQ: three bands across the whole mix. They shape sound rather than notes, so a move takes
+   effect at once without rebuilding the song — and because the EQ keeps its own headroom, you can push all
+   three bands and the mix still cannot clip. It lives in state.eq, so it autosaves, undoes, rides
+   along in a saved project and is rendered into the WAV export. */
+const eqFmt=v=>{const d=Z.eqDb(v);return d?(d>0?'+':'−')+(Math.round(Math.abs(d)*10)/10)+' dB':'flat'};
+const eqAt=b=>Math.round(Z.eqNetDb(state.eq,Z.EQ.HZ[b])*10)/10;
+function eqSays(){
+  if(Z.eqFlat(state.eq))return 'Flat: the mix passes through the EQ untouched.';
+  const moved=Z.EQ.bands.filter(b=>Z.eqDb(state.eq[b])!==0).map(b=>Z.EQ.LABEL[b]+' '+eqFmt(state.eq[b]));
+  const back=Math.round(-Z.eqTrimDb(state.eq)*10)/10;
+  return moved.join(' · ')+(back>0?' · '+back+' dB handed back, so the mix cannot clip':'');
+}
+function renderEq(){
+  Z.EQ.bands.forEach(b=>{const i=$('eq-'+b);i.value=state.eq[b];U.fill(i);$('o-eq-'+b).textContent=eqFmt(state.eq[b])});
+  $('eqNote').textContent=eqSays();$('eqFlat').disabled=Z.eqFlat(state.eq);
+}
+Z.EQ.bands.forEach(b=>{
+  $('eq-'+b).addEventListener('input',e=>{state.eq=Z.normEq(Object.assign({},state.eq,{[b]:+e.target.value}));E.setEq(state.eq);renderEq();U.persist()});
+  $('eq-'+b).addEventListener('change',()=>U.setStatus(Z.eqDb(state.eq[b])===0
+    ?Z.EQ.LABEL[b]+' back to flat · '+Z.EQ.SAYS[b]+' is left as it was'
+    :Z.EQ.LABEL[b]+' '+eqFmt(state.eq[b])+' at '+(Z.EQ.HZ[b]>=1000?Z.EQ.HZ[b]/1000+' kHz':Z.EQ.HZ[b]+' Hz')+': '+Z.EQ.SAYS[b]+'. You hear '+(eqAt(b)>=0?'+':'−')+Math.abs(eqAt(b))+' dB of it in the mix, and the WAV export is shaped the same.'));
+});
+$('eqFlat').addEventListener('click',()=>{state.eq=Z.normEq(null);E.setEq(state.eq);renderEq();U.persist();
+  U.setStatus('EQ flat: the whole mix passes through untouched')});
 /* the arp's own figure: the order it walks the chord in, how far up it reaches and how much of each step a
    note holds. These three make notes rather than shape a sound, so changing one rebuilds the song — and
    every one of them lives in state.arp, so it autosaves, undoes and goes out in the WAV and the MIDI. */
@@ -249,7 +288,7 @@ async function exportWav(){
   try{
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.init(off);
+    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;R.init(off);
     let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
@@ -333,7 +372,8 @@ $('scale').addEventListener('change',e=>{state.scale=e.target.value;U.regenerate
 $('energy').addEventListener('input',e=>{state.energy=+e.target.value;syncLabels();U.regenerate()});
 $('bpm').addEventListener('input',e=>{state.bpm=+e.target.value;E.setBpm(state.bpm);syncLabels();$('seed').value=U.code();U.renderArr();renderFavs();U.persist()});
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
-$('master').addEventListener('input',e=>{E.setMaster(+e.target.value);U.persist()});
+$('master').addEventListener('input',e=>{const v=+e.target.value;E.setMaster(v);
+  if(onMaster()){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()});
 $('warmth').addEventListener('input',e=>{state.warmth=+e.target.value;E.setWarmth(state.warmth);U.persist()});
 $('warmth').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Warmth '+v+' %: the whole mix through a soft clip with the top end rolled off a shade — the quiet half comes up, the peaks round over. The WAV export is warmed the same way.'

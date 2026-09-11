@@ -639,6 +639,74 @@ for(const bars of [1,2,4,8,16]){
   assert(Z.warmthShelf(100)<Z.warmthShelf(25),'more warmth must roll more of the top end off');
 }
 
+// the master EQ: three bands across the whole mix. A tone control you can lean on is one that cannot wreck
+// the mix, so whatever the three bands are set to, the EQ must hand back most of what it adds and never
+// make the master louder than the limiter can hold; every band must stay in its own part of the spectrum
+// and move the way its label says; and flat must be a true bypass, exactly like warmth at 0.
+{
+  const eqTag=e=>' [eq '+Z.EQ.bands.map(b=>b[0]+(e[b]>0?'+':'')+e[b]).join(' ')+']';
+  const probes=[20,40,80,160,320,640,1000,2000,4200,8000,14000,20000];
+  const ceiling=Z.EQ.headDb;
+  assert(Z.EQ.bands.length===3,'the master EQ has '+Z.EQ.bands.length+' bands, expected three');
+  assert(Z.EQ.maxDb>0&&Z.EQ.maxDb<=18,'an EQ band reaching '+Z.EQ.maxDb+' dB is not a tone control');
+  assert(Z.EQ.headDb>0&&Z.EQ.headDb<Z.EQ.maxDb,'the EQ headroom must be some of a band, not none of it and not all of it');
+  assert(Z.EQ.slack>0&&Z.EQ.slack<0.5,'the EQ needs a small margin for its sweep, not a large one');
+  assert(Z.EQ.HZ.low<Z.EQ.HZ.mid&&Z.EQ.HZ.mid<Z.EQ.HZ.high,'the EQ bands are not low, mid and high in that order');
+  Z.EQ.bands.forEach(b=>{
+    assert(Z.EQ.HZ[b]>=20&&Z.EQ.HZ[b]<=20000,'the '+b+' band sits at '+Z.EQ.HZ[b]+' Hz, outside hearing');
+    assert(typeof Z.EQ.LABEL[b]==='string'&&Z.EQ.LABEL[b],'the '+b+' band has no label');
+    assert(typeof Z.EQ.SAYS[b]==='string'&&Z.EQ.SAYS[b],'the '+b+' band has nothing to say for its tooltip');
+    assert(['lowshelf','peaking','highshelf'].includes(Z.EQ.TYPE[b]),'the '+b+' band is not a filter a browser has');
+  });
+  // flat is a true bypass, and anything that is not a setting at all reads as flat
+  const flat=Z.normEq(null);
+  assert(Z.eqFlat(flat),'a fresh EQ is not flat');
+  for(const junk of [null,undefined,{},{low:NaN,mid:'x',high:null},'nonsense',7])
+    assert(Z.eqFlat(Z.normEq(junk)),'an EQ of '+JSON.stringify(junk)+' should read as flat');
+  assert(Z.eqTrim(flat)===1&&Z.eqTrimDb(flat)===0,'a flat EQ must leave the level exactly alone');
+  probes.forEach(hz=>assert(Math.abs(Z.eqNetDb(flat,hz))<1e-9,'a flat EQ moved '+hz+' Hz, so it is not a bypass'));
+  // the knob: whole numbers inside ±100, clamped at both ends, and dB that follow it
+  assert(Z.eqAmt(140)===100&&Z.eqAmt(-140)===-100,'an EQ band past either end of the knob should clamp to it');
+  assert(Z.eqDb(100)===Z.EQ.maxDb&&Z.eqDb(-100)===-Z.EQ.maxDb&&Z.eqDb(0)===0,'the EQ knob does not run from a full cut to a full boost');
+  // every setting of the three bands, coarsely, plus the corners
+  const steps=[-100,-70,-35,-1,0,1,35,70,100];
+  let lifted=0;
+  for(const lo of steps)for(const mi of steps)for(const hi of steps){
+    const e=Z.normEq({low:lo,mid:mi,high:hi}),tag=eqTag(e),trim=Z.eqTrim(e),trimDb=Z.eqTrimDb(e),peak=Z.eqPeakDb(e);
+    assert(trim>0&&trim<=1,'an EQ trim of '+trim+' is outside (0, 1]'+tag);
+    assert(trimDb<=1e-9,'the EQ trim must take level off, never add it'+tag);
+    for(const hz of probes){
+      const raw=Z.eqBandsDb(e,hz),net=raw+trimDb;
+      assert(isFinite(net)&&isFinite(raw),'the EQ response at '+hz+' Hz is not a number'+tag);
+      assert(net<=ceiling+1e-6,'the EQ lifts '+hz+' Hz by '+net.toFixed(2)+' dB, past the '+ceiling+' dB of headroom it keeps'+tag);
+      // the sweep that sets the trim must find the real peak, to within the margin the trim allows for it
+      assert(raw<=peak+Z.EQ.slack,'the EQ peaks '+(raw-peak).toFixed(4)+' dB higher at '+hz+' Hz than the sweep found'+tag);
+      assert(net>=-(3*Z.EQ.maxDb)-1e-6,'the EQ buried '+hz+' Hz at '+net.toFixed(2)+' dB'+tag);
+      if(net>0.5)lifted++;
+    }
+    // the trim is exactly the promise: nothing at all until the bands run out of headroom, then the difference
+    assert(Math.abs(trimDb+Math.max(0,peak+Z.EQ.slack-Z.EQ.headDb))<1e-9,'the EQ did not hand back what it said it would'+tag);
+    if(peak+Z.EQ.slack<=Z.EQ.headDb)assert(trim===1,'an EQ inside its headroom must be exactly what was asked for'+tag);
+  }
+  assert(lifted>0,'no EQ setting anywhere made anything louder, so the boosts do nothing');
+  // each band moves its own frequency the way its label says, and leaves the far end of the spectrum alone
+  const only=(b,v)=>Z.normEq({low:0,mid:0,high:0,[b]:v});
+  const at={low:Z.EQ.HZ.low/4,mid:Z.EQ.HZ.mid,high:Z.EQ.HZ.high*3};
+  const far={low:Z.EQ.HZ.high*3,mid:20,high:Z.EQ.HZ.low/4};
+  Z.EQ.bands.forEach(b=>{
+    const up=Z.eqBandsDb(only(b,100),at[b]),down=Z.eqBandsDb(only(b,-100),at[b]);
+    assert(up>Z.EQ.maxDb*0.5,'the '+b+' band at full boost only reached '+up.toFixed(2)+' dB at '+Math.round(at[b])+' Hz');
+    assert(down<-Z.EQ.maxDb*0.5,'the '+b+' band at full cut only reached '+down.toFixed(2)+' dB at '+Math.round(at[b])+' Hz');
+    assert(up<=Z.EQ.maxDb+1e-6&&down>=-Z.EQ.maxDb-1e-6,'the '+b+' band went past the '+Z.EQ.maxDb+' dB on its knob');
+    assert(Math.abs(Z.eqBandsDb(only(b,100),far[b]))<1,'the '+b+' band reached all the way to '+Math.round(far[b])+' Hz, where it has no business');
+    // and it is monotonic: more knob is more decibels, all the way up and all the way down
+    let last=-99;
+    for(let v=-100;v<=100;v+=10){const g=Z.eqBandsDb(only(b,v),at[b]);
+      assert(g>last,'the '+b+' band did not rise between '+(v-10)+' and '+v+' on the knob');last=g}
+    assert(Math.abs(Z.eqBandsDb(only(b,0),at[b]))<1e-9,'the '+b+' band at 0 is not flat');
+  });
+}
+
 // drum kits and the perc row. Every kit must be able to play every row of the grid — a kit missing a recipe
 // would drop hits on the floor — and its perc voice must be one the engine synthesises and the MIDI export
 // has a GM note for. A generated perc figure stays off the backbeat the snare and clap own, never plays
@@ -781,7 +849,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
