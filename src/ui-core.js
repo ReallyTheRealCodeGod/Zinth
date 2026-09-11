@@ -130,10 +130,17 @@ function restore(p){
 }
 // autosave + undo history: every settled change becomes an undo step
 let persistTimer=null;const undo={stack:[],redo:[],last:null,quiet:false};
-function persist(){clearTimeout(persistTimer);persistTimer=setTimeout(()=>{
-  const s=JSON.stringify(snapshot());
-  if(s!==undo.last){if(undo.last&&!undo.quiet){undo.stack.push(undo.last);if(undo.stack.length>50)undo.stack.shift();undo.redo.length=0}undo.last=s}
-  undo.quiet=false;try{localStorage.setItem('zinth.project',s)}catch(e){}},300)}
+// persist(true) settles the change at once instead of waiting: opening a shared link uses it to make the
+// track you already had an undo step before the link replaces it, so Ctrl+Z always brings your own back
+function persist(now){
+  clearTimeout(persistTimer);
+  const settle=()=>{
+    const s=JSON.stringify(snapshot());
+    if(s!==undo.last){if(undo.last&&!undo.quiet){undo.stack.push(undo.last);if(undo.stack.length>50)undo.stack.shift();undo.redo.length=0}undo.last=s}
+    undo.quiet=false;try{localStorage.setItem('zinth.project',s)}catch(e){}
+  };
+  if(now)settle();else persistTimer=setTimeout(settle,300);
+}
 function undoStep(){if(!undo.stack.length){setStatus('Nothing to undo');return}const prev=undo.stack.pop();undo.redo.push(undo.last);undo.quiet=true;undo.last=prev;restore(JSON.parse(prev));setStatus('Undone ('+undo.stack.length+' more)')}
 function redoStep(){if(!undo.redo.length){setStatus('Nothing to redo');return}const nxt=undo.redo.pop();undo.stack.push(undo.last);undo.quiet=true;undo.last=nxt;restore(JSON.parse(nxt));setStatus('Redone')}
 

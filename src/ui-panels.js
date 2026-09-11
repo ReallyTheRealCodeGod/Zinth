@@ -358,6 +358,52 @@ $('saveProj').addEventListener('click',async()=>{const name='zinth-'+state.seeds
 $('openProj').addEventListener('click',()=>$('projFile').click());
 $('projFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{U.restore(JSON.parse(r.result));U.setStatus('Opened '+f.name)}catch(err){U.setStatus('Could not open: '+err.message)}};r.readAsText(f);e.target.value=''});
 
+/* ---------- shareable links ----------
+   Copy link writes the whole project into the address bar and onto the clipboard: the song travels inside
+   the link itself, so there is nothing to upload, nothing to sign in to and nothing that can go stale.
+   Opening a link — pasted into the bar of an open Zinth, or followed from a chat — restores it through the
+   same restore() Open uses, with the track you already had kept one Ctrl+Z away. */
+let ourHash='';
+function clearHash(){
+  ourHash='';
+  try{history.replaceState(null,'',location.pathname+location.search)}
+  catch(e){try{location.hash=''}catch(err){}}   // a page opened from a file cannot rewrite its own URL
+}
+async function toClipboard(text){
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true}}catch(e){}
+  try{
+    const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:-1000px;left:0;opacity:0';
+    document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand('copy');ta.remove();return ok;
+  }catch(e){return false}
+}
+async function copyLink(){
+  const btn=$('copyLink');btn.disabled=true;
+  try{
+    const hash=Z.linkHash(U.snapshot()),url=location.href.split('#')[0]+hash;
+    ourHash=hash;try{location.hash=hash}catch(e){}
+    const kb=Math.round(url.length/102.4)/10,long=url.length>Z.LINK.maxBytes;
+    const size=' · '+(url.length<1024?url.length+' characters':kb+' KB')+' of link, and not a byte of it leaves this browser'+
+      (long?' — this one is long, so a chat window may cut it in half; Save writes a .json file instead':'');
+    U.setStatus((await toClipboard(url)?'Link copied. Paste it anywhere — whoever opens it gets this whole song: key, chords, arrangement, your notes and every sound'
+      :'Link is in the address bar — copy it from there. Whoever opens it gets this whole song')+size);
+  }catch(err){U.setStatus('Could not make a link: '+(err&&err.message||err))}
+  btn.disabled=false;
+}
+function openLink(str){
+  const p=Z.linkDecode(str);
+  if(!p){U.setStatus('That link does not carry a Zinth song');return false}
+  try{U.restore(p)}catch(err){U.setStatus('Could not open that link: '+(err&&err.message||err));return false}
+  clearHash();
+  U.setStatus('Opened a shared song · it is yours now — reroll it, draw in it, export it. Ctrl+Z brings back the track you had.');
+  return true;
+}
+$('copyLink').addEventListener('click',copyLink);
+// a link pasted into the address bar of an open Zinth only changes the hash, so listen for that — but
+// ignore the hash Copy link just wrote, which is this very song
+window.addEventListener('hashchange',()=>{if(location.hash&&location.hash!==ourHash)openLink(location.hash)});
+
 /* ---------- transport & track controls ---------- */
 function setPlaying(on){$('play').classList.toggle('on',on);$('play').setAttribute('aria-pressed',on);$('playLabel').textContent=on?'Stop':'Play';
   if(!on){$('leds').querySelectorAll('.led').forEach(l=>l.classList.remove('on'));U.drawFrame(-1);Object.keys(fxHeld).forEach(fxUp);$('pads').querySelectorAll('.pad.now').forEach(el=>el.classList.remove('now'))}U.renderArr()}
@@ -515,6 +561,10 @@ Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,render
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();
-if(!seen){showSheet(true);try{localStorage.setItem('zinth.seen','1')}catch(e){}}
+// a link in the address bar wins over the autosave — but settle the autosave into the undo history first,
+// so opening someone else's song never costs you your own: Ctrl+Z brings it straight back
+const booted=Z.linkPayload(location.hash);
+if(booted){U.persist(true);if(!openLink(location.hash))clearHash()}
+if(!seen&&!booted){showSheet(true);try{localStorage.setItem('zinth.seen','1')}catch(e){}}
 requestAnimationFrame(raf);
 })();

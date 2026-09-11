@@ -625,6 +625,206 @@ function fadeGain(plan,t){
   }
   return plan[plan.length-1].g;
 }
+/* ================= shareable links =================
+   A whole song in a URL. The hash carries the very same project snapshot Save writes, as JSON in base64url:
+   no compression, no library, nothing to install, and nothing between the link and the song but the address
+   bar. Two things keep a link short enough to paste anywhere. A project is canonicalised first — notes, drum
+   rows, sections and sounds all normalised the way the app itself reads them, and written in their shortest
+   honest form: a note is [step, length, pitch, velocity], a drum row is only the hits that are in it, a
+   section that is exactly its type is just that type's name. Then everything still sitting at its default is
+   left out altogether and put back on the way in, so a fresh track is a few hundred characters and a whole
+   demo song with its own chords, drums and hook is a couple of thousand.
+   Because both ends of the journey run through linkNorm, a link round-trips exactly: what comes back out of
+   one is the same project, note for note, which is what the theory check proves over every demo song. */
+const LINK={v:2,hash:'#z=',maxBytes:8192,lanes:['lead','arp','bass'],
+  fields:['part','bars','energy','transpose','hook','double','sweep','fade'],
+  dflt:{mood:'chill',root:0,scale:'dorian',bpm:112,energy:55,swing:12,gate:0.7,warmth:WARMTH.dflt,
+    kit:'808',sel:0,layer:'lead',recTarget:'lead',master:80}};
+const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+// UTF-8 and base64url by hand: a link must survive an address bar, an email and a chat window, and it must
+// mean the same thing in a browser and in the headless check, so neither end depends on anything but JSON.
+function utf8Bytes(s){
+  const out=[];
+  for(let i=0;i<s.length;i++){
+    let c=s.charCodeAt(i);
+    if(c>=0xd800&&c<=0xdbff&&i+1<s.length){const d=s.charCodeAt(i+1);if(d>=0xdc00&&d<=0xdfff){c=0x10000+((c-0xd800)<<10)+(d-0xdc00);i++}}
+    if(c<0x80)out.push(c);
+    else if(c<0x800)out.push(0xc0|(c>>6),0x80|(c&63));
+    else if(c<0x10000)out.push(0xe0|(c>>12),0x80|((c>>6)&63),0x80|(c&63));
+    else out.push(0xf0|(c>>18),0x80|((c>>12)&63),0x80|((c>>6)&63),0x80|(c&63));
+  }
+  return out;
+}
+function bytesUtf8(b){
+  let s='';
+  for(let i=0;i<b.length;){
+    const c=b[i++];let u;
+    if(c<0x80)u=c; else if(c<0xe0)u=((c&31)<<6)|(b[i++]&63);
+    else if(c<0xf0)u=((c&15)<<12)|((b[i++]&63)<<6)|(b[i++]&63);
+    else u=((c&7)<<18)|((b[i++]&63)<<12)|((b[i++]&63)<<6)|(b[i++]&63);
+    if(u>0xffff){u-=0x10000;s+=String.fromCharCode(0xd800+(u>>10),0xdc00+(u&1023))}else s+=String.fromCharCode(u);
+  }
+  return s;
+}
+function b64url(bytes){
+  let s='';
+  for(let i=0;i<bytes.length;i+=3){
+    const a=bytes[i],b=bytes[i+1],c=bytes[i+2],n=(a<<16)|((b||0)<<8)|(c||0);
+    s+=B64[(n>>18)&63]+B64[(n>>12)&63]+(b===undefined?'':B64[(n>>6)&63])+(c===undefined?'':B64[n&63]);
+  }
+  return s;
+}
+function unb64url(str){
+  const out=[];let n=0,bits=0;
+  for(let i=0;i<str.length;i++){
+    const v=B64.indexOf(str.charAt(i));if(v<0)return null;
+    n=(n<<6)|v;bits+=6;
+    if(bits>=8){bits-=8;out.push((n>>bits)&255)}
+  }
+  return out.length?out:null;
+}
+const linkInt=(v,a,b,d)=>{const n=Math.round(+v);return isFinite(n)?Math.max(a,Math.min(b,n)):d};
+const linkNum=(v,a,b,d)=>{const n=+v;return isFinite(n)?Math.max(a,Math.min(b,n)):d};
+// velocities are written to a ten-thousandth: far finer than anything you could hear, and it keeps a drum
+// row from spending twenty characters on the tail of a floating-point number
+const r4=v=>Math.round(v*1e4)/1e4;
+const linkLayers=()=>(window.Z&&window.Z.LAYERS)||['lead','arp','chords','bass','drums'];
+// a note as the app stores it, from either form: an object from a project or a [step,dur,midi,vel] tuple
+function normNotes(list){
+  if(!Array.isArray(list))return null;
+  const out=[];
+  for(const x of list){
+    const e=Array.isArray(x)?{step:x[0],dur:x[1],midi:x[2],vel:x[3]}:(x||{});
+    const step=Math.round(+e.step),dur=Math.round(+e.dur),midi=Math.round(+e.midi);
+    if(!(step>=0&&step<TOTAL)||!(dur>=1)||!(midi>=0&&midi<=127))continue;
+    out.push({step,dur,midi,vel:r4(+e.vel>0?Math.min(1,+e.vel):0.85)});
+  }
+  out.sort((a,b)=>a.step-b.step||a.midi-b.midi);
+  return out;
+}
+// a section as the arranger holds it: its type's own settings, with whatever the project changed on top
+function normSection(sec){
+  const type=typeof sec==='string'?sec:(sec&&sec.type),s=sectionOf(type),o=(sec&&typeof sec==='object')?sec:{};
+  if(o.part==='v'||o.part==='c')s.part=o.part;
+  s.bars=linkInt(o.bars,1,64,s.bars);
+  s.energy=linkInt(o.energy,-100,100,s.energy);
+  s.transpose=linkInt(o.transpose,-12,12,s.transpose);
+  if(o.hook!==undefined)s.hook=!!o.hook;
+  if(o.double!==undefined)s.double=!!o.double;
+  if(SWEEP_MODES.indexOf(o.sweep)>=0)s.sweep=o.sweep;
+  if(FADE_MODES.indexOf(o.fade)>=0)s.fade=o.fade;
+  for(const L in s.layers){const v=o.layers&&o.layers[L];if(v!==undefined)s.layers[L]=v==='lite'?'lite':(v?1:0)}
+  return s;
+}
+// the one shape everything here agrees on: a project with every field filled in and every value in range,
+// so a project and the link made from it can be compared note for note
+function linkNorm(p){
+  const s=(p&&p.state)||{},L=linkLayers(),D=LINK.dflt,txt=(v,d)=>typeof v==='string'&&v?v:d;
+  const seeds={},locks={};
+  for(const k of L){seeds[k]=String((s.seeds&&s.seeds[k])||'');locks[k]=!!(s.locks&&s.locks[k])}
+  const scale=SCALES[s.scale]?s.scale:D.scale,n=chordScaleOf(scale).steps.length;
+  const pair=(o,f)=>({v:f(o&&o.v)||null,c:f(o&&o.c)||null});
+  const sections=(Array.isArray(s.sections)&&s.sections.length?s.sections:DEFAULT_FORM).map(normSection);
+  const st={seeds,locks,mood:txt(s.mood,D.mood),root:linkInt(s.root,0,11,D.root),scale,
+    bpm:linkInt(s.bpm,60,180,D.bpm),energy:linkInt(s.energy,0,100,D.energy),swing:linkInt(s.swing,0,60,D.swing),
+    evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:(+s.gate>0&&+s.gate<=1)?+s.gate:D.gate,
+    warmth:linkNum(s.warmth,0,100,D.warmth),eq:normEq(s.eq),arp:normArp(s.arp),
+    prog:pair(s.prog,x=>normProg(x,n)),
+    drumEdits:pair(s.drumEdits,x=>{if(!x)return null;const P=normDrumPattern(x);for(const k of DRUM_KINDS)P[k]=P[k].map(r4);return P}),
+    kit:txt(s.kit,D.kit),transitions:s.transitions!==false,sections,
+    sel:linkInt(s.sel,0,sections.length-1,D.sel),
+    layer:(L.indexOf(s.layer)>=0||s.layer==='master')?s.layer:D.layer,
+    recTarget:LINK.lanes.indexOf(s.recTarget)>=0?s.recTarget:D.recTarget};
+  for(const lane of LINK.lanes)st[lane+'Edits']=pair(s[lane+'Edits'],normNotes);
+  const DEF=(window.Z&&window.Z.DEFAULTS)||{},params={};
+  for(const k of L){
+    const d=DEF[k]||{},src=(p&&p.params&&p.params[k])||{},o={};
+    for(const f in d){const v=src[f],t=typeof d[f];
+      o[f]=t==='boolean'?(v===undefined?d[f]:!!v):t==='number'?linkNum(v,-1e6,1e6,d[f]):txt(v,d[f])}
+    params[k]=o;
+  }
+  return {app:'zinth',v:2,state:st,params,master:linkNum(p&&p.master,0,100,D.master)};
+}
+/* Everything below turns that canonical project into the shortest honest JSON and back again. A value that
+   is absent from a link is a value that was still at its default, so leaving it out costs nothing. */
+const slimNotes=list=>list.map(e=>[e.step,e.dur,e.midi,e.vel]);
+const slimProg=list=>list.map(e=>(e.bars===undefined&&e.seventh===undefined&&e.inv===undefined)?e.d:e);
+function slimDrum(P){
+  const o={};if(P.fill===false)o.f=0;
+  for(const k of DRUM_KINDS){const hits=[];P[k].forEach((v,i)=>{if(v>0)hits.push([i,v])});if(hits.length)o[k]=hits}
+  return o;
+}
+function fatDrum(d){
+  const P={fill:!(d&&d.f===0)};
+  for(const k of DRUM_KINDS){const row=new Array(16).fill(0);
+    ((d&&Array.isArray(d[k]))?d[k]:[]).forEach(h=>{const i=Math.round(h&&h[0]),v=+(h&&h[1]);if(i>=0&&i<16&&v>0)row[i]=Math.min(1,v)});
+    P[k]=row}
+  return P;
+}
+function slimSection(sec){
+  const base=sectionOf(sec.type),diff={},eq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  for(const k of LINK.fields)if(!eq(sec[k],base[k]))diff[k]=sec[k];
+  const lay={};for(const L in base.layers)if(sec.layers[L]!==base.layers[L])lay[L]=sec.layers[L];
+  if(Object.keys(lay).length)diff.layers=lay;
+  return Object.keys(diff).length?[sec.type,diff]:sec.type;
+}
+const fatSection=x=>Array.isArray(x)?Object.assign({type:x[0]},x[1]||{}):x;
+function linkSlim(p){
+  const c=linkNorm(p),s=c.state,D=LINK.dflt,L=linkLayers(),st={},out={z:LINK.v};
+  const seeds=L.map(k=>s.seeds[k]);
+  st.seeds=seeds.every(x=>x===seeds[0])?seeds[0]:seeds;
+  const locked=L.filter(k=>s.locks[k]);if(locked.length)st.locks=locked;
+  for(const k of ['mood','root','scale','bpm','energy','swing','gate','warmth','kit','sel','layer','recTarget'])
+    if(s[k]!==D[k])st[k]=s[k];
+  if(!s.evolve)st.evolve=false;
+  if(s.sevenths)st.sevenths=true;
+  if(!s.transitions)st.transitions=false;
+  if(!eqFlat(s.eq))st.eq=s.eq;
+  const A=normArp(null);if(s.arp.mode!==A.mode||s.arp.octaves!==A.octaves||s.arp.gate!==A.gate)st.arp=s.arp;
+  const pair=(o,f)=>{const r={};if(o.v)r.v=f(o.v);if(o.c)r.c=f(o.c);return Object.keys(r).length?r:null};
+  const put=(k,v)=>{if(v)st[k]=v};
+  put('prog',pair(s.prog,slimProg));
+  put('drumEdits',pair(s.drumEdits,slimDrum));
+  for(const lane of LINK.lanes)put(lane+'Edits',pair(s[lane+'Edits'],slimNotes));
+  const form=s.sections.map(slimSection);
+  if(JSON.stringify(form)!==JSON.stringify(DEFAULT_FORM))st.sections=form;
+  out.s=st;
+  const DEF=(window.Z&&window.Z.DEFAULTS)||{},pm={};
+  for(const k of L){const d=DEF[k]||{},o={};for(const f in d)if(c.params[k][f]!==d[f])o[f]=c.params[k][f];
+    if(Object.keys(o).length)pm[k]=o}
+  if(Object.keys(pm).length)out.p=pm;
+  if(c.master!==D.master)out.m=c.master;
+  return out;
+}
+function linkFat(o){
+  const s=(o&&o.s)||{},L=linkLayers(),seeds={},locks={};
+  L.forEach((k,i)=>seeds[k]=Array.isArray(s.seeds)?s.seeds[i]:s.seeds);
+  (Array.isArray(s.locks)?s.locks:[]).forEach(k=>{locks[k]=true});
+  const pair=(x,f)=>({v:(x&&x.v)?f(x.v):null,c:(x&&x.c)?f(x.c):null});
+  const st=Object.assign({},s,{seeds,locks,prog:pair(s.prog,x=>x),drumEdits:pair(s.drumEdits,fatDrum),
+    sections:Array.isArray(s.sections)?s.sections.map(fatSection):null});
+  for(const lane of LINK.lanes)st[lane+'Edits']=pair(s[lane+'Edits'],x=>x);
+  return linkNorm({app:'zinth',v:2,state:st,params:o&&o.p,master:o&&o.m});
+}
+const linkEncode=p=>b64url(utf8Bytes(JSON.stringify(linkSlim(p))));
+// what a link says, from a bare code, a hash or a whole URL — and nothing at all from anything else
+function linkPayload(str){
+  let s=String(str==null?'':str).trim();
+  const i=s.indexOf(LINK.hash);
+  if(i>=0)s=s.slice(i+LINK.hash.length);
+  else if(s.slice(0,3)==='#z=')s=s.slice(3);
+  else if(s.slice(0,2)==='z=')s=s.slice(2);
+  return /^[A-Za-z0-9_-]{8,}$/.test(s)?s:null;
+}
+function linkDecode(str){
+  const code=linkPayload(str);if(!code)return null;
+  const bytes=unb64url(code);if(!bytes)return null;
+  let o=null;try{o=JSON.parse(bytesUtf8(bytes))}catch(e){return null}
+  if(!o||typeof o!=='object'||!(o.z>=1)||!o.s)return null;
+  try{return linkFat(o)}catch(e){return null}
+}
+const linkHash=p=>LINK.hash+linkEncode(p);
+
 function generateTrack(cfg,seeds,part,loop){
   const clamp=v=>Math.max(0,Math.min(100,v));
   cfg=Object.assign({},cfg,{energy:clamp(cfg.energy)});
@@ -652,5 +852,6 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
   ARP,ARP_MODES,ARP_FIGURES,normArp,arpOctaves,arpGate,arpDur,arpNotes,arpIndex,progCode,parseProgCode,SWEEP,SWEEP_MODES,sweepPlan,FADE,FADE_MODES,fadePlan,fadeGain,DRIFT,driftCents,driftCutoff,
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
-  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates});
+  GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,
+  LINK,normNotes,normSection,linkNorm,linkSlim,linkFat,linkEncode,linkDecode,linkPayload,linkHash});
 })();

@@ -927,6 +927,145 @@ for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<
   }
 }
 
+/* Shareable links. A link carries a whole project, so it carries notes: what comes back out of one has to
+   be the same song, and it has to be a song that is still in its key. Every project here is canonicalised
+   (Z.linkNorm) and then put through the link and back, and both ends are generated section by section and
+   compared note for note — chords, lead, arp, bass and drums — before every note is checked against the
+   scale. The link is proved to be URL-safe, to stay under Z.LINK.maxBytes for an ordinary song, to leave
+   defaults out rather than spell them, and to refuse anything that is not a Zinth link. */
+{
+  const projects=[];
+  {
+    const seeds={},locks={};Z.LAYERS.forEach(L=>{seeds[L]='LINKS1';locks[L]=false});
+    projects.push(['a fresh track',{app:'zinth',v:2,master:80,params:JSON.parse(JSON.stringify(Z.DEFAULTS)),
+      state:{seeds,locks,mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,
+        warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),prog:{v:null,c:null},drumEdits:{v:null,c:null},
+        leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,
+        sections:Z.DEFAULT_FORM.map(Z.sectionOf),sel:0,layer:'lead',recTarget:'lead'}}]);
+  }
+  for(const d of Z.DEMOS)projects.push(['“'+d.name+'”',Z.demoProject(d.id)]);
+  const typical=projects.length;
+  // the heaviest project the app can make: a long form, every lane drawn in both parts, nothing at a default
+  {
+    const P=Z.demoProject('drive'),S=P.state;
+    S.sections=S.sections.concat(JSON.parse(JSON.stringify(S.sections))).slice(0,16);
+    for(const p of ['v','c'])for(const L of ['arp','bass']){
+      const rows=Z.lanePitches(L,S.root,S.scale),list=[];
+      for(let s=0;s<Z.TOTAL;s+=(L==='arp'?1:2))list.push({step:s,dur:L==='arp'?1:2,midi:rows[(s*3)%rows.length].midi,vel:0.8});
+      S[L+'Edits'][p]=list;
+    }
+    // a layer rerolled on its own dice has a seed of its own, so a link has to carry all five
+    Z.LAYERS.forEach((L,i)=>S.seeds[L]='ROLL'+i+'X');
+    S.locks.lead=true;S.eq={low:40,mid:-20,high:15};S.arp={mode:'chord',octaves:3,gate:38};
+    S.layer='master';S.recTarget='bass';S.sel=3;S.evolve=false;S.transitions=false;P.master=62;
+    // sections the arranger changed by hand, so a link has to carry more than the name of a type
+    Object.assign(S.sections[1],{bars:16,transpose:3,sweep:'down',fade:'in',hook:true,double:true,energy:7,
+      layers:Object.assign({},S.sections[1].layers,{lead:0,drums:'lite',arp:1})});
+    Object.assign(S.sections[4],{part:'c',bars:4,sweep:'up',layers:Object.assign({},S.sections[4].layers,{bass:0})});
+    projects.push(['a project with every lane drawn',P]);
+  }
+  const sectionTrack=(P,sec)=>{
+    const S=P.state,root=(S.root+(sec.transpose||0)+120)%12;
+    return Z.generateTrack({root,transpose:sec.transpose||0,scale:S.scale,energy:S.energy+sec.energy,
+      leadEnergy:S.energy+(sec.part==='c'?10:0),evolve:S.evolve,sevenths:S.sevenths,gate:S.gate,arp:S.arp,hook:!!sec.hook,
+      prog:S.prog[sec.part],drumPattern:S.drumEdits[sec.part],
+      leadEvents:S.leadEdits[sec.part],arpEvents:S.arpEdits[sec.part],bassEvents:S.bassEdits[sec.part]},S.seeds,sec.part,0);
+  };
+  projects.forEach(([name,p],pi)=>{
+    const tag=' [link · '+name+']',canon=Z.linkNorm(p),code=Z.linkEncode(p),hash=Z.linkHash(p);
+    assert(/^[A-Za-z0-9_-]+$/.test(code),'a link is not URL-safe: it would not survive an address bar'+tag);
+    assert(hash===Z.LINK.hash+code,'a link hash is not the link'+tag);
+    if(pi<typical)assert(code.length<=Z.LINK.maxBytes,'an ordinary song makes a '+code.length+' character link, past the '+Z.LINK.maxBytes+' the roadmap promises'+tag);
+    else assert(code.length<=4*Z.LINK.maxBytes,'even the heaviest project should not make a '+code.length+' character link'+tag);
+    const back=Z.linkDecode(hash);
+    assert(!!back,'a link made by Zinth does not open in Zinth'+tag);
+    if(!back)return;
+    assert(JSON.stringify(back)===JSON.stringify(canon),'a link does not bring the project back unchanged'+tag);
+    assert(JSON.stringify(Z.linkDecode(code))===JSON.stringify(back),'a bare link code opens differently from a hash'+tag);
+    assert(JSON.stringify(Z.linkSlim(back))===JSON.stringify(Z.linkSlim(p)),'a link made from a link is a different link'+tag);
+    assert(back.app==='zinth'&&!!back.state&&!!back.params,'a link does not open as a Zinth project'+tag);
+    // the song itself: the same notes at both ends of the link, and every one of them in the key
+    const S=back.state,cs=Z.chordScaleOf(S.scale);
+    S.sections.forEach((sec,i)=>{
+      const st=' · section '+(i+1)+' '+sec.type+tag;
+      const a=sectionTrack(canon,canon.state.sections[i]),b=sectionTrack(back,sec);
+      ['lead','arp','bass','drums'].forEach(k=>assert(JSON.stringify(a[k])===JSON.stringify(b[k]),
+        'the '+k+' plays differently after a link'+st));
+      assert(JSON.stringify(a.chords.map(c=>c.notes))===JSON.stringify(b.chords.map(c=>c.notes)),'the chords play differently after a link'+st);
+      const root=(S.root+(sec.transpose||0)+120)%12,melPcs=pcsOf(root,Z.SCALES[S.scale].steps),chPcs=pcsOf(root,cs.steps);
+      b.chords.forEach(c=>c.notes.forEach(m=>assert(chPcs.has(((m%12)+12)%12),'a chord tone from a link is outside the scale'+st)));
+      b.lead.forEach(e=>assert(melPcs.has(((e.midi%12)+12)%12),'a lead note from a link is outside the scale'+st));
+      b.arp.forEach(e=>assert(chPcs.has(((e.midi%12)+12)%12),'an arp note from a link is outside the scale'+st));
+      b.bass.forEach(e=>{assert(chPcs.has(((e.midi%12)+12)%12),'a bass note from a link is outside the scale'+st);
+        assert(e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'a bass note from a link is out of register'+st)});
+      tracks++;
+    });
+  });
+  // defaults are left out rather than spelled: a fresh track is a link you could read down the phone
+  {
+    const slim=Z.linkSlim(projects[0][1]),code=Z.linkEncode(projects[0][1]);
+    assert(code.length<400,'a fresh track makes a '+code.length+' character link: defaults are not being left out');
+    assert(slim.p===undefined&&slim.m===undefined,'a link spells out sounds that are still at their defaults');
+    assert(slim.s.sections===undefined,'a link spells out the form a fresh track already has');
+    assert(slim.s.eq===undefined&&slim.s.arp===undefined&&slim.s.evolve===undefined&&slim.s.transitions===undefined,
+      'a link spells out settings that are still at their defaults');
+    assert(typeof slim.s.seeds==='string','five identical seeds are written out five times');
+  }
+  // anything that is not a Zinth link is refused rather than half-opened
+  ['','#z=','z=','#z=!!!!!!!!','not a link at all','#z='+Z.linkEncode(projects[0][1]).slice(0,6),
+   '#z='+(()=>{const s=JSON.stringify({hello:1});let b='';for(let i=0;i<s.length;i++)b+=s.charCodeAt(i);return 'AAAAAAAAAAAA'})(),
+   null,undefined,{}].forEach(bad=>assert(Z.linkDecode(bad)===null,'a link that is not a Zinth link was opened anyway: '+String(bad)));
+  // a link written by hand, with nonsense in every field, still opens as a project that plays in key
+  {
+    const junk=Z.linkFat({z:2,s:{seeds:['','','','',''],root:99,scale:'nope',bpm:9999,energy:-40,swing:900,gate:17,
+      kit:{},mood:7,sel:42,layer:'guitar',recTarget:'kazoo',sections:['Nonsense',['Chorus',{bars:'x',sweep:'sideways',layers:{lead:'yes'}}]],
+      leadEdits:{v:[[9999,1,60,0.8],[4,0,60,0.8],[8,2,'x',0.8],[12,2,64,5]]},drumEdits:{v:{kick:[[0,1],[99,1],[3,-2]]}}}});
+    const tag=' [link · a link written by hand]';
+    assert(!!Z.SCALES[junk.state.scale]&&junk.state.root>=0&&junk.state.root<12,'a junk link did not land on a real key and scale'+tag);
+    assert(junk.state.bpm<=180&&junk.state.bpm>=60&&junk.state.energy>=0&&junk.state.swing<=60,'a junk link left a control outside its slider'+tag);
+    junk.state.sections.forEach(sec=>{
+      assert(!!Z.SEC_TYPES[sec.type],'a junk link made up a section type'+tag);
+      assert(Z.SWEEP_MODES.indexOf(sec.sweep)>=0&&Z.FADE_MODES.indexOf(sec.fade)>=0,'a junk link made up a sweep or a fade'+tag);
+    });
+    assert(junk.state.leadEdits.v.length===1&&junk.state.leadEdits.v[0].step===12&&junk.state.leadEdits.v[0].vel<=1,
+      'a junk link kept a note that could not be played'+tag);
+    assert(junk.state.drumEdits.v.kick[0]===1&&junk.state.drumEdits.v.kick.length===16,'a junk link kept a drum hit off the grid'+tag);
+    const melPcs=pcsOf(junk.state.root,Z.SCALES[junk.state.scale].steps);
+    junk.state.sections.forEach((sec,i)=>{
+      const t=sectionTrack(junk,sec);tracks++;
+      t.lead.forEach(e=>assert(melPcs.has(((e.midi%12)+12)%12),'a junk link played a lead note outside the scale · section '+(i+1)+tag));
+    });
+  }
+  // a link is UTF-8, so a name with something other than plain letters in it survives the journey —
+  // two bytes, three bytes and a surrogate pair from the far end of the range alike
+  {
+    const P=Z.demoProject('retro'),kit='Brø♯eaks',mood='🎛 𠀀 retro';
+    P.state.kit=kit;P.state.mood=mood;
+    const back=Z.linkDecode(Z.linkHash(P));
+    assert(!!back&&back.state.kit===kit&&back.state.mood===mood,'a link cannot carry text outside plain ASCII');
+  }
+  // a link that has been damaged on the way — a character dropped in a chat window, one letter changed —
+  // either opens as a real Zinth project or is refused. There is no half-open song.
+  {
+    const code=Z.linkEncode(projects[1][1]),tag=' [link · a damaged link]';
+    const damaged=[code.slice(0,-1),code.slice(1),code.slice(0,40)+code.slice(41)];
+    for(let i=0;i<code.length;i+=Math.max(1,Math.floor(code.length/24)))
+      damaged.push(code.slice(0,i)+(code.charAt(i)==='A'?'B':'A')+code.slice(i+1));
+    damaged.forEach(bad=>{
+      const p=Z.linkDecode(Z.LINK.hash+bad);
+      if(!p)return;
+      assert(p.app==='zinth'&&!!Z.SCALES[p.state.scale]&&p.state.sections.length>0,'a damaged link opened as something that is not a project'+tag);
+      const S=p.state,cs=Z.chordScaleOf(S.scale);
+      S.sections.forEach(sec=>{
+        const root=(S.root+(sec.transpose||0)+120)%12,melPcs=pcsOf(root,Z.SCALES[S.scale].steps),chPcs=pcsOf(root,cs.steps);
+        const t=sectionTrack(p,sec);tracks++;
+        t.lead.forEach(e=>assert(melPcs.has(((e.midi%12)+12)%12),'a damaged link played a lead note outside the scale'+tag));
+        t.bass.forEach(e=>assert(chPcs.has(((e.midi%12)+12)%12)&&e.midi>=Z.BASS_LO&&e.midi<=Z.BASS_HI,'a damaged link played a bass note outside the scale or its register'+tag));
+      });
+    });
+  }
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -936,7 +1075,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
