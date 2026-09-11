@@ -1347,6 +1347,87 @@ for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<
   }
 }
 
+/* ---- stems ----
+   A stems export is a promise about a folder: one file for every layer you can hear in the mix, none for a
+   layer you cannot, and all of them lining up when they are dropped into a DAW at zero. The render is audio
+   and cannot run here, but everything that decides what the folder holds is arithmetic — which layers the
+   song actually plays, what the mixer is doing to them, and what each file is called — and that is where a
+   stems export goes wrong: a silent file for a muted layer, two files sharing one name, a name a computer
+   will not write. */
+{
+  const SEEDS={chords:'STEM01',lead:'STEM01l',arp:'STEM01a',bass:'STEM01b',drums:'STEM01d'};
+  // a whole song the way the app builds one: the default form, every section carrying its generated track
+  const built=Z.DEFAULT_FORM.map(type=>{
+    const s=Z.sectionOf(type);
+    const cfg={root:0,scale:'dorian',energy:55+s.energy,leadEnergy:55,evolve:true,sevenths:true,gate:0.7,hook:!!s.hook};
+    tracks++;
+    return Object.assign({},s,{track:Z.generateTrack(cfg,SEEDS,s.part,0)});
+  });
+  const mixer=over=>{const p={};Z.LAYERS.forEach(L=>p[L]=Object.assign({mute:false,solo:false},(over||{})[L]));return p};
+  const plain=mixer();
+  // a plan reads as a folder: layers in mixer order, numbered from one without a gap, every name unique,
+  // safe to write anywhere, and saying which layer it holds
+  const folder=(plan,t)=>{
+    const names=new Set();
+    let last=-1;
+    plan.forEach((s,i)=>{
+      assert(Z.LAYERS.includes(s.layer),'a stem is for "'+s.layer+'", which is not a layer'+t);
+      assert(Z.LAYERS.indexOf(s.layer)>last,'the stems are not in mixer order'+t);
+      last=Z.LAYERS.indexOf(s.layer);
+      assert(!names.has(s.name),'two stems are both called '+s.name+t);
+      names.add(s.name);
+      assert(/^[A-Za-z0-9._-]+$/.test(s.name),'the stem name "'+s.name+'" is not one every computer can write'+t);
+      assert(s.name.slice(-4)==='.'+Z.STEMS.ext,'the stem '+s.name+' is not a .'+Z.STEMS.ext+' file'+t);
+      assert(s.name.indexOf('-'+(i+1)+'-'+s.layer+'.')>0,'the stem '+s.name+' is not numbered '+(i+1)+' for the '+s.layer+t);
+    });
+  };
+  {
+    const plan=Z.stemPlan(built,plain,'zinth-STEM01'),t=' [stems · whole song]';
+    folder(plan,t);
+    assert(plan.length===Z.LAYERS.length,'a whole song made '+plan.length+' stems, expected one per layer'+t);
+    Z.LAYERS.forEach(L=>assert(plan.some(s=>s.layer===L),'the whole song made no '+L+' stem'+t));
+    assert(JSON.stringify(Z.stemPlan(built,plain,'zinth-STEM01'))===JSON.stringify(plan),'the same song planned two different folders'+t);
+    assert(Z.STEMS.tailSec>0,'a stem is cut off the moment the last note is played');
+  }
+  // the mixer decides what is in the folder: a muted layer is silence, and so is a layer soloed out
+  for(const L of Z.LAYERS){
+    const t=' [stems · '+L+' muted]';
+    const plan=Z.stemPlan(built,mixer({[L]:{mute:true}}),'zinth');
+    assert(!plan.some(s=>s.layer===L),'a muted '+L+' still came out as a stem'+t);
+    assert(plan.length===Z.LAYERS.length-1,'muting '+L+' left '+plan.length+' stems'+t);
+    folder(plan,t);
+    const solo=Z.stemPlan(built,mixer({[L]:{solo:true}}),'zinth'),ts=' [stems · '+L+' soloed]';
+    assert(solo.length===1&&solo[0].layer===L,'soloing '+L+' gave '+solo.length+' stems'+ts);
+    folder(solo,ts);
+    assert(Z.stemPlan(built,mixer({[L]:{mute:true,solo:true}}),'zinth').length===0,
+      'a layer that is both muted and soloed is silence, but it made a folder'+t);
+  }
+  // a layer the song never plays gets no file: not one that is switched off in every section, and not one
+  // with nothing written in it anywhere
+  {
+    const off=built.map(s=>Object.assign({},s,{layers:Object.assign({},s.layers,{arp:0})}));
+    const t=' [stems · arp switched off]';
+    assert(Z.stemPlays(built,'arp'),'the song does not play its arp at all'+t);
+    assert(!Z.stemPlays(off,'arp'),'a layer switched off in every section still counts as played'+t);
+    const plan=Z.stemPlan(off,plain,'zinth');
+    assert(!plan.some(s=>s.layer==='arp'),'an arp that never plays still came out as a stem'+t);
+    folder(plan,t);
+    const empty=built.map(s=>Object.assign({},s,{track:{byStep:{lead:[],arp:[],chords:[],bass:[],drums:[]}}}));
+    assert(Z.stemPlan(empty,plain,'zinth').length===0,'a song with no notes in it made stems anyway'+t);
+    assert(Z.stemPlan([],plain,'zinth').length===0,'a song with no sections made stems anyway'+t);
+  }
+  // the name: whatever the track code says, a stem has to be a file name. Nothing that walks a path, nothing
+  // that starts with a dot, nothing empty and nothing longer than a file system will take.
+  ['zinth-ALPHA1','../../etc/passwd','my song #1 (final)','   ','','...','é•ü','x'.repeat(200),'con:/nul'].forEach(base=>{
+    const t=' [stem name · "'+base+'"]',n=Z.stemName(base,0,'lead');
+    assert(/^[A-Za-z0-9._-]+$/.test(n),'the stem name "'+n+'" is not one every computer can write'+t);
+    assert(n.indexOf('/')<0&&n.indexOf('\\')<0&&n.indexOf('..')<0,'the stem name "'+n+'" walks a path'+t);
+    assert(n[0]!=='.'&&n[0]!=='-','the stem name "'+n+'" starts badly'+t);
+    assert(n.length>'-1-lead.wav'.length&&n.length<=Z.STEMS.maxBase+'-1-lead.wav'.length,'the stem name "'+n+'" is '+n.length+' characters'+t);
+    assert(n.slice(-'-1-lead.wav'.length)==='-1-lead.wav','the stem name "'+n+'" does not say which layer it is'+t);
+  });
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -1356,7 +1437,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li><li>Humanize loosens the groove without ever moving a note out of its own step, changing which note is played or making one silent: the kick never moves at all, every other note stays inside a fraction of a step of where it was written, every velocity stays audible and under full scale, and the nudges come from the song\'s seed, so the playback and both exports are one performance.</li><li>Every song-length preset builds a whole song — it opens, it has a verse and a chorus, it ends — of about the length it promises at every tempo the slider can reach, out of sections the arranger itself could hold; and every note generated over a rebuilt arrangement is still in the key.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li><li>Humanize loosens the groove without ever moving a note out of its own step, changing which note is played or making one silent: the kick never moves at all, every other note stays inside a fraction of a step of where it was written, every velocity stays audible and under full scale, and the nudges come from the song\'s seed, so the playback and both exports are one performance.</li><li>Every song-length preset builds a whole song — it opens, it has a verse and a chorus, it ends — of about the length it promises at every tempo the slider can reach, out of sections the arranger itself could hold; and every note generated over a rebuilt arrangement is still in the key.</li><li>A stems export writes one file for every layer the mix lets you hear and the song actually plays, and none for a layer that is muted, soloed out or empty: the files come in mixer order, numbered without a gap, never share a name, and every name is one any computer will write, whatever the track code says.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);

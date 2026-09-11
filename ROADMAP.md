@@ -44,7 +44,7 @@ This file is the work queue for the background agent. Items are in priority orde
 
 ## Sharing
 
-- [ ] **Stems export.** Export one WAV per layer, rendered offline with the same buses and effects, so the song can be mixed in a DAW. Files are offered one after another through the same save path as the WAV export.
+- [x] **Stems export.** Export one WAV per layer, rendered offline with the same buses and effects, so the song can be mixed in a DAW. Files are offered one after another through the same save path as the WAV export. (2026-09-11: a **Stems** button beside Export MIDI renders the song once per layer through the same `renderSong` the WAV export now uses, with the other layers turned down at their buses rather than left unplayed, so the kick still pumps every stem and all five line up sample for sample; the riser and crash ride with the drums, the master warmth and bus compressor step out of the chain because that glue belongs over the sum, and `Z.stemPlan` writes a file only for a layer the mixer lets you hear and the song actually plays, numbered in mixer order under a name any computer will write — all of which the check proves.)
 - [ ] **Chord chart export.** A text file with the arrangement, key, tempo, and the chords of every section as roman numerals and names, bar by bar, formatted so a musician could play along.
 - [ ] **OGG export.** A compressed audio export using MediaRecorder on a MediaStreamDestination, with a progress readout, for when a WAV is too big to share.
 

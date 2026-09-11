@@ -52,6 +52,8 @@ class Engine{
     this.countInEnd=0;
     // the note a glideing layer played last, so the next one can slide out of it
     this.glideFrom={};
+    // the layer this engine is rendering on its own, when it is rendering a stem rather than the mix
+    this.stem=null;
   }
   init(ctxIn){
     if(this.ctx)return;
@@ -86,9 +88,15 @@ class Engine{
     // downstream fights it. The scope and the meter read after it, so you see a fade as well as hear it.
     this.fade=ctx.createGain();this.fade.gain.value=Z.FADE.full;
     this.analyser=ctx.createAnalyser();this.analyser.fftSize=512;
-    this.eqTrim.connect(this.warmShape);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
+    // a stem is one layer on its own, so the glue that only means anything over a whole mix steps out of
+    // the chain: the warmth soft clip and the bus compressor both react to everything at once, and putting
+    // them on each layer separately would not add back up to the song. They go back on the master in the
+    // DAW, over the sum. Everything linear stays exactly where it is — the EQ, the sweep, the fade, the
+    // sends — and the limiter stays as a safety catch, so the files add up to the mix you heard.
+    const glue=!this.stem;
+    this.eqTrim.connect(glue?this.warmShape:this.sweep);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
     this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);this.setEq(this.eq,true);
-    this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(this.comp);
+    this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(glue?this.comp:this.limiter);
     this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
@@ -165,9 +173,12 @@ class Engine{
   }
   anySolo(){return LAYERS.some(L=>this.params[L].solo)}
   audible(L){const p=this.params[L];return !p.mute&&(!this.anySolo()||p.solo)}
+  // while a stem renders, every other layer is turned down at its bus rather than left unscheduled: the
+  // notes still play, silently, so the kick still ducks the mix and the stems all line up bar for bar.
+  stemGain(L){return this.stem&&L!==this.stem?0:(this.audible(L)?levelGain(this.params[L].level):0)}
   updateGains(now){
     if(!this.ctx)return;const t=this.ctx.currentTime;
-    for(const L of LAYERS){const g=this.audible(L)?levelGain(this.params[L].level):0;if(now)this.bus[L].g.gain.value=g;else this.bus[L].g.gain.setTargetAtTime(g,t,0.03)}
+    for(const L of LAYERS){const g=this.stemGain(L);if(now)this.bus[L].g.gain.value=g;else this.bus[L].g.gain.setTargetAtTime(g,t,0.03)}
   }
   setParam(L,key,val){
     const p=this.params[L];p[key]=val;if(!this.ctx)return;
@@ -352,13 +363,17 @@ class Engine{
     g.gain.setValueAtTime(step%16===0?0.3:0.18,time);g.gain.exponentialRampToValueAtTime(0.001,time+0.05);
     o.connect(g);g.connect(this.master);o.start(time);o.stop(time+0.06);
   }
+  // Risers and crashes hang off the master rather than a layer bus, so in a stems render they would land
+  // in all five files at once. They are percussion by any other name: they ride with the drums stem.
   riser(time,dur){
+    if(this.stem&&this.stem!=='drums')return;
     const ctx=this.ctx,n=ctx.createBufferSource();n.buffer=this.noise;n.loop=true;
     const f=ctx.createBiquadFilter();f.type='bandpass';f.Q.value=1.2;f.frequency.setValueAtTime(250,time);f.frequency.exponentialRampToValueAtTime(5000,time+dur);
     const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);g.gain.exponentialRampToValueAtTime(0.2,time+dur);g.gain.setValueAtTime(0.0001,time+dur+0.005);
     n.connect(f);f.connect(g);g.connect(this.master);g.connect(this.reverbIn);n.start(time);n.stop(time+dur+0.05);
   }
   crash(time){
+    if(this.stem&&this.stem!=='drums')return;
     const ctx=this.ctx,n=ctx.createBufferSource();n.buffer=this.noise;n.loop=true;
     const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=4500;
     const g=ctx.createGain();g.gain.setValueAtTime(0.28,time);g.gain.exponentialRampToValueAtTime(0.001,time+1.4);
@@ -485,5 +500,36 @@ class Engine{
     let s=0;for(let i=0;i<a.length;i++){const v=(a[i]-128)/128;s+=v*v}return Math.sqrt(s/a.length);
   }
 }
+/* ================= stems =================
+   One WAV per layer, so a song can leave Zinth in pieces and be mixed anywhere. A stem is the same offline
+   render as the WAV export with one layer left up: it carries that layer's own filter, its delay, reverb
+   and chorus, the pump it takes from the kick and the sweeps and fades of the song, and nothing of the
+   other four. What a stems export promises is that the files line up — drop all of them into a DAW at
+   zero and you have the song back — so what goes into the folder matters as much as what goes into a file.
+   A layer earns a stem when the mix lets you hear it and the song actually plays it: a muted layer, a
+   layer soloed out and a layer with no notes anywhere are all silence, and a folder of silent files is a
+   puzzle rather than an export. The files are numbered in mixer order so they land in a DAW the right
+   way up, and the name of every one of them is made safe for a desktop, a phone and a DAW alike. */
+const STEMS={ext:'wav',unsafe:/[^A-Za-z0-9._-]+/g,maxBase:48,tailSec:3};
+const stemSafe=s=>String(s==null?'':s).replace(STEMS.unsafe,'-').replace(/^[-.]+|[-.]+$/g,'').slice(0,STEMS.maxBase)||'song';
+const stemName=(base,i,L)=>stemSafe(base)+'-'+(i+1)+'-'+L+'.'+STEMS.ext;
+// does the song ever play this layer? A section with the layer switched off, or with nothing written in it,
+// does not count: a lane you never drew in and an arp you turned off should not come back as a file.
+function stemPlays(song,L){
+  return (song||[]).some(sec=>{
+    if(!sec||!sec.layers||!sec.layers[L])return false;
+    const by=sec.track&&sec.track.byStep&&sec.track.byStep[L];if(!by)return false;
+    const steps=(sec.bars||Z.BARS)*Z.STEPS;
+    for(let st=0;st<steps;st++){const list=by[st%Z.TOTAL];if(list&&list.length)return true}
+    return false;
+  });
+}
+// the folder, decided before a single sample is rendered: which layers get a file and what each is called
+function stemPlan(song,params,base){
+  const p=params||{},anySolo=LAYERS.some(L=>p[L]&&p[L].solo);
+  const heard=L=>{const q=p[L];return !!q&&!q.mute&&(!anySolo||!!q.solo)};
+  return LAYERS.filter(L=>heard(L)&&stemPlays(song,L)).map((L,i)=>({layer:L,name:stemName(base,i,L)}));
+}
 Z.LAYERS=LAYERS;Z.DEFAULTS=DEFAULTS;Z.KITS=KITS;Z.Engine=Engine;Z.engine=new Engine();Z.cutoffHz=cutoffHz;Z.attackSec=attackSec;Z.releaseSec=releaseSec;
+Z.STEMS=STEMS;Z.stemSafe=stemSafe;Z.stemName=stemName;Z.stemPlays=stemPlays;Z.stemPlan=stemPlan;
 })();

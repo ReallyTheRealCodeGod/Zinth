@@ -1,6 +1,6 @@
 # Zinth
 
-A scale-locked song studio in a single HTML file. Every layer, every chord pad and every key you can press is locked to one key and scale, so nothing ever sounds off. Press Play and you hear a whole song. Roll until you smile, lock what you love, play along, record your own hook, then export it as WAV or MIDI and finish it anywhere.
+A scale-locked song studio in a single HTML file. Every layer, every chord pad and every key you can press is locked to one key and scale, so nothing ever sounds off. Press Play and you hear a whole song. Roll until you smile, lock what you love, play along, record your own hook, then export it as WAV, as stems or as MIDI and finish it anywhere.
 
 No build tools or dependencies. Open `index.html` in a browser.
 
@@ -31,7 +31,8 @@ No build tools or dependencies. Open `index.html` in a browser.
 - **Transitions.** Risers into louder sections and a crash on their first beat.
 - **Tap the tempo, count yourself in.** Under the tempo slider are **−**, **Tap** and **+**: tap the pulse you have in your head and the track takes it from the second tap on, or nudge the tempo a beat at a time. A pulse tapped at half or double speed is folded back into the slider's range, so whatever you tap lands somewhere the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps, <kbd>−</kbd> and <kbd>+</kbd> nudge. And pressing **Rec** from stopped gives you a **Count-in** first — one bar of clicks at the tempo, counted down in the transport, so you can come in on the one. None of it reaches the song or the exports; switch it off beside Click.
 - **Send it in a link.** **Copy link** puts the whole song into a URL — key, scale, tempo, arrangement, your chords, every note you drew or recorded, the drum grid, the sound of every layer, the EQ and the master. The song travels inside the link as JSON in base64url, so nothing is uploaded and nothing can go stale; it goes to the clipboard and the address bar at once. Opening a link restores the song, and the track you already had stays one <kbd>Ctrl</kbd>+<kbd>Z</kbd> away. Only what you changed is written, so a fresh track is a couple of hundred characters and a whole demo song about 2.5 KB.
-- **Leaves Zinth.** Export the whole song as WAV or as a MIDI file with one track per layer and drums on channel 10. Save and open projects as JSON. Everything autosaves in the browser, with undo and redo.
+- **Stems.** **Stems** in the top bar exports one WAV per layer, offered one after another. Each is the whole song rendered again with only that layer up, so it carries its own filter, its delay, reverb and chorus, the pump it takes from the kick and every sweep and fade of the arrangement — and nothing of the other four. They all start together and run the same length, so dropping the lot into a DAW at zero puts the song back together with a fader on every layer. Only what you can hear gets a file: a muted layer, a layer soloed out and an empty lane are left out, and the files are numbered in mixer order. The master Warmth and the bus compressor are deliberately not baked in — that glue belongs over the sum, on your master — while the EQ, the sweeps and the fades already are.
+- **Leaves Zinth.** Export the whole song as WAV, as stems, or as a MIDI file with one track per layer and drums on channel 10. Save and open projects as JSON. Everything autosaves in the browser, with undo and redo.
 
 ## Shortcuts
 
@@ -69,7 +70,7 @@ On Windows without Git Bash:
 | --- | --- |
 | `src/theory.js` | Scales, chords, section types, voice leading, generators for melody, arp, bass and drums |
 | `src/demos.js` | The six demo songs and the builder that turns one into a project snapshot |
-| `src/engine.js` | Web Audio synth voices, drum kits, buses, effects, scheduler |
+| `src/engine.js` | Web Audio synth voices, drum kits, buses, effects, scheduler, the stem plan |
 | `src/ui-core.js` | State, project model, undo, arranger, piano roll |
 | `src/ui-panels.js` | Sound panel, mixer, chord box, keys, recording, export |
 | `tests/check.js` | Theory self-test; open `tests/check.html` after building |

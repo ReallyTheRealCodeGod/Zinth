@@ -298,22 +298,59 @@ async function saveFile(name,blob,doneMsg){
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);return doneMsg;
 }
 let exporting=false;
+const exportBtns=()=>['exportWav','exportStems'].map($).filter(Boolean);
+function exportBusy(on){exporting=on;exportBtns().forEach(b=>b.disabled=on)}
+// One offline render of the whole song, exactly as it plays: the same engine, the same patches, the same
+// seed for the humanize, the same sweeps, fades and transitions. Name a layer and it renders that layer on
+// its own — a stem — with everything else turned down at its bus but still playing, so the kick still
+// pumps the mix and every stem lines up with every other, sample for sample.
+async function renderSong(stem){
+  const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+Z.STEMS.tailSec,sr=44100;
+  const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
+  const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
+  // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
+  R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.stem=stem||null;R.init(off);
+  let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
+  return {buf:await off.startRendering(),secs:Math.round(steps*d)};
+}
+const wavBlob=buf=>new Blob([encodeWav(buf)],{type:'audio/wav'});
+// a breath between renders, so the status line gets a chance to paint before the next one starts
+const breathe=()=>new Promise(r=>setTimeout(r,0));
 async function exportWav(){
-  if(exporting)return;exporting=true;const btn=$('exportWav');btn.disabled=true;U.setStatus('Rendering…');
+  if(exporting)return;exportBusy(true);U.setStatus('Rendering…');
   try{
-    const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
-    const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
-    // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
-    R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.init(off);
-    let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
-    const buf=await off.startRendering();
-    const name='zinth-'+state.seeds.chords+'.wav';
-    U.setStatus(await saveFile(name,new Blob([encodeWav(buf)],{type:'audio/wav'}),'Saved '+name+' ('+Math.round(dur-3)+' s)'));
+    const r=await renderSong(null),name=Z.stemSafe('zinth-'+state.seeds.chords)+'.wav';
+    U.setStatus(await saveFile(name,wavBlob(r.buf),'Saved '+name+' ('+r.secs+' s)'));
   }catch(err){U.setStatus('Export failed: '+(err&&err.message||err))}
-  btn.disabled=false;exporting=false;
+  exportBusy(false);
 }
 $('exportWav').addEventListener('click',exportWav);
+// Stems: one WAV per layer, rendered one after another and offered one after another through the same save
+// path as the WAV export. Only the layers you can actually hear get a file, so a muted layer or a lane with
+// nothing in it never turns up as silence, and if a save is declined the rest are not forced on you.
+async function exportStems(){
+  if(exporting)return;exportBusy(true);
+  try{
+    const plan=Z.stemPlan(song(),E.params,'zinth-'+state.seeds.chords);
+    if(!plan.length)U.setStatus('No stems to export: every layer is muted or empty');
+    else{
+      let saved=0,stopped='';
+      for(let i=0;i<plan.length;i++){
+        const s=plan[i];
+        U.setStatus('Rendering '+s.layer+'… ('+(i+1)+' of '+plan.length+')');
+        await breathe();
+        const r=await renderSong(s.layer),done='Saved '+s.name;
+        const msg=await saveFile(s.name,wavBlob(r.buf),done);
+        if(msg!==done){stopped=msg;break}
+        saved++;
+      }
+      U.setStatus(stopped?stopped+' — '+saved+' of '+plan.length+' stems saved'
+        :'Saved '+saved+' stems: '+plan.map(s=>s.layer).join(', '));
+    }
+  }catch(err){U.setStatus('Stems export failed: '+(err&&err.message||err))}
+  exportBusy(false);
+}
+$('exportStems').addEventListener('click',exportStems);
 // Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
 // A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses,
 // and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth. Humanize comes
