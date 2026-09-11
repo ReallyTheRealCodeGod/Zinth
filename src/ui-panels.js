@@ -303,7 +303,9 @@ async function exportWav(){
   try{
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;R.init(off);
+    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
+    // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
+    R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.init(off);
     let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
@@ -314,9 +316,13 @@ async function exportWav(){
 $('exportWav').addEventListener('click',exportWav);
 // Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
 // A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses,
-// and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth.
+// and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth. Humanize comes
+// through as well: every note sits on the tick it was played on and carries the velocity it was played with.
 function midiFile(){
   const PPQ=96,T16=PPQ/4,S=song(),stepSec=60/state.bpm/4;
+  const HUMAN=state.humanize,hseed=state.seeds.chords||'';
+  // the room a nudge needs either side of a step, in ticks, so a humanized note never runs into the next one
+  const hpad=2+(HUMAN>0?Math.ceil(Z.humanSpan(stepSec)/stepSec*T16):0);
   const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
   // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
   const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
@@ -339,18 +345,26 @@ function midiFile(){
       evs.push({tick:0,cc:77,val:cc7(64+(Z.vibRateHz(pm.vibRate)-Z.VIB.rateLo)/(Z.VIB.rateHi-Z.VIB.rateLo)*63)});
       evs.push({tick:0,cc:78,val:cc7(64+Z.VIB.onset/0.5*63)});
     }
-    S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
+    S.forEach((sec,si)=>{const steps=sec.bars*16,lay=sec.layers[L];
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
         else evs.push({tick:offset,cc:7,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
-        for(const e of list){const tick=offset+st*T16;
+        for(let i=0;i<list.length;i++){const e=list[i];
+          // humanize: the very nudge and velocity this note was played with, as ticks of the grid, so a loose
+          // groove reaches a DAW loose rather than snapping back onto the beat
+          const h=Z.humanize(HUMAN,hseed,L,si,st,i,stepSec,e.vel,e.kind);
+          const tick=Math.max(0,offset+st*T16+Math.round(h.shift/stepSec*T16));
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
-            evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(e.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
-          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick
-          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-2);
-            notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(e.vel*127)});evs.push({tick:tick+len,on:false,note:n,vel:0})});
-            if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
+            evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(h.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
+          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick.
+          // A nudged note is released where its own step ends rather than a nudge later — a player hits late
+          // and lets go on time — and never later than the note after it could start, however that one was
+          // nudged, so a humanized MIDI file never leaves a note held down.
+          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-hpad);
+            const off=Math.max(tick+2,offset+st*T16+len);
+            notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(h.vel*127)});evs.push({tick:off,on:false,note:n,vel:0})});
+            if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(h.vel*60)},{tick:off,on:false,note:e.midi+12,vel:0})}
         }}
       offset+=steps*T16});
     const rank=e=>e.cc!==undefined?0:e.on?2:1; // at one tick: volume first, then note-offs, then note-ons
@@ -474,7 +488,21 @@ $('warmth').addEventListener('change',e=>{const v=+e.target.value;
     :'Warmth off: the mix stays clean and digital');});
 $('evolve').addEventListener('click',()=>{state.evolve=!state.evolve;$('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);U.persist()});
 $('transTgl').addEventListener('click',()=>{state.transitions=!state.transitions;E.transitions=state.transitions;U.syncControls();U.persist();U.setStatus(state.transitions?'Risers and crashes on':'Transitions off')});
-function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textContent=state.bpm;$('energyVal').textContent=state.energy;$('swingVal').textContent=state.swing+' %'}
+/* Humanize: one amount for how loose the whole track plays. It changes when notes land and how hard they are
+   hit rather than which notes they are, so a move takes effect on the next step without rebuilding the song —
+   and because the nudges come from the track's seed, the WAV render and the MIDI file lean exactly the way
+   the playback did. It lives in state.humanize, so it autosaves, undoes and travels in a link. */
+function humanFmt(){
+  const v=state.humanize;
+  if(!(v>0))return 'machine-tight';
+  const ms=Math.round(Z.humanSpan(60/state.bpm/4)*Z.humanAmt(v)*1000);
+  return '± '+ms+' ms · ± '+Math.round(Z.humanAmt(v)*Z.HUMAN.vel*100)+' %';
+}
+$('human').addEventListener('input',e=>{state.humanize=+e.target.value;E.humanize=state.humanize;syncLabels();U.persist()});
+$('human').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Humanize '+humanFmt()+': every note but the kick sits a little off its step and is hit a little harder or softer, so the track breathes like a player. The kick never moves, a nudge is never near half a step, and both exports lean exactly the same way.'
+    :'Humanize off: every note lands dead on the grid at exactly the velocity it was written')});
+function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textContent=state.bpm;$('energyVal').textContent=state.energy;$('swingVal').textContent=state.swing+' %';$('humanVal').textContent=humanFmt()}
 /* help sheet */
 function showSheet(on){$('sheet').hidden=!on;if(on)$('sheetClose').focus()}
 $('helpBtn').addEventListener('click',()=>showSheet(true));$('sheetClose').addEventListener('click',()=>showSheet(false));

@@ -45,6 +45,9 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // humanize: how loose the groove is, and the seed the nudges come from. Because they come from a seed
+    // rather than a die thrown at playback time, the offline render below sounds exactly like the playback.
+    this.humanize=Z.HUMAN.dflt;this.humanSeed='';
     // the moment the count-in ends and the song comes in; 0 whenever nothing is counting in
     this.countInEnd=0;
     // the note a glideing layer played last, so the next one can slide out of it
@@ -450,19 +453,22 @@ class Engine{
     for(const L of LAYERS){
       if(!this.audible(L)||!lay[L])continue;
       const evs=tr.byStep[L][s];if(!evs||!evs.length)continue;
-      for(const e of evs){
-        const vel=e.vel*(0.93+Math.random()*0.1);
+      for(let i=0;i<evs.length;i++){
+        const e=evs[i];
+        // humanize: this event's own nudge off the grid and its own velocity, the same pair every time
+        const h=Z.humanize(this.humanize,this.humanSeed,L,si,step,i,d,e.vel,e.kind);
+        const vel=h.vel,t=Math.max(0,time+h.shift);
         if(L==='drums'){
           if(lay[L]==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&s%16!==0)))continue;
-          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,time);
+          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
         }else if(L==='chords'){
-          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,time,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
+          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,t,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
         }else if(L==='arp'){
-          this.playNote(L,e.midi,vel,time,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
+          this.playNote(L,e.midi,vel,t,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
         }else{
           const dur=Math.max(0.05,e.dur*d*0.95);
-          this.playNote(L,e.midi,vel,time,dur,L==='lead'?0.08:0);
-          if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,time,dur,-0.22);
+          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);
+          if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,t,dur,-0.22);
         }
       }
     }

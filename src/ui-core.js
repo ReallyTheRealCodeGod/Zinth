@@ -8,19 +8,19 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
-  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
+  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,human:34,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
             sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
-  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor','lydDom'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
+  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor','lydDom'],bpm:[84,100],energy:35,swing:8, human:30,sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
             sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
-  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
+  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, human:6, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
             sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
-  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen','phrygDom','hungMinor'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
+  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen','phrygDom','hungMinor'],bpm:[92,112],energy:60,swing:6,human:22,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
             sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
-  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
+  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,human:0, sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
             sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
-  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
+  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,human:8, sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
             sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
-  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen','dorb2','neapMinor'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
+  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen','dorb2','neapMinor'],bpm:[70,100],energy:40,swing:10,human:28,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
             sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
 // how the arp walks the chord it is playing, in the order the Sound panel offers them, and what each one
@@ -55,7 +55,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -118,7 +118,8 @@ function snapshot(){const s=JSON.parse(JSON.stringify(state));delete s.loop;s.se
 function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
-  Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
+  Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,
+    humanize:s.humanize===undefined?Z.HUMAN.dflt:Z.humanAmt(s.humanize)*100,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
     warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,countIn:s.countIn!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
@@ -164,16 +165,21 @@ function applyMood(seed){
   const m=MOODS[state.mood],r=new Z.Rng(seed+':mood:'+state.mood);
   state.root=r.int(12);state.scale=r.pick(m.scales);state.bpm=Math.round(r.range(m.bpm[0],m.bpm[1]));
   state.energy=m.energy;state.swing=m.swing;state.sevenths=m.sevenths;state.gate=m.gate;state.kit=m.kit;E.kit=m.kit;
+  // how loose the mood plays: Retro is machine-tight by ear, Chill leans right back off the grid
+  if(m.human!==undefined)state.humanize=Z.humanAmt(m.human)*100;
   // a mood deals the arp a figure that suits it — the same roll that picks the key and the tempo picks
   // this one — unless the arp is locked, in which case what you kept stays exactly as it is
   if(m.arp&&!state.locks.arp)state.arp=Z.normArp({mode:r.pick(m.arp.modes),octaves:m.arp.octaves,gate:m.arp.gate});
   for(const L in m.sound)for(const k in m.sound[L])E.setParam(L,k,m.sound[L][k]);
 }
+// humanize reaches the engine as an amount plus the seed its nudges come from; the offline render and the
+// MIDI export read the very same pair, so a loose groove is loose in exactly the same way everywhere
+function syncHumanize(){E.humanize=state.humanize;E.humanSeed=state.seeds.chords||''}
 function syncControls(){
-  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('kit').value=state.kit;
+  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('human').value=state.humanize;$('kit').value=state.kit;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
   state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
-  document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
+  document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;syncHumanize();
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
   $('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);
   $('transTgl').classList.toggle('on',state.transitions);$('transTgl').setAttribute('aria-checked',state.transitions);
@@ -208,7 +214,7 @@ function buildSong(){return state.sections.map(sec=>Object.assign({},sec,{track:
 function rebuild(){song=buildSong();E.song=song;buildRoll();persist()}
 function regenerate(){
   if(!state.sections.length)state.sections=defaultSections();
-  song=buildSong();E.song=song;E.kit=state.kit;E.transitions=state.transitions;
+  song=buildSong();E.song=song;E.kit=state.kit;E.transitions=state.transitions;syncHumanize();
   if(viewSection>=song.length)viewSection=song.length-1;if(state.sel>=song.length)state.sel=song.length-1;
   $('seed').value=code();renderKey();renderProg();renderArr();renderInsp();buildRoll();renderKeys();renderPads();renderMixer();renderFavs();renderSound();persist();
 }

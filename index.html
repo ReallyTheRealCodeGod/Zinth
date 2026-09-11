@@ -369,6 +369,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         </div>
         <div class="field"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55"></div>
         <div class="field"><label for="swing">Swing <output id="swingVal">12 %</output></label><input type="range" id="swing" min="0" max="60" value="12"></div>
+        <div class="field"><label for="human">Humanize <output id="humanVal">± 6 ms</output></label><input type="range" id="human" min="0" max="100" value="18" title="Humanize: how much like a player and how little like a machine. Every note gets its own small nudge off the grid and its own change of velocity — except the kick, which never moves, so the pulse stays put and everything else leans around it. Right down is machine-tight. The nudge is always well under half a step, so the rhythm you wrote is the rhythm you hear, and it comes from the track's seed rather than a die, so the WAV and MIDI exports are exactly what you heard."></div>
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
         <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
         <button class="btn big" id="generate" title="Reroll every layer that is not locked in the mixer">New track</button>
@@ -526,6 +527,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
       <li><b>Shape the chords.</b> Click a chord card above the arrangement to open it: pick another degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. The progression always fills eight bars, so what no longer fits steps aside. Split a card in two to add a chord, and ↺ Generated brings the rolled progression back. <kbd>←</kbd> <kbd>→</kbd> step between chords, <kbd>Esc</kbd> closes.</li>
       <li><b>Find the tempo, then count yourself in.</b> Under the tempo slider are three little buttons. <b>Tap</b> takes the tempo from you: tap it in time with the pulse in your head and from the second tap Zinth is already following, four taps settle it — and if you tap half speed or double speed it folds back into range, so whatever you tap it lands on a tempo the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps without reaching for the mouse. Beside it, <b>−</b> and <b>+</b> nudge the tempo one beat a minute at a time, and so do the <kbd>−</kbd> and <kbd>+</kbd> keys. Then, when you press <b>Rec</b> from a standing start, <b>Count-in</b> gives you one bar of clicks first — four beats counting down where the bar and beat usually are, so you can hear the tempo and come in on the one instead of scrambling at the top of the loop. It is a way into a take, not part of the song: nothing of the count reaches the song, the WAV or the MIDI. Switch it off next to Click if you would rather start straight away.</li>
+      <li><b>Let it breathe.</b> Under Swing in the Track panel is <b>Humanize</b>: how much like a player and how little like a machine the track plays. Turn it up and every note gets its own small nudge off the grid and its own change of velocity, so a pattern stops sounding typed in and starts sounding played — except the <b>kick</b>, which never moves and never changes level, so the pulse stays exactly where it is and everything else leans around it. The readout tells you what it is doing at this tempo, in milliseconds. A nudge is always well under half a step, so the rhythm you wrote is still the rhythm you hear, and every one of them comes from the track's own seed rather than a die thrown as it plays — which means a song always plays the same way twice and the WAV and MIDI exports are exactly the performance you heard. Right down is machine-tight, for chiptune and anything else that wants to be a machine; every mood already comes set the way it plays, from Retro dead on the grid to Chill leaning right back off it.</li>
       <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
       <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
       <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
@@ -1215,6 +1217,49 @@ function countInPlan(stepSec){
   return {beats,dur:COUNTIN.steps*d};
 }
 
+/* Humanize. A player is never exactly on the grid and never hits twice at the same weight, and a machine
+   always is — so one amount, from machine-tight to loose, gives every note of the song a small nudge off its
+   step and a small change of velocity. Two rules keep it musical rather than sloppy. The kick never moves and
+   never changes level: it is the spine of the track, and everything else can lean around it because it does
+   not. And a nudge is never more than HUMAN.maxFrac of a step (and never more than HUMAN.maxSec whatever the
+   tempo), so however loose it is set two notes can never swap places or cross the step between them — the
+   groove loosens, the rhythm stays exactly the rhythm that was written.
+   It is deterministic: the nudge a note gets comes from the song's own seed and where the note sits, not from
+   a die thrown at playback time, so the same song always plays the same way and the WAV and MIDI exports are
+   the very thing you heard. */
+const HUMAN={maxFrac:0.22,maxSec:0.045,vel:0.3,minVel:0.06,dflt:18};
+const humanAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+// the kick is the only thing humanize leaves alone, in time and in level alike
+const humanMoves=(L,kind)=>!(L==='drums'&&kind==='kick');
+// the two numbers one event gets, in [0,1): its place in the song and the song's seed decide them, so they
+// are the same every time that note is played, rendered or written out
+function humanRolls(seed,L,si,step,i){
+  const f=mulberry32(hashStr(String(seed)+'|'+L+'|'+si+'|'+step+'|'+(i||0)));
+  return [f(),f()];
+}
+const humanR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
+// the widest a nudge may be at this tempo, in seconds: a fraction of a step, and never past HUMAN.maxSec
+const humanSpan=stepSec=>Math.min(HUMAN.maxSec,HUMAN.maxFrac*(stepSec>0?stepSec:0));
+// how far off its step a note sits, in seconds — early as readily as late, and always inside that span
+function humanShift(amount,stepSec,r){
+  const a=humanAmt(amount);
+  return a>0?humanR(r)*humanSpan(stepSec)*a:0;
+}
+// what a velocity becomes: a little softer or a little louder, never silent and never past full scale
+function humanVel(amount,vel,r){
+  const v=Math.max(0,Math.min(1,+vel||0)),a=humanAmt(amount);
+  if(!(a>0))return v;
+  return Math.max(HUMAN.minVel,Math.min(1,v*(1+humanR(r)*HUMAN.vel*a)));
+}
+// everything one event needs, in one call: where it lands and how hard it is hit. Playback, the offline
+// render and the MIDI file all ask this same question, so all three agree note for note.
+function humanize(amount,seed,L,si,step,i,stepSec,vel,kind){
+  const v=Math.max(0,Math.min(1,+vel||0));
+  if(!humanMoves(L,kind)||!(humanAmt(amount)>0))return {shift:0,vel:v};
+  const r=humanRolls(seed,L,si,step,i);
+  return {shift:humanShift(amount,stepSec,r[0]),vel:humanVel(amount,v,r[1])};
+}
+
 /* ================= shareable links =================
    A whole song in a URL. The hash carries the very same project snapshot Save writes, as JSON in base64url:
    no compression, no library, nothing to install, and nothing between the link and the song but the address
@@ -1228,7 +1273,7 @@ function countInPlan(stepSec){
    one is the same project, note for note, which is what the theory check proves over every demo song. */
 const LINK={v:2,hash:'#z=',maxBytes:8192,lanes:['lead','arp','bass'],
   fields:['part','bars','energy','transpose','hook','double','sweep','fade'],
-  dflt:{mood:'chill',root:0,scale:'dorian',bpm:112,energy:55,swing:12,gate:0.7,warmth:WARMTH.dflt,
+  dflt:{mood:'chill',root:0,scale:'dorian',bpm:112,energy:55,swing:12,humanize:HUMAN.dflt,gate:0.7,warmth:WARMTH.dflt,
     kit:'808',sel:0,layer:'lead',recTarget:'lead',master:80}};
 const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 // UTF-8 and base64url by hand: a link must survive an address bar, an email and a chat window, and it must
@@ -1317,6 +1362,7 @@ function linkNorm(p){
   const sections=(Array.isArray(s.sections)&&s.sections.length?s.sections:DEFAULT_FORM).map(normSection);
   const st={seeds,locks,mood:txt(s.mood,D.mood),root:linkInt(s.root,0,11,D.root),scale,
     bpm:linkInt(s.bpm,60,180,D.bpm),energy:linkInt(s.energy,0,100,D.energy),swing:linkInt(s.swing,0,60,D.swing),
+    humanize:linkInt(s.humanize,0,100,D.humanize),
     evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:(+s.gate>0&&+s.gate<=1)?+s.gate:D.gate,
     warmth:linkNum(s.warmth,0,100,D.warmth),eq:normEq(s.eq),arp:normArp(s.arp),
     prog:pair(s.prog,x=>normProg(x,n)),
@@ -1364,7 +1410,7 @@ function linkSlim(p){
   const seeds=L.map(k=>s.seeds[k]);
   st.seeds=seeds.every(x=>x===seeds[0])?seeds[0]:seeds;
   const locked=L.filter(k=>s.locks[k]);if(locked.length)st.locks=locked;
-  for(const k of ['mood','root','scale','bpm','energy','swing','gate','warmth','kit','sel','layer','recTarget'])
+  for(const k of ['mood','root','scale','bpm','energy','swing','humanize','gate','warmth','kit','sel','layer','recTarget'])
     if(s[k]!==D[k])st[k]=s[k];
   if(!s.evolve)st.evolve=false;
   if(s.sevenths)st.sevenths=true;
@@ -1444,6 +1490,7 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,TAP,tapBpm,nudgeBpm,COUNTIN,countInPlan,
+  HUMAN,humanAmt,humanMoves,humanRolls,humanSpan,humanShift,humanVel,humanize,
   LINK,normNotes,normSection,linkNorm,linkSlim,linkFat,linkEncode,linkDecode,linkPayload,linkHash});
 })();
 </script>
@@ -1697,6 +1744,9 @@ class Engine{
     this.bpm=112;this.swing=0.12;this.playing=false;this.masterLevel=0.8;this.warmth=Z.WARMTH.dflt;this.eq=Z.normEq(null);
     this.song=[];this.section=0;this.step=0;this.loop=0;this.queue=[];this.onLoop=null;this.onSection=null;
     this.loopSection=false;this.fx={};this.metronome=false;this.transitions=true;
+    // humanize: how loose the groove is, and the seed the nudges come from. Because they come from a seed
+    // rather than a die thrown at playback time, the offline render below sounds exactly like the playback.
+    this.humanize=Z.HUMAN.dflt;this.humanSeed='';
     // the moment the count-in ends and the song comes in; 0 whenever nothing is counting in
     this.countInEnd=0;
     // the note a glideing layer played last, so the next one can slide out of it
@@ -2102,19 +2152,22 @@ class Engine{
     for(const L of LAYERS){
       if(!this.audible(L)||!lay[L])continue;
       const evs=tr.byStep[L][s];if(!evs||!evs.length)continue;
-      for(const e of evs){
-        const vel=e.vel*(0.93+Math.random()*0.1);
+      for(let i=0;i<evs.length;i++){
+        const e=evs[i];
+        // humanize: this event's own nudge off the grid and its own velocity, the same pair every time
+        const h=Z.humanize(this.humanize,this.humanSeed,L,si,step,i,d,e.vel,e.kind);
+        const vel=h.vel,t=Math.max(0,time+h.shift);
         if(L==='drums'){
           if(lay[L]==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&s%16!==0)))continue;
-          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,time);
+          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
         }else if(L==='chords'){
-          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,time,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
+          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,t,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
         }else if(L==='arp'){
-          this.playNote(L,e.midi,vel,time,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
+          this.playNote(L,e.midi,vel,t,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
         }else{
           const dur=Math.max(0.05,e.dur*d*0.95);
-          this.playNote(L,e.midi,vel,time,dur,L==='lead'?0.08:0);
-          if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,time,dur,-0.22);
+          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);
+          if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,t,dur,-0.22);
         }
       }
     }
@@ -2145,19 +2198,19 @@ const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
-  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
+  chill:   {label:'Chill',       scales:['dorian','pentMajor','mixolydian'],bpm:[80,96],  energy:45,swing:28,human:34,sevenths:true, gate:0.7,kit:'Breaks',arp:{modes:['updown','up','pattern'],octaves:2,gate:75},
             sound:{lead:{vibrato:40,vibRate:40,wave:'triangle',cutoff:58,reso:15,attack:8,release:45,spread:15,delay:40,reverb:40},arp:{wave:'sine',cutoff:60,level:45,delay:50,reverb:35},chords:{wave:'super',cutoff:38,attack:50,release:65,reverb:55,level:50},bass:{glide:25,wave:'saw',cutoff:32,level:80},drums:{level:60,reverb:25,pump:25}}},
-  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor','lydDom'],bpm:[84,100],energy:35,swing:8, sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
+  dreamy:  {label:'Dreamy',      scales:['lydian','major','pentMajor','lydDom'],bpm:[84,100],energy:35,swing:8, human:30,sevenths:true, gate:0.9,kit:'Lo-fi',arp:{modes:['up','updown','chord'],octaves:3,gate:90},
             sound:{lead:{vibrato:55,vibRate:32,wave:'sine',cutoff:55,reso:10,attack:22,release:70,spread:30,delay:55,reverb:60},arp:{wave:'triangle',cutoff:50,level:45,delay:55,reverb:45},chords:{wave:'super',cutoff:35,attack:70,release:80,reverb:70,level:55},bass:{glide:35,wave:'sine',cutoff:40,level:75},drums:{level:45,reverb:35,pump:20}}},
-  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
+  driving: {label:'Driving',     scales:['minor','dorian','pentMinor'],bpm:[124,138],energy:80,swing:0, human:6, sevenths:false,gate:0.55,kit:'909',arp:{modes:['up','pattern','down'],octaves:2,gate:45},
             sound:{lead:{vibrato:18,vibRate:60,wave:'saw',cutoff:70,reso:35,attack:1,release:25,spread:25,delay:30,reverb:20},arp:{wave:'square',cutoff:62,level:60,delay:35,reverb:20},chords:{wave:'saw',cutoff:45,attack:20,release:40,level:40,reverb:40},bass:{glide:8,wave:'square',cutoff:45,level:85},drums:{level:85,reverb:15,pump:60}}},
-  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen','phrygDom','hungMinor'],bpm:[92,112],energy:60,swing:6,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
+  dark:    {label:'Dark',        scales:['phrygian','harmMinor','hirajoshi','insen','phrygDom','hungMinor'],bpm:[92,112],energy:60,swing:6,human:22,sevenths:false,gate:0.6,kit:'Trap',arp:{modes:['down','random','pattern'],octaves:2,gate:55},
             sound:{lead:{vibrato:35,vibRate:45,wave:'saw',cutoff:48,reso:45,attack:2,release:40,spread:35,delay:45,reverb:45},arp:{wave:'saw',cutoff:42,level:50,delay:50,reverb:35},chords:{wave:'super',cutoff:30,attack:60,release:70,level:50,reverb:65},bass:{glide:30,wave:'saw',cutoff:30,level:85},drums:{level:75,reverb:30,pump:45}}},
-  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
+  retro:   {label:'Retro',       scales:['major','mixolydian','pentMajor'],bpm:[110,124],energy:65,swing:0,human:0, sevenths:false,gate:0.5,kit:'808',arp:{modes:['pattern','up'],octaves:1,gate:40},
             sound:{lead:{vibrato:0,vibRate:60,wave:'square',cutoff:80,reso:5,attack:0,release:15,spread:0,delay:25,reverb:12},arp:{wave:'square',cutoff:85,level:55,spread:0,delay:30,reverb:10},chords:{wave:'triangle',cutoff:70,attack:5,release:30,level:45,spread:0,reverb:20},bass:{glide:0,wave:'triangle',cutoff:60,level:85,spread:0},drums:{level:70,reverb:8,pump:15}}},
-  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
+  uplift:  {label:'Uplifting',   scales:['major','lydian'],bpm:[126,134],energy:75,swing:0,human:8, sevenths:false,gate:0.6,kit:'House',arp:{modes:['updown','up','chord'],octaves:3,gate:60},
             sound:{lead:{vibrato:25,vibRate:55,wave:'super',cutoff:68,reso:20,attack:4,release:40,spread:45,delay:40,reverb:40},arp:{wave:'saw',cutoff:60,level:55,delay:45,reverb:30},chords:{wave:'super',cutoff:50,attack:30,release:60,level:55,spread:55,reverb:55},bass:{glide:10,wave:'saw',cutoff:40,level:85},drums:{level:80,reverb:20,pump:65}}},
-  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen','dorb2','neapMinor'],bpm:[70,100],energy:40,swing:10,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
+  odd:     {label:'Otherworldly',scales:['wholeTone','lydian','insen','dorb2','neapMinor'],bpm:[70,100],energy:40,swing:10,human:28,sevenths:true,gate:0.85,kit:'Lo-fi',arp:{modes:['random','chord','updown'],octaves:3,gate:80},
             sound:{lead:{vibrato:60,vibRate:25,wave:'sine',cutoff:60,reso:30,attack:15,release:80,spread:40,delay:60,reverb:70},arp:{wave:'triangle',cutoff:55,level:50,delay:60,reverb:50},chords:{wave:'super',cutoff:32,attack:80,release:90,level:50,reverb:80},bass:{glide:40,wave:'sine',cutoff:35,level:70},drums:{level:35,reverb:50,pump:20}}},
 };
 // how the arp walks the chord it is playing, in the order the Sound panel offers them, and what each one
@@ -2192,7 +2245,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
 };
 const rec={armed:false};
@@ -2255,7 +2308,8 @@ function snapshot(){const s=JSON.parse(JSON.stringify(state));delete s.loop;s.se
 function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
-  Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
+  Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,
+    humanize:s.humanize===undefined?Z.HUMAN.dflt:Z.humanAmt(s.humanize)*100,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
     warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,countIn:s.countIn!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
@@ -2301,16 +2355,21 @@ function applyMood(seed){
   const m=MOODS[state.mood],r=new Z.Rng(seed+':mood:'+state.mood);
   state.root=r.int(12);state.scale=r.pick(m.scales);state.bpm=Math.round(r.range(m.bpm[0],m.bpm[1]));
   state.energy=m.energy;state.swing=m.swing;state.sevenths=m.sevenths;state.gate=m.gate;state.kit=m.kit;E.kit=m.kit;
+  // how loose the mood plays: Retro is machine-tight by ear, Chill leans right back off the grid
+  if(m.human!==undefined)state.humanize=Z.humanAmt(m.human)*100;
   // a mood deals the arp a figure that suits it — the same roll that picks the key and the tempo picks
   // this one — unless the arp is locked, in which case what you kept stays exactly as it is
   if(m.arp&&!state.locks.arp)state.arp=Z.normArp({mode:r.pick(m.arp.modes),octaves:m.arp.octaves,gate:m.arp.gate});
   for(const L in m.sound)for(const k in m.sound[L])E.setParam(L,k,m.sound[L][k]);
 }
+// humanize reaches the engine as an amount plus the seed its nudges come from; the offline render and the
+// MIDI export read the very same pair, so a loose groove is loose in exactly the same way everywhere
+function syncHumanize(){E.humanize=state.humanize;E.humanSeed=state.seeds.chords||''}
 function syncControls(){
-  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('kit').value=state.kit;
+  $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('human').value=state.humanize;$('kit').value=state.kit;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
   state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
-  document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;
+  document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;syncHumanize();
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
   $('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);
   $('transTgl').classList.toggle('on',state.transitions);$('transTgl').setAttribute('aria-checked',state.transitions);
@@ -2345,7 +2404,7 @@ function buildSong(){return state.sections.map(sec=>Object.assign({},sec,{track:
 function rebuild(){song=buildSong();E.song=song;buildRoll();persist()}
 function regenerate(){
   if(!state.sections.length)state.sections=defaultSections();
-  song=buildSong();E.song=song;E.kit=state.kit;E.transitions=state.transitions;
+  song=buildSong();E.song=song;E.kit=state.kit;E.transitions=state.transitions;syncHumanize();
   if(viewSection>=song.length)viewSection=song.length-1;if(state.sel>=song.length)state.sel=song.length-1;
   $('seed').value=code();renderKey();renderProg();renderArr();renderInsp();buildRoll();renderKeys();renderPads();renderMixer();renderFavs();renderSound();persist();
 }
@@ -2945,7 +3004,9 @@ async function exportWav(){
   try{
     const S=song(),d=60/state.bpm/4,steps=S.reduce((a,x)=>a+x.bars*16,0),dur=steps*d+3,sr=44100;
     const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
-    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;R.init(off);
+    const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
+    // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
+    R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.init(off);
     let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
     const buf=await off.startRendering();
     const name='zinth-'+state.seeds.chords+'.wav';
@@ -2956,9 +3017,13 @@ async function exportWav(){
 $('exportWav').addEventListener('click',exportWav);
 // Standard MIDI file, format 1: a tempo track plus one track per layer, drums on channel 10 with GM notes.
 // A section that fades carries its fade here too, as CC7 volume automation down the same plan playback uses,
-// and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth.
+// and a layer sent into the chorus asks its instrument for the same, as CC93 chorus depth. Humanize comes
+// through as well: every note sits on the tick it was played on and carries the velocity it was played with.
 function midiFile(){
   const PPQ=96,T16=PPQ/4,S=song(),stepSec=60/state.bpm/4;
+  const HUMAN=state.humanize,hseed=state.seeds.chords||'';
+  // the room a nudge needs either side of a step, in ticks, so a humanized note never runs into the next one
+  const hpad=2+(HUMAN>0?Math.ceil(Z.humanSpan(stepSec)/stepSec*T16):0);
   const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
   // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
   const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
@@ -2981,18 +3046,26 @@ function midiFile(){
       evs.push({tick:0,cc:77,val:cc7(64+(Z.vibRateHz(pm.vibRate)-Z.VIB.rateLo)/(Z.VIB.rateHi-Z.VIB.rateLo)*63)});
       evs.push({tick:0,cc:78,val:cc7(64+Z.VIB.onset/0.5*63)});
     }
-    S.forEach(sec=>{const steps=sec.bars*16,lay=sec.layers[L];
+    S.forEach((sec,si)=>{const steps=sec.bars*16,lay=sec.layers[L];
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
         else evs.push({tick:offset,cc:7,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
-        for(const e of list){const tick=offset+st*T16;
+        for(let i=0;i<list.length;i++){const e=list[i];
+          // humanize: the very nudge and velocity this note was played with, as ticks of the grid, so a loose
+          // groove reaches a DAW loose rather than snapping back onto the beat
+          const h=Z.humanize(HUMAN,hseed,L,si,st,i,stepSec,e.vel,e.kind);
+          const tick=Math.max(0,offset+st*T16+Math.round(h.shift/stepSec*T16));
           if(L==='drums'){if(lay==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&st%16!==0)))continue;
-            evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(e.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
-          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick
-          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-2);
-            notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(e.vel*127)});evs.push({tick:tick+len,on:false,note:n,vel:0})});
-            if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(e.vel*60)},{tick:tick+len,on:false,note:e.midi+12,vel:0})}
+            evs.push({tick,on:true,note:GM[e.kind],vel:Math.round(h.vel*(lay==='lite'?0.6:1)*127)});evs.push({tick:tick+T16/2,on:false,note:GM[e.kind],vel:0})}
+          // an arp gate can make a note a fraction of a step long, so the length is rounded to a whole tick.
+          // A nudged note is released where its own step ends rather than a nudge later — a player hits late
+          // and lets go on time — and never later than the note after it could start, however that one was
+          // nudged, so a humanized MIDI file never leaves a note held down.
+          else{const notes=L==='chords'?e.notes:[e.midi],len=Math.max(2,Math.round(Math.min(e.dur,steps-st)*T16)-hpad);
+            const off=Math.max(tick+2,offset+st*T16+len);
+            notes.forEach(n=>{evs.push({tick,on:true,note:n,vel:Math.round(h.vel*127)});evs.push({tick:off,on:false,note:n,vel:0})});
+            if(L==='lead'&&sec.double)evs.push({tick,on:true,note:e.midi+12,vel:Math.round(h.vel*60)},{tick:off,on:false,note:e.midi+12,vel:0})}
         }}
       offset+=steps*T16});
     const rank=e=>e.cc!==undefined?0:e.on?2:1; // at one tick: volume first, then note-offs, then note-ons
@@ -3116,7 +3189,21 @@ $('warmth').addEventListener('change',e=>{const v=+e.target.value;
     :'Warmth off: the mix stays clean and digital');});
 $('evolve').addEventListener('click',()=>{state.evolve=!state.evolve;$('evolve').classList.toggle('on',state.evolve);$('evolve').setAttribute('aria-checked',state.evolve);U.persist()});
 $('transTgl').addEventListener('click',()=>{state.transitions=!state.transitions;E.transitions=state.transitions;U.syncControls();U.persist();U.setStatus(state.transitions?'Risers and crashes on':'Transitions off')});
-function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textContent=state.bpm;$('energyVal').textContent=state.energy;$('swingVal').textContent=state.swing+' %'}
+/* Humanize: one amount for how loose the whole track plays. It changes when notes land and how hard they are
+   hit rather than which notes they are, so a move takes effect on the next step without rebuilding the song —
+   and because the nudges come from the track's seed, the WAV render and the MIDI file lean exactly the way
+   the playback did. It lives in state.humanize, so it autosaves, undoes and travels in a link. */
+function humanFmt(){
+  const v=state.humanize;
+  if(!(v>0))return 'machine-tight';
+  const ms=Math.round(Z.humanSpan(60/state.bpm/4)*Z.humanAmt(v)*1000);
+  return '± '+ms+' ms · ± '+Math.round(Z.humanAmt(v)*Z.HUMAN.vel*100)+' %';
+}
+$('human').addEventListener('input',e=>{state.humanize=+e.target.value;E.humanize=state.humanize;syncLabels();U.persist()});
+$('human').addEventListener('change',e=>{const v=+e.target.value;
+  U.setStatus(v?'Humanize '+humanFmt()+': every note but the kick sits a little off its step and is hit a little harder or softer, so the track breathes like a player. The kick never moves, a nudge is never near half a step, and both exports lean exactly the same way.'
+    :'Humanize off: every note lands dead on the grid at exactly the velocity it was written')});
+function syncLabels(){$('bpmVal').textContent=state.bpm+' bpm';$('bpmOut').textContent=state.bpm;$('energyVal').textContent=state.energy;$('swingVal').textContent=state.swing+' %';$('humanVal').textContent=humanFmt()}
 /* help sheet */
 function showSheet(on){$('sheet').hidden=!on;if(on)$('sheetClose').focus()}
 $('helpBtn').addEventListener('click',()=>showSheet(true));$('sheetClose').addEventListener('click',()=>showSheet(false));

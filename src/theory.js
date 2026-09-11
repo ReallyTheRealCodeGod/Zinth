@@ -661,6 +661,49 @@ function countInPlan(stepSec){
   return {beats,dur:COUNTIN.steps*d};
 }
 
+/* Humanize. A player is never exactly on the grid and never hits twice at the same weight, and a machine
+   always is — so one amount, from machine-tight to loose, gives every note of the song a small nudge off its
+   step and a small change of velocity. Two rules keep it musical rather than sloppy. The kick never moves and
+   never changes level: it is the spine of the track, and everything else can lean around it because it does
+   not. And a nudge is never more than HUMAN.maxFrac of a step (and never more than HUMAN.maxSec whatever the
+   tempo), so however loose it is set two notes can never swap places or cross the step between them — the
+   groove loosens, the rhythm stays exactly the rhythm that was written.
+   It is deterministic: the nudge a note gets comes from the song's own seed and where the note sits, not from
+   a die thrown at playback time, so the same song always plays the same way and the WAV and MIDI exports are
+   the very thing you heard. */
+const HUMAN={maxFrac:0.22,maxSec:0.045,vel:0.3,minVel:0.06,dflt:18};
+const humanAmt=v=>Math.max(0,Math.min(100,+v||0))/100;
+// the kick is the only thing humanize leaves alone, in time and in level alike
+const humanMoves=(L,kind)=>!(L==='drums'&&kind==='kick');
+// the two numbers one event gets, in [0,1): its place in the song and the song's seed decide them, so they
+// are the same every time that note is played, rendered or written out
+function humanRolls(seed,L,si,step,i){
+  const f=mulberry32(hashStr(String(seed)+'|'+L+'|'+si+'|'+step+'|'+(i||0)));
+  return [f(),f()];
+}
+const humanR=r=>Math.max(0,Math.min(1,+r||0))*2-1;
+// the widest a nudge may be at this tempo, in seconds: a fraction of a step, and never past HUMAN.maxSec
+const humanSpan=stepSec=>Math.min(HUMAN.maxSec,HUMAN.maxFrac*(stepSec>0?stepSec:0));
+// how far off its step a note sits, in seconds — early as readily as late, and always inside that span
+function humanShift(amount,stepSec,r){
+  const a=humanAmt(amount);
+  return a>0?humanR(r)*humanSpan(stepSec)*a:0;
+}
+// what a velocity becomes: a little softer or a little louder, never silent and never past full scale
+function humanVel(amount,vel,r){
+  const v=Math.max(0,Math.min(1,+vel||0)),a=humanAmt(amount);
+  if(!(a>0))return v;
+  return Math.max(HUMAN.minVel,Math.min(1,v*(1+humanR(r)*HUMAN.vel*a)));
+}
+// everything one event needs, in one call: where it lands and how hard it is hit. Playback, the offline
+// render and the MIDI file all ask this same question, so all three agree note for note.
+function humanize(amount,seed,L,si,step,i,stepSec,vel,kind){
+  const v=Math.max(0,Math.min(1,+vel||0));
+  if(!humanMoves(L,kind)||!(humanAmt(amount)>0))return {shift:0,vel:v};
+  const r=humanRolls(seed,L,si,step,i);
+  return {shift:humanShift(amount,stepSec,r[0]),vel:humanVel(amount,v,r[1])};
+}
+
 /* ================= shareable links =================
    A whole song in a URL. The hash carries the very same project snapshot Save writes, as JSON in base64url:
    no compression, no library, nothing to install, and nothing between the link and the song but the address
@@ -674,7 +717,7 @@ function countInPlan(stepSec){
    one is the same project, note for note, which is what the theory check proves over every demo song. */
 const LINK={v:2,hash:'#z=',maxBytes:8192,lanes:['lead','arp','bass'],
   fields:['part','bars','energy','transpose','hook','double','sweep','fade'],
-  dflt:{mood:'chill',root:0,scale:'dorian',bpm:112,energy:55,swing:12,gate:0.7,warmth:WARMTH.dflt,
+  dflt:{mood:'chill',root:0,scale:'dorian',bpm:112,energy:55,swing:12,humanize:HUMAN.dflt,gate:0.7,warmth:WARMTH.dflt,
     kit:'808',sel:0,layer:'lead',recTarget:'lead',master:80}};
 const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 // UTF-8 and base64url by hand: a link must survive an address bar, an email and a chat window, and it must
@@ -763,6 +806,7 @@ function linkNorm(p){
   const sections=(Array.isArray(s.sections)&&s.sections.length?s.sections:DEFAULT_FORM).map(normSection);
   const st={seeds,locks,mood:txt(s.mood,D.mood),root:linkInt(s.root,0,11,D.root),scale,
     bpm:linkInt(s.bpm,60,180,D.bpm),energy:linkInt(s.energy,0,100,D.energy),swing:linkInt(s.swing,0,60,D.swing),
+    humanize:linkInt(s.humanize,0,100,D.humanize),
     evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:(+s.gate>0&&+s.gate<=1)?+s.gate:D.gate,
     warmth:linkNum(s.warmth,0,100,D.warmth),eq:normEq(s.eq),arp:normArp(s.arp),
     prog:pair(s.prog,x=>normProg(x,n)),
@@ -810,7 +854,7 @@ function linkSlim(p){
   const seeds=L.map(k=>s.seeds[k]);
   st.seeds=seeds.every(x=>x===seeds[0])?seeds[0]:seeds;
   const locked=L.filter(k=>s.locks[k]);if(locked.length)st.locks=locked;
-  for(const k of ['mood','root','scale','bpm','energy','swing','gate','warmth','kit','sel','layer','recTarget'])
+  for(const k of ['mood','root','scale','bpm','energy','swing','humanize','gate','warmth','kit','sel','layer','recTarget'])
     if(s[k]!==D[k])st[k]=s[k];
   if(!s.evolve)st.evolve=false;
   if(s.sevenths)st.sevenths=true;
@@ -890,5 +934,6 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
   CHORUS,chorusCents,WARMTH,warmthAmt,warmthDrive,warmthShape,warmthCurve,warmthShelf,warmthTrim,
   EQ,eqAmt,eqDb,normEq,eqFlat,eqCoefs,eqCurve,eqBandDb,eqBandsDb,eqPeakDb,eqTrimDb,eqTrim,eqNetDb,
   GLIDE,glideSec,glideMidi,VIB,vibCents,vibRateHz,vibrates,TAP,tapBpm,nudgeBpm,COUNTIN,countInPlan,
+  HUMAN,humanAmt,humanMoves,humanRolls,humanSpan,humanShift,humanVel,humanize,
   LINK,normNotes,normSection,linkNorm,linkSlim,linkFat,linkEncode,linkDecode,linkPayload,linkHash});
 })();

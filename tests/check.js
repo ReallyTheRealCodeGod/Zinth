@@ -1132,6 +1132,121 @@ for(const scale in Z.SCALES){const cs=Z.chordScaleOf(scale);for(let root=0;root<
   }
 }
 
+/* ---- humanize ----
+   Humanize does not choose notes, but it decides when every one of them is played and how hard, so it can
+   break a rhythm in the two ways that matter: it could move a note far enough to swap places with its
+   neighbour, and it could push a note to silence or past full scale. It can do neither. The kick never moves
+   at all, a nudge is always well under half a step, a velocity always stays a real velocity, and every one of
+   them comes from the song's seed — so the playback, the offline render and the MIDI file are the same
+   performance rather than three throws of a die. */
+{
+  const tag=' [humanize]';
+  const amounts=[0,1,18,50,99,100],tempos=[Z.TAP.min,92,112,140,Z.TAP.max];
+  // whatever is asked for, the amount itself is a fraction of the knob and nothing else
+  assert(Z.humanAmt(-50)===0&&Z.humanAmt(0)===0&&Z.humanAmt(100)===1&&Z.humanAmt(1e6)===1&&Z.humanAmt('x')===0,
+    'the humanize amount left 0–1'+tag);
+  // the kick is the spine of the track: it is the one thing humanize never touches
+  for(const a of amounts)for(const bpm of tempos){
+    const stepSec=60/bpm/4;
+    for(let step=0;step<64;step++){
+      const h=Z.humanize(a,'SEED1','drums',0,step,0,stepSec,0.9,'kick');
+      assert(h.shift===0&&h.vel===0.9,'humanize moved the kick at '+a+' / '+bpm+' bpm'+tag);
+    }
+    // and every other drum voice, and every layer, does get nudged once the knob is up
+    if(a>0){
+      let moved=0;
+      for(let step=0;step<64;step++)for(const k of Z.DRUM_KINDS){
+        if(k==='kick')continue;
+        if(Z.humanize(a,'SEED1','drums',0,step,0,stepSec,0.8,k).shift!==0)moved++;
+      }
+      assert(moved>0,'humanize at '+a+' never moved anything but the kick'+tag);
+    }
+  }
+  // at 0 nothing moves and nothing changes level: machine-tight is exactly the grid it was written on
+  for(const bpm of tempos){const stepSec=60/bpm/4;
+    for(const L of Z.LAYERS)for(let step=0;step<32;step++){
+      const h=Z.humanize(0,'SEED1',L,1,step,0,stepSec,0.72);
+      assert(h.shift===0&&h.vel===0.72,'humanize at 0 was not machine-tight'+tag);
+    }
+  }
+  // a nudge stays inside its span, which is a fraction of a step and never more than HUMAN.maxSec — so two
+  // notes a step apart can never swap places or even meet, however loose it is set and whatever the tempo
+  for(const bpm of tempos){
+    const stepSec=60/bpm/4,span=Z.humanSpan(stepSec),ct=' ['+bpm+' bpm]';
+    assert(span>0&&span<=Z.HUMAN.maxSec&&span<=Z.HUMAN.maxFrac*stepSec,'the humanize span is out of bounds'+ct+tag);
+    assert(span*2<stepSec,'two nudged notes a step apart could meet'+ct+tag);
+    for(const a of amounts)for(const L of Z.LAYERS)for(let step=0;step<64;step++)for(let i=0;i<3;i++){
+      const h=Z.humanize(a,'HUM'+bpm,L,2,step,i,stepSec,0.85);
+      assert(Math.abs(h.shift)<=span*Z.humanAmt(a)+1e-12,'a nudge of '+h.shift+' s left its span'+ct+tag);
+      assert(Math.abs(h.shift)<stepSec/2,'a nudge reached half a step'+ct+tag);
+      // a nudged note is still inside its own step's half-open neighbourhood, so the rhythm is the rhythm
+      const at=step*stepSec+h.shift;
+      assert(at>(step-0.5)*stepSec&&at<(step+0.5)*stepSec,'a note left its own step'+ct+tag);
+      // a velocity is still a velocity: audible, and never past full scale
+      assert(h.vel>=Z.HUMAN.minVel&&h.vel<=1,'humanize gave a velocity of '+h.vel+ct+tag);
+    }
+  }
+  // the quietest and the loudest note in the song stay playable at the top of the knob
+  for(const v of [0.05,0.2,0.5,0.85,0.95,1])for(let r=0;r<=1.0001;r+=0.05){
+    const out=Z.humanVel(100,v,r);
+    assert(out>=Z.HUMAN.minVel&&out<=1,'a velocity of '+v+' humanized to '+out+tag);
+  }
+  assert(Z.humanVel(100,0,0.5)>=0&&Z.humanVel(100,2,0.5)<=1,'humanize let a nonsense velocity through'+tag);
+  // nudges are drawn from the song, not from a die: the same note of the same song always plays the same way,
+  // which is the whole reason an export sounds like what you heard
+  for(const L of Z.LAYERS)for(let step=0;step<16;step++){
+    const a=Z.humanize(40,'SAME',L,0,step,0,0.13,0.8),b=Z.humanize(40,'SAME',L,0,step,0,0.13,0.8);
+    assert(a.shift===b.shift&&a.vel===b.vel,'humanize is not deterministic'+tag);
+  }
+  // and they really are spread about: a different seed, step, layer or section leans a different way
+  {
+    const keys=[];
+    for(const L of Z.LAYERS)for(let si=0;si<2;si++)for(let step=0;step<32;step++)
+      keys.push(Z.humanize(60,'SPREAD',L,si,step,0,0.13,0.8).shift);
+    const uniq=new Set(keys.map(x=>Math.round(x*1e9)));
+    assert(uniq.size>keys.length*0.9,'humanize nudges repeat themselves: '+uniq.size+' of '+keys.length+tag);
+    const early=keys.filter(x=>x<0).length;
+    assert(early>keys.length*0.3&&early<keys.length*0.7,'humanize leans one way: '+early+' of '+keys.length+' early'+tag);
+    assert(Z.humanize(60,'A','lead',0,0,0,0.13,0.8).shift!==Z.humanize(60,'B','lead',0,0,0,0.13,0.8).shift,
+      'two different seeds nudge a note the same way'+tag);
+  }
+  // a whole generated song, humanized: every note of every layer still plays in its own step, in order,
+  // and the kick of every bar is still exactly on the grid
+  {
+    const cfg={root:5,scale:'dorian',energy:70,evolve:true,sevenths:true,gate:0.7},stepSec=60/124/4;
+    const S={chords:'HUMAN1',lead:'HUMAN1l',arp:'HUMAN1a',bass:'HUMAN1b',drums:'HUMAN1d'};
+    const t=Z.generateTrack(cfg,S,'c',0);
+    for(const L of ['lead','arp','chords','bass','drums']){
+      const list=(L==='chords'?t.chordEvs:t[L]).slice().sort((a,b)=>a.step-b.step);
+      // hits that share a step may separate — that is the whole point, everything leaning around the kick —
+      // but nothing may cross into a neighbouring step, so the written rhythm is the rhythm you hear
+      let curStep=-1,curMax=-1e9,prevMax=-1e9;
+      for(let n=0;n<list.length;n++){
+        const e=list[n],h=Z.humanize(80,S.chords,L,3,e.step,0,stepSec,e.vel===undefined?0.8:e.vel,e.kind);
+        const at=e.step*stepSec+h.shift;
+        if(e.step!==curStep){prevMax=curMax;curStep=e.step;curMax=-1e9}
+        if(L==='drums'&&e.kind==='kick')assert(h.shift===0,'a kick in the song moved'+tag);
+        assert(at>-stepSec/2,'a nudged note landed before the song started'+tag);
+        assert(at>prevMax,'a nudged '+L+' note crossed back into the step before it'+tag);
+        assert(Math.abs(at-e.step*stepSec)<stepSec/2,'a nudged '+L+' note left its own step'+tag);
+        curMax=Math.max(curMax,at);
+        assert(h.vel>0&&h.vel<=1,'a note of the song was humanized to '+h.vel+tag);
+      }
+    }
+  }
+  // and like every other setting, how loose the track plays travels with the song
+  {
+    const loose=Z.demoProject('chill');loose.state.humanize=73;
+    const back=Z.linkDecode(Z.linkHash(loose));
+    assert(!!back&&back.state.humanize===73,'humanize did not survive a link'+tag);
+    const dflt=Z.linkDecode(Z.linkHash(Z.demoProject('chill')));
+    assert(!!dflt&&dflt.state.humanize===Z.HUMAN.dflt,'humanize did not come back at its default from a link'+tag);
+    const tight=Z.demoProject('retro');tight.state.humanize=0;
+    const t2=Z.linkDecode(Z.linkHash(tight));
+    assert(!!t2&&t2.state.humanize===0,'a machine-tight track came back loose from a link'+tag);
+  }
+}
+
 const ms=Math.round(performance.now()-t0);
 window.ZINTH_CHECK={fails,tracks,ms,results};
 function report(){
@@ -1141,7 +1256,7 @@ h.innerHTML='<h1 style="font:700 26px \'Chakra Petch\',sans-serif;letter-spacing
   '<p style="color:#a3a8bf;margin:0 0 18px">'+tracks+' generated tracks across '+Object.keys(Z.SCALES).length+' scales, 4 keys, '+seeds.length+' seeds and both song parts, plus every chord-box voicing in all 12 keys. '+ms+' ms.</p>'+
   '<div style="display:inline-block;padding:10px 16px;border-radius:6px;font:600 15px \'Chakra Petch\',sans-serif;letter-spacing:.1em;background:'+(fails?'rgba(242,109,133,.15);color:#f26d85;border:1px solid #f26d85':'rgba(79,209,197,.15);color:#4fd1c5;border:1px solid #4fd1c5')+'">'+(fails?fails+' FAILURES':'ALL CHECKS PASS')+'</div>'+
   (fails?'<ul style="font:13px \'IBM Plex Mono\',monospace;color:#f26d85;line-height:1.7">'+results.slice(0,200).map(r=>'<li>'+r+'</li>').join('')+'</ul>':'')+
-  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li></ul>';
+  '<ul style="color:#a3a8bf;margin-top:20px;line-height:1.8"><li>Every chord tone, arp note and bass note is diatonic to the chord scale.</li><li>Every melody note is in the melody scale; blues passing tones never land on a downbeat.</li><li>At least 60 % of melody downbeats are chord tones of the chord sounding at that moment.</li><li>Arps only use tones of the chord that is playing.</li><li>Generation is deterministic, so a chorus hook returns note for note.</li><li>Sketched progressions and edited drum patterns are honoured exactly.</li><li>Chords edited on the cards keep their degree, bar length, seventh and inversion, still fill 8 bars, and survive a track code.</li><li>Edited and recorded lead notes come back verbatim, follow the section key shift and stay in scale.</li><li>Notes drawn into the arp and bass lanes do the same, and the bass stays inside MIDI 36–59.</li><li>A letter key recorded into the arp or the bass keeps its pitch class, lands in that layer\'s own register and stays diatonic to the chord scale.</li><li>Every scale is well formed — it starts on its root, rises, stays inside the octave and has at least five notes — and either brings its own progression pool or borrows one.</li><li>No progression pool in the app holds a degree that builds a diminished chord, as a triad or as a seventh, and no rolled progression in any scale or key lands on one.</li><li>Every chord-box pad in every key is entirely in scale.</li><li>A section filter sweep starts and ends on an audible frequency, stays inside its own section and always hands the next one a wide-open mix.</li><li>A section fade moves between silence and full level in one direction, stays inside its own section, never reaches a gain of 0, and leaves every unfaded section at full level.</li><li>Analog drift wanders a voice by cents and never a semitone: a drifted note still rounds to the note that was played, in every key and scale, and its filter never closes.</li><li>The stereo chorus reaches both sides of the field, keeps its delay lines inside their buffer, and bends a note by a few cents at most, so a chorused note is still the note that was played.</li><li>Whatever mode, octave range and gate the arp is set to, every note it plays is a tone of the chord sounding under it, inside its own lane, one note to a step — or a whole chord at once in block mode — and never long enough to run into the note after it.</li><li>A bass glide always lands exactly on the note it was heading for, never overshoots the interval it is crossing and never takes more than part of the note.</li><li>Lead vibrato leaves a short note straight, and drift, chorus and a full vibrato together still bend a note by less than a semitone, in every key and scale.</li><li>Every drum kit can play every row of the grid, and its perc voice is one the engine synthesises and the MIDI export has a GM note for.</li><li>A generated perc figure stays off the snare and clap, never plays louder than the backbeat, and never appears on a quiet track; a pattern saved before there was a perc row still opens.</li><li>The master EQ keeps its headroom: whatever the three bands are set to, it can never lift any frequency by more than a few decibels, each band stays in its own part of the spectrum and moves the way its label says, and flat is a true bypass.</li><li>Every demo song opens as a complete project the arranger itself could have made, its chords are real degrees of its scale and never diminished, its drum rows are sixteen steps of real velocities, and every note of every section — chords, hook, arp and bass — is in the key, with each hook note sitting on a pitch row of its own lane.</li><li>A shareable link carries a whole project and brings it back unchanged: every section of it generates the same chords, lead, arp, bass and drums at both ends, in key; a link is URL-safe, stays under '+Math.round(Z.LINK.maxBytes/1024)+' KB for an ordinary song because defaults are left out, and anything that is not a Zinth link is refused rather than half-opened.</li><li>Master warmth lifts the quiet half of a mix and rounds its peaks without ever passing full scale, folding the waveform or boosting the top end, and warmth at 0 is a true bypass.</li><li>A tapped tempo can only ever land on a whole number of beats per minute inside the slider — a clean pulse comes back exactly, a jittery one within a few bpm, a half or double speed one folded back into range, and nothing that is not a pulse gives a tempo at all — and a count-in is exactly one bar at that tempo whose last click never runs into the take.</li><li>Humanize loosens the groove without ever moving a note out of its own step, changing which note is played or making one silent: the kick never moves at all, every other note stays inside a fraction of a step of where it was written, every velocity stays audible and under full scale, and the nudges come from the song\'s seed, so the playback and both exports are one performance.</li></ul>';
 document.body.appendChild(h);
 }
 if(document.body)report();else document.addEventListener('DOMContentLoaded',report);
