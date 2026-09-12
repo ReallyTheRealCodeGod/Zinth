@@ -4,6 +4,10 @@ A scale-locked song studio in a single HTML file. Every layer, every chord pad a
 
 No build tools or dependencies. Open `index.html` in a browser.
 
+## Two views
+
+Zinth opens in **Jam**: Play, mood, key and scale, tempo, energy, one big dice, the song strip, the roll, a tile per layer with its sound, level, mute, lock and its own dice, the punch-in pads, Rec, the chord pads and the keys. That is everything making music needs. **Studio**, in the top bar, opens the rest: the chord cards and editor, the arrangement inspector and length presets, swing, humanize, transitions and warmth, saved songs, and the full Sound panel with every knob of every voice, the drum grid and the master EQ. The **Song** menu holds keep, copy link, save and open, and the WAV, MIDI and stems exports.
+
 ## What it does
 
 - **Six songs to start from.** The help sheet leads with six finished tracks — *Late Bus Home* (chill), *Night Drive* (driving), *Lantern Street* (dark), *Coin Rush* (retro), *Sunrise Flight* (uplifting), *Glass Observatory* (otherworldly). Press one, or <kbd>1</kbd>–<kbd>6</kbd> while the sheet is open, and it plays. Each is a whole project — key, scale, tempo, form, its own chords, a drum pattern written step by step, a hook in the lead lane, a sound for every layer — so from the moment it opens it is yours to reroll, redraw and export. Ctrl+Z brings your own track back.

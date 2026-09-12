@@ -240,8 +240,16 @@ $('fillTgl').addEventListener('click',()=>editPattern(P=>{P.fill=!P.fill}));
 $('gridReset').addEventListener('click',()=>{const sec=song()[U.viewSection];if(sec){state.drumEdits[sec.part]=null;U.regenerate();U.setStatus('Drums back to the generated pattern')}});
 
 /* ---------- mixer ---------- */
+// each layer is a tile: its sound, its level, mute, solo, lock and its own dice. The sound picker is the
+// patch menu for a synth layer and the kit menu for the drums, so a sound is one click from the front page.
+function tileSelect(L){
+  const p=E.params[L];
+  if(L==='drums')return '<select class="sm" data-l="drums" aria-label="Drum kit" title="The drum machine this song plays">'+Object.keys(Z.KITS).map(k=>'<option value="'+k+'"'+(k===state.kit?' selected':'')+'>'+k+'</option>').join('')+'</select>';
+  const cur=patchName(p);
+  return '<select class="sm" data-l="'+L+'" aria-label="'+L+' sound" title="The sound of the '+L+'. Studio has every knob behind it.">'+Object.keys(PATCHES).map(k=>'<option value="'+k+'"'+(k===cur?' selected':'')+'>'+k+'</option>').join('')+'<option value=""'+(cur?'':' selected')+'>custom</option></select>';
+}
 function renderMixer(){
-  $('mixer').innerHTML=Z.LAYERS.map(L=>{const p=E.params[L];return '<div class="ch'+(E.audible(L)?'':' dim')+'" style="--c:'+COLORS[L]+'"><div class="nm"><b>'+L+'</b><output>'+p.level+'</output></div><input type="range" min="0" max="100" value="'+p.level+'" data-l="'+L+'" aria-label="'+L+' level"><div class="bt"><button class="m'+(p.mute?' on':'')+'" data-l="'+L+'" data-a="mute" title="Mute">M</button><button class="s'+(p.solo?' on':'')+'" data-l="'+L+'" data-a="solo" title="Solo">S</button><button class="l'+(state.locks[L]?' on':'')+'" data-l="'+L+'" data-a="lock" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-l="'+L+'" data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
+  $('mixer').innerHTML=Z.LAYERS.map(L=>{const p=E.params[L];return '<div class="ch'+(E.audible(L)?'':' dim')+'" style="--c:'+COLORS[L]+'"><div class="nm"><b>'+L+'</b><output>'+p.level+'</output></div>'+tileSelect(L)+'<input type="range" min="0" max="100" value="'+p.level+'" data-l="'+L+'" aria-label="'+L+' level"><div class="bt"><button class="m'+(p.mute?' on':'')+'" data-l="'+L+'" data-a="mute" title="Mute">M</button><button class="s'+(p.solo?' on':'')+'" data-l="'+L+'" data-a="solo" title="Solo">S</button><button class="l'+(state.locks[L]?' on':'')+'" data-l="'+L+'" data-a="lock" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-l="'+L+'" data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
   $('mixer').querySelectorAll('input').forEach(r=>{U.fill(r);r.addEventListener('input',e=>{const L=e.target.dataset.l,v=+e.target.value;E.setParam(L,'level',v);U.fill(e.target);e.target.parentElement.querySelector('output').textContent=v;
     if(state.layer===L){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()})});
   $('lanes').querySelectorAll('button[data-l]').forEach(b=>b.classList.toggle('muted',!E.audible(b.dataset.l)));
@@ -252,6 +260,23 @@ $('mixer').addEventListener('click',e=>{const b=e.target.closest('button');if(!b
   else if(a==='lock'){state.locks[L]=!state.locks[L];U.setStatus(state.locks[L]?L+' locked: New track keeps it':L+' unlocked')}
   else if(a==='dice'){U.dice(L);return}
   renderMixer();U.persist()});
+$('mixer').addEventListener('change',e=>{const s=e.target.closest('select[data-l]');if(!s)return;const L=s.dataset.l;
+  if(L==='drums'){state.kit=s.value;E.kit=state.kit;U.setStatus('Kit: '+state.kit)}
+  else{const P=PATCHES[s.value];if(!P)return;for(const k in P)E.setParam(L,k,P[k]);U.setStatus(L+' → '+s.value)}
+  if(state.layer===L)renderSound();renderMixer();U.persist()});
+
+/* ---------- views & the song menu ---------- */
+function applyView(){
+  const v=state.view==='studio'?'studio':'jam';document.querySelector('.app').dataset.view=v;
+  $('viewSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  $('warmthVal').textContent=Math.round(state.warmth)+' %';
+  U.buildRoll();
+}
+$('viewSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.v===state.view)return;state.view=b.dataset.v;applyView();U.persist();
+  U.setStatus(state.view==='studio'?'Studio: every control is out. Jam tucks them away again.':'Jam: just the essentials. Studio opens everything.')});
+function menuOpen(on){$('fileMenu').hidden=!on;$('fileBtn').setAttribute('aria-expanded',on)}
+$('fileBtn').addEventListener('click',e=>{e.stopPropagation();menuOpen($('fileMenu').hidden)});
+document.addEventListener('click',e=>{if(!$('fileMenu').hidden&&!e.target.closest('.menu-wrap'))menuOpen(false)});
 
 /* ---------- punch-in effects ---------- */
 $('fx').innerHTML='<span class="lbl">Punch-in</span>'+FX.map(([id,key,name])=>'<button class="fxb" data-fx="'+id+'" title="Hold to apply"><b>'+name+'</b><span>'+key+'</span></button>').join('');
@@ -529,7 +554,7 @@ $('bpmUp').addEventListener('click',()=>nudgeTempo(1));
 $('swing').addEventListener('input',e=>{state.swing=+e.target.value;E.swing=state.swing/100;syncLabels();$('seed').value=U.code();renderFavs();U.persist()});
 $('master').addEventListener('input',e=>{const v=+e.target.value;E.setMaster(v);
   if(onMaster()){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()});
-$('warmth').addEventListener('input',e=>{state.warmth=+e.target.value;E.setWarmth(state.warmth);U.persist()});
+$('warmth').addEventListener('input',e=>{state.warmth=+e.target.value;E.setWarmth(state.warmth);$('warmthVal').textContent=Math.round(state.warmth)+' %';U.persist()});
 $('warmth').addEventListener('change',e=>{const v=+e.target.value;
   U.setStatus(v?'Warmth '+v+' %: the whole mix through a soft clip with the top end rolled off a shade — the quiet half comes up, the peaks round over. The WAV export is warmed the same way.'
     :'Warmth off: the mix stays clean and digital');});
@@ -582,7 +607,7 @@ const typing=e=>!!(e.target&&e.target.matches&&e.target.matches('input,select,te
 document.addEventListener('keydown',e=>{
   if(typing(e))return;
   const k=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
-  if(e.key==='Escape'){if(!$('sheet').hidden)showSheet(false);else if(!U.closeChordEdit())chordOff();return}
+  if(e.key==='Escape'){if(!$('fileMenu').hidden)menuOpen(false);else if(!$('sheet').hidden)showSheet(false);else if(!U.closeChordEdit())chordOff();return}
   if(e.key==='?'){showSheet($('sheet').hidden);return}
   // while the sheet is open the number keys are the demo songs, not the chord pads
   if(!$('sheet').hidden){const di='123456789'.indexOf(e.key);if(di>=0&&di<Z.DEMOS.length){e.preventDefault();loadDemo(di)}return}
@@ -684,10 +709,11 @@ $('keys').addEventListener('pointercancel',e=>{const k=e.target.closest('.key');
 window.addEventListener('blur',()=>{Object.keys(held).forEach(i=>keyOff(i));if(!cb.hold)chordOff()});
 
 /* ---------- boot ---------- */
-Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,syncLabels,renderRecInfo,midiFile,setRec});
+Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,syncLabels,renderRecInfo,midiFile,setRec,applyView});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();
+applyView();
 // a link in the address bar wins over the autosave — but settle the autosave into the undo history first,
 // so opening someone else's song never costs you your own: Ctrl+Z brings it straight back
 const booted=Z.linkPayload(location.hash);

@@ -1,8 +1,8 @@
-<div class="app">
+<div class="app" data-view="jam">
   <header class="top">
     <div class="brand">
       <h1>Zin<span>th</span></h1>
-      <small>scale-locked song studio · every note lands in key</small>
+      <small>every note lands in key</small>
     </div>
     <div class="transport">
       <button class="play" id="play" aria-pressed="false"><i class="ico"></i><span id="playLabel">Play</span></button>
@@ -11,49 +11,62 @@
       <div class="readout"><b id="bpmOut">112</b><span>bpm</span></div>
       <div class="readout"><b id="posOut">1.1</b><span id="posLabel">bar . beat</span></div>
       <button class="btn tgl" id="loopSec" aria-pressed="false" title="Repeat the selected section while you work on it (L)">Loop section</button>
-      <div class="seed">
-        <input id="seed" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Track code" title="Track code. Paste one in and press Load to recall a track idea.">
-        <button class="btn" id="seedGo" title="Load this track code">Load</button>
-        <button class="btn icon" id="saveFav" title="Keep this song in Saved songs" aria-pressed="false">♥</button>
+      <div class="seg viewseg" id="viewSeg" role="group" aria-label="View" title="Jam shows just what making music needs. Studio opens every control: the arrangement inspector, the chord editor, the full Sound panel, the drum grid, the master EQ.">
+        <button data-v="jam" class="on">Jam</button><button data-v="studio">Studio</button>
       </div>
-      <button class="btn" id="exportWav" title="Render the whole song to a WAV file">Export WAV</button>
-      <button class="btn" id="exportMid" title="Export the whole song as a MIDI file for your DAW">Export MIDI</button>
-      <button class="btn" id="exportStems" title="Export stems: one WAV per layer — lead, arp, chords, bass, drums — each with its own filter, delay, reverb and chorus, the pump it takes from the kick, and the sweeps and fades of the song. They all start together, so dropping them into a DAW at zero gives you the song back, ready to mix. Muted and empty layers are left out. The warmth and the bus compressor are not baked in: those belong on the master over the sum.">Stems</button>
-      <button class="btn" id="saveProj" title="Save the whole project as a .json file">Save</button>
-      <button class="btn" id="openProj" title="Open a saved .json project">Open</button>
-      <button class="btn" id="copyLink" title="Copy a link to this song: the whole project — key, chords, arrangement, your notes, every sound — travels in the link itself. Paste it anywhere; opening it loads the song. Nothing is uploaded.">Copy link</button>
-      <input type="file" id="projFile" accept=".json,application/json" hidden>
-      <div class="vol warm"><span>Warmth</span><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does — the quiet half comes up, the peaks round over, nothing turns brittle. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
       <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
+      <div class="menu-wrap">
+        <button class="btn" id="fileBtn" aria-haspopup="true" aria-expanded="false" title="Save, share and export this song">Song ▾</button>
+        <div class="menu" id="fileMenu" hidden role="menu" aria-label="Song menu">
+          <button class="btn" id="saveFav" title="Keep this song in Saved songs, in this browser" aria-pressed="false">♥ Keep in saved songs</button>
+          <button class="btn" id="copyLink" title="Copy a link to this song: the whole project travels in the link itself. Nothing is uploaded.">Copy link</button>
+          <div class="menu-row">
+            <button class="btn" id="saveProj" title="Save the whole project as a .json file">Save file</button>
+            <button class="btn" id="openProj" title="Open a saved .json project">Open file</button>
+          </div>
+          <div class="menu-sep">Export</div>
+          <div class="menu-row">
+            <button class="btn" id="exportWav" title="Render the whole song to a WAV file">WAV</button>
+            <button class="btn" id="exportMid" title="Export the whole song as a MIDI file for your DAW">MIDI</button>
+            <button class="btn" id="exportStems" title="Export stems: one WAV per layer, all starting together, so dropping them into a DAW at zero gives you the song back ready to mix. Muted and empty layers are left out.">Stems</button>
+          </div>
+          <div class="menu-sep">Track code</div>
+          <div class="menu-row">
+            <input id="seed" maxlength="120" spellcheck="false" autocomplete="off" aria-label="Track code" title="Track code. Paste one in and press Load to recall a track idea.">
+            <button class="btn" id="seedGo" title="Load this track code">Load</button>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="projFile" accept=".json,application/json" hidden>
       <button class="btn icon" id="helpBtn" title="How Zinth works and every shortcut (?)">?</button>
       <span class="status" id="status" aria-live="polite"></span>
     </div>
   </header>
 
+  <section class="jam" aria-label="Track settings">
+    <div class="field jf moods"><label>Mood</label><div class="chips" id="moods" role="group" aria-label="Mood presets"></div></div>
+    <div class="field jf"><label for="root">Key</label><div class="row2 tight"><select id="root" aria-label="Key"></select><select id="scale" aria-label="Scale"></select></div></div>
+    <div class="field jf tempo-f"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112">
+      <div class="tempo">
+        <button class="btn sm" id="bpmDown" aria-label="One bpm slower" title="One bpm slower. The − key does the same.">−</button>
+        <button class="btn sm tap" id="tapTempo" title="Tap tempo: tap in time with the pulse in your head — from the second tap Zinth follows you, and four taps settle it. Shift+T taps too.">Tap</button>
+        <button class="btn sm" id="bpmUp" aria-label="One bpm faster" title="One bpm faster. The + key does the same.">+</button>
+        <span class="taphint" id="tapHint">tap four times</span>
+      </div>
+    </div>
+    <div class="field jf"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55" title="How busy the track is: sparser and calmer to the left, denser and harder to the right"></div>
+    <button class="btn big dice" id="generate" title="Reroll every layer that is not locked. Lock what you love in the tiles below, roll the rest."><span class="die">🎲</span> New track</button>
+  </section>
+
   <div class="main">
-    <section class="panel gen" aria-label="Track settings">
+    <section class="panel gen" aria-label="Track details" data-studio>
       <h2>Track</h2>
       <div class="stack">
-        <div class="field"><label>Mood</label><div class="chips" id="moods" role="group" aria-label="Mood presets"></div></div>
-        <div class="row2">
-          <div class="field"><label for="root">Key</label><select id="root"></select></div>
-          <div class="field"><label for="scale">Scale</label><select id="scale"></select></div>
-        </div>
-        <div class="field"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112">
-          <div class="tempo">
-            <button class="btn sm" id="bpmDown" aria-label="One bpm slower" title="One bpm slower. The − key does the same.">−</button>
-            <button class="btn sm tap" id="tapTempo" title="Tap tempo: tap in time with the pulse in your head — from the second tap Zinth follows you, and four taps settle it. Tap half or double speed and it still lands in range. Shift+T taps too.">Tap</button>
-            <button class="btn sm" id="bpmUp" aria-label="One bpm faster" title="One bpm faster. The + key does the same.">+</button>
-            <span class="taphint" id="tapHint">tap four times</span>
-          </div>
-        </div>
-        <div class="field"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55"></div>
         <div class="field"><label for="swing">Swing <output id="swingVal">12 %</output></label><input type="range" id="swing" min="0" max="60" value="12"></div>
         <div class="field"><label for="human">Humanize <output id="humanVal">± 6 ms</output></label><input type="range" id="human" min="0" max="100" value="18" title="Humanize: how much like a player and how little like a machine. Every note gets its own small nudge off the grid and its own change of velocity — except the kick, which never moves, so the pulse stays put and everything else leans around it. Right down is machine-tight. The nudge is always well under half a step, so the rhythm you wrote is the rhythm you hear, and it comes from the track's seed rather than a die, so the WAV and MIDI exports are exactly what you heard."></div>
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
         <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
-        <button class="btn big" id="generate" title="Reroll every layer that is not locked in the mixer">New track</button>
-        <p style="margin:-4px 0 0;font-size:12px;color:var(--ink-mute)">Rerolls every layer that is not locked in the mixer. Lock what you love, roll the rest.</p>
+        <div class="field"><label for="warmth">Warmth <output id="warmthVal"></output></label><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
         <div class="field"><label>Saved songs</label><div class="saved" id="saved"></div></div>
       </div>
     </section>
@@ -63,9 +76,9 @@
         <div class="name" id="keyName">C <em>Dorian</em></div>
         <div class="notes" id="scaleNotes"></div>
       </div>
-      <div class="prog-head"><span class="lbl" id="progLabel">Chords · Verse (A)</span><span class="chint">click a card to change the chord</span><span class="tag" id="progTag" hidden>your progression</span></div>
-      <div class="prog" id="prog"></div>
-      <div class="insp cedit" id="chordEdit" hidden aria-label="Chord editor">
+      <div class="prog-head" data-studio><span class="lbl" id="progLabel">Chords · Verse (A)</span><span class="chint">click a card to change the chord</span><span class="tag" id="progTag" hidden>your progression</span></div>
+      <div class="prog" id="prog" data-studio></div>
+      <div class="insp cedit" id="chordEdit" hidden aria-label="Chord editor" data-studio>
         <span class="lbl" id="ceLabel"></span>
         <div class="grp"><span class="lbl">Degree</span><div class="seg" id="ceDeg"></div></div>
         <div class="grp"><span class="lbl">Bars</span><div class="seg" id="ceBars" title="How many bars this chord lasts. The progression always fills 8 bars."><button data-v="1">1</button><button data-v="2">2</button><button data-v="4">4</button></div></div>
@@ -78,13 +91,14 @@
         <button class="btn sm" id="ceClose" title="Close the chord editor (Esc)">Close</button>
       </div>
       <div class="arr-head">
-        <span class="lbl">Arrangement <output id="songLen"></output></span>
-        <span class="slen">Length</span>
-        <div class="seg" id="songLength" role="group" aria-label="Song length" title="Rebuild the arrangement into a whole song of about this length at the current tempo. Your chords, your notes, the drum grid and every sound stay exactly as they are — only the sections change, and Ctrl+Z brings the old arrangement back."></div>
-        <button class="btn sm" id="addSec" title="Add a section after the selected one">+ Section</button>
+        <span class="lbl">Song <output id="songLen"></output></span>
+        <span class="jamhint" data-jam>click a section to play it · double-click to loop it</span>
+        <span class="slen" data-studio>Length</span>
+        <div class="seg" id="songLength" role="group" aria-label="Song length" data-studio title="Rebuild the arrangement into a whole song of about this length at the current tempo. Your chords, your notes, the drum grid and every sound stay exactly as they are — only the sections change, and Ctrl+Z brings the old arrangement back."></div>
+        <button class="btn sm" id="addSec" data-studio title="Add a section after the selected one">+ Section</button>
       </div>
       <div class="arr" id="arr" aria-label="Arrangement"></div>
-      <div class="insp" id="insp">
+      <div class="insp" id="insp" data-studio>
         <div class="grp"><span class="lbl">Type</span><select class="sm" id="secType"></select></div>
         <div class="grp"><span class="lbl">Chords</span><div class="seg" id="secPart"><button data-v="v">A · verse</button><button data-v="c">B · chorus</button></div></div>
         <div class="grp"><span class="lbl">Bars</span><div class="seg" id="secBars"><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button></div></div>
@@ -102,16 +116,16 @@
         <canvas id="rollCanvas" width="1000" height="420" title="Lead, arp and bass lanes: click an empty spot to add a note in key, click a note to remove it, drag its right edge to make it longer or shorter. ↺ beside a lane name brings its generated notes back."></canvas>
         <div class="lanes" id="lanes"></div>
       </div>
-      <div class="mixer" id="mixer"></div>
+      <div class="mixer" id="mixer" aria-label="Layers"></div>
       <div class="fx" id="fx" aria-label="Punch-in effects"></div>
-      <div class="hint">
+      <div class="hint" data-studio>
         <span>Lead, arp and bass lanes: click to add a note, click a note to remove it, drag its right edge for length. Every note lands in key. ↺ beside a lane name undoes the whole lane.</span>
         <span>Punch-in effects are momentary: hold the key or the button. Lanes can be muted from their names.</span>
         <span><kbd>Space</kbd> play / stop &nbsp; <kbd>L</kbd> loop section &nbsp; <kbd>Esc</kbd> release chords</span>
       </div>
     </section>
 
-    <section class="panel snd" aria-label="Sound design">
+    <section class="panel snd" aria-label="Sound design" data-studio>
       <h2>Sound</h2>
       <div class="tabs" id="tabs" role="tablist"></div>
       <div class="stack" id="sndFields">
@@ -184,8 +198,8 @@
           <button data-v="arp" aria-pressed="false" title="Record into the arp: the letter keys play an octave up, where the arp sings (I)">arp</button>
           <button data-v="bass" aria-pressed="false" title="Record into the bass: the letter keys drop into the bass register (I)">bass</button>
         </div>
-        <button class="opt" id="clickBtn" aria-pressed="false" title="Metronome click while playing">Click</button>
-        <button class="opt on" id="countBtn" aria-pressed="true" title="Count-in: pressing Rec from stopped gives you one bar of clicks before the song comes in, so you can hear the tempo and come in on the one. Nothing of the count reaches the song or the exports.">Count-in</button>
+        <button class="opt" id="clickBtn" aria-pressed="false" data-studio title="Metronome click while playing">Click</button>
+        <button class="opt on" id="countBtn" aria-pressed="true" data-studio title="Count-in: pressing Rec from stopped gives you one bar of clicks before the song comes in, so you can hear the tempo and come in on the one. Nothing of the count reaches the song or the exports.">Count-in</button>
         <button class="opt" id="clearMel" title="Remove your own melody for this part, recorded or drawn in the roll, and bring the generated one back">Clear melody</button>
         <span class="recinfo" id="recInfo"></span>
       </div>
@@ -216,31 +230,15 @@
     <div class="sheet-head"><h2>How Zin<span>th</span> works</h2><button class="btn sm" id="sheetClose">Close</button></div>
     <div class="demos-head">
       <h3>Six songs to start from</h3>
-      <p>Press one and it plays. Each is a finished project — its own key and scale, chords, a drum pattern written step by step, a hook in the lead lane and a sound for every layer — and from the moment it opens it is yours: reroll it, draw in it, export it. <kbd>1</kbd>–<kbd>6</kbd> load them from this sheet, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings your own track back.</p>
+      <p>Press one and it plays. Each is a finished song and it is yours from the moment it opens: reroll it, play over it, export it. <kbd>1</kbd>–<kbd>6</kbd> load them from this sheet.</p>
     </div>
     <div class="demos" id="demos" role="group" aria-label="Demo songs"></div>
     <ol class="steps">
-      <li><b>Press Play.</b> You are hearing a whole song: intro, verses, choruses, a break, a drop. Every note of every layer is locked to one key and scale, so nothing ever sounds off.</li>
-      <li><b>Roll until you smile.</b> New track rerolls everything. Lock a layer in the mixer to keep it, hit its dice to reroll just that one. Moods pick scale, tempo and sounds for you.</li>
-      <li><b>Pick a scale, get a mood.</b> The <b>Scale</b> menu holds eighteen, grouped so you can read it: the <b>modes</b> you already know, five-note scales that cannot clash, and a shelf of <b>exotic</b> ones — <b>Lydian dominant</b> sunlit and slippery, <b>Dorian ♭2</b> smoky, <b>Hungarian minor</b> all drama, <b>Phrygian dominant</b> flamenco and desert, <b>Neapolitan minor</b> solemn and cinematic. Hover any of them and it tells you what it sounds like. Whichever you choose, the chords Zinth rolls come from a pool picked by hand for that scale, so there is never a sour chord under the tune, and the pads, the keys and every generated layer move with you.</li>
-      <li><b>Play along.</b> Number keys are chords, letter keys are notes, all in key. Sketch chords into the tray and send them to the verse or the chorus.</li>
-      <li><b>Shape the chords.</b> Click a chord card above the arrangement to open it: pick another degree, give that one chord its seventh, choose which note sits in the bass, or set how many bars it lasts — I for four bars, then IV and V for two. The progression always fills eight bars, so what no longer fits steps aside. Split a card in two to add a chord, and ↺ Generated brings the rolled progression back. <kbd>←</kbd> <kbd>→</kbd> step between chords, <kbd>Esc</kbd> closes.</li>
-      <li><b>Find the tempo, then count yourself in.</b> Under the tempo slider are three little buttons. <b>Tap</b> takes the tempo from you: tap it in time with the pulse in your head and from the second tap Zinth is already following, four taps settle it — and if you tap half speed or double speed it folds back into range, so whatever you tap it lands on a tempo the song can play. <kbd>Shift</kbd>+<kbd>T</kbd> taps without reaching for the mouse. Beside it, <b>−</b> and <b>+</b> nudge the tempo one beat a minute at a time, and so do the <kbd>−</kbd> and <kbd>+</kbd> keys. Then, when you press <b>Rec</b> from a standing start, <b>Count-in</b> gives you one bar of clicks first — four beats counting down where the bar and beat usually are, so you can hear the tempo and come in on the one instead of scrambling at the top of the loop. It is a way into a take, not part of the song: nothing of the count reaches the song, the WAV or the MIDI. Switch it off next to Click if you would rather start straight away.</li>
-      <li><b>Let it breathe.</b> Under Swing in the Track panel is <b>Humanize</b>: how much like a player and how little like a machine the track plays. Turn it up and every note gets its own small nudge off the grid and its own change of velocity, so a pattern stops sounding typed in and starts sounding played — except the <b>kick</b>, which never moves and never changes level, so the pulse stays exactly where it is and everything else leans around it. The readout tells you what it is doing at this tempo, in milliseconds. A nudge is always well under half a step, so the rhythm you wrote is still the rhythm you hear, and every one of them comes from the track's own seed rather than a die thrown as it plays — which means a song always plays the same way twice and the WAV and MIDI exports are exactly the performance you heard. Right down is machine-tight, for chiptune and anything else that wants to be a machine; every mood already comes set the way it plays, from Retro dead on the grid to Chill leaning right back off it.</li>
-      <li><b>Record your hook.</b> Press Rec, choose whether you are playing into the lead, the arp or the bass, and play the letter keys over the looping section. Your notes replace that generated layer, snapped to the grid. The arp records an octave up and the bass drops into its own register, so a take always sits where that layer sings. <kbd>I</kbd> switches layer, and undo is always one press away.</li>
-      <li><b>Draw notes in the roll.</b> The amber lead lane, the teal arp lane and the rose bass lane are yours: click an empty spot to add a note, click a note to remove it, drag its right edge for length. Notes snap to the grid and to the key, the bass stays in its own register, edits are undoable, and ↺ beside a lane name (or Clear melody for the lead) brings the generated notes back.</li>
-      <li><b>Say how long it should be.</b> Beside the arrangement is <b>Length</b>: <b>Short</b>, <b>Radio</b> and <b>Extended</b> — about a minute and a half, about three minutes, about five. Press one and Zinth rebuilds the arrangement into a whole song of about that long at the tempo you are on: a short song opens on four bars and gets to the chorus quickly, a long one takes a pre-chorus, a break, a drop and a bridge on the way. Because a bar lasts longer at 90 bpm than at 160, the sections you get follow the tempo rather than a fixed count. Nothing else moves — your chords, every note you drew or recorded, the drum grid and the sound of every layer come through exactly as they were, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old arrangement back. A preset lights up when the arrangement is the one it would build, so you can always see where you are.</li>
-      <li><b>Sweep a section.</b> Pick a section and set <b>Sweep</b> in the inspector: <b>↗ up</b> starts the whole mix dark and opens it over the section — an intro or a build — and <b>↘ down</b> closes it over the last bar for an outro or a hand-off into the next part. Intros, pre-choruses and breaks come set to open up, outros to close down. A swept section shows its arrow in the arrangement, and the WAV export sweeps exactly as you heard it.</li>
-      <li><b>Fade a section.</b> Beside Sweep is <b>Fade</b>: <b>◢ in</b> lifts the whole mix out of silence over the section's first two bars, the way a song starts, and <b>◣ out</b> lets it fall away to silence over its last two, the way a song ends. Outros come set to fade out, so a fresh track already ends gracefully; any section can fade, and the section after a fade-out comes back at full level. A faded section shows its wedge in the arrangement, the WAV export fades exactly as you heard it, and the MIDI export carries the fade as volume automation.</li>
-      <li><b>Give it some analog.</b> Each layer in the Sound panel has an <b>Analog drift</b> amount, already on and gentle. It lets that layer's voices wander a few cents in pitch and open their filter a shade differently on every note, the way a real analog synth does, so repeated notes never stack up identically and a held pad breathes. It is measured in cents and capped far under a semitone, so the note itself never changes — turn it right down for machine-tight chiptune, right up for something seasick.</li>
-      <li><b>Let it slide and sing.</b> Pick the <b>bass</b> tab in the Sound panel and there is a <b>Glide</b> amount: the bass slides up or down into each note from the one before, the way a finger slides along a string, whenever the two notes are close enough together to belong to one phrase. Pick the <b>lead</b> tab and there is <b>Vibrato</b> and a rate beside it: a note you hold waits a moment and then comes alive, the way a singer leans into a long note, while short notes stay dead straight. Both come set gently, both are in the WAV export, and both are locked to the key — a slide always lands exactly on the note it was heading for, and vibrato is measured in cents, never a semitone.</li>
-      <li><b>Tell the arp what to play.</b> Pick the <b>arp</b> tab in the Sound panel and there are three choices that change the notes rather than the tone. <b>Arp pattern</b> is the order it walks the chord in: up, down, up-down, random, <b>Chord</b> for block stabs of the whole chord, or <b>Pattern</b> for a little figure repeating the way an old arpeggiator does — and <b>Auto</b> lets every roll of the arp's 🎲 deal a new one. <b>Arp octaves</b> is how far up it reaches, from one octave sitting still to three sweeping up the chord, and <b>Arp gate</b> how much of its step each note holds: right down is a staccato tick, right up is a legato run straight into the next note. Every mood already deals a figure that suits it — Retro a one-octave chip pattern, Dreamy a long three-octave run — and whatever you choose, every note is a tone of the chord playing underneath, so the arp cannot leave the key.</li>
-      <li><b>Widen it and warm it.</b> Each layer has a <b>Chorus</b> amount in the Sound panel: it sends that layer into a stereo chorus — three short delay lines drifting under their own slow LFOs, spread across the field — so a pad spreads out and a lead sounds like more than one player. Up in the top bar, beside the volume, <b>Warmth</b> drives the whole mix into a soft clip and rolls the top end off a shade, the way tape or a valve does: the quiet half comes up, the peaks round over, nothing turns brittle. Turn it right down for a clean digital mix. Neither ever moves a note far enough to change it, both are in the WAV export, and the MIDI asks your instrument for the same chorus.</li>
-      <li><b>Mix the whole thing.</b> The last tab in the Sound panel is <b>master</b>, and it holds the mix rather than a layer: a three-band EQ — <b>High</b> for the air on top, <b>Mid</b> for the body where the chords and the lead sing, <b>Low</b> for the weight underneath — each running from a full cut through flat in the middle to a full boost, with <b>Flat</b> to put all three back. Under them sits the <b>Sidechain pump</b> that ducks everything beneath each kick, and the master fader with its meter. The EQ keeps its own headroom: lean on all three bands at once and it quietly takes the difference back, so it can shape the mix but never make it clip. It is in the WAV export exactly as you hear it.</li>
-      <li><b>Pick a kit and add some perc.</b> The Sound panel's drums tab has six kits — <b>808</b> deep and boomy, <b>909</b> punchy, <b>Lo-fi</b> soft and dusty, <b>Trap</b> long-tailed, <b>House</b> punchy with open bright hats, <b>Breaks</b> dusty with a room-y snare. Under the kit, the step grid's last row is <b>perc</b>, and the kit decides what it plays: a cowbell, a rim or a shaker. Busy sections come with a perc figure already, off the backbeat and behind it in level; click the row to write your own. It follows the kit into the WAV export and reaches your DAW as the matching GM percussion note.</li>
-      <li><b>Send it to someone.</b> <b>Copy link</b> in the top bar puts the whole song into a link — the key and scale, the tempo, the arrangement, your chords, every note you drew or recorded, the drum grid, the sound of every layer, the EQ and the master. The song travels <em>inside</em> the link, so nothing is uploaded, there is nothing to sign in to and no link ever goes stale; it lands on your clipboard and in the address bar at once, so if copying is not allowed you can still take it from there. Whoever opens it gets the song and it is immediately theirs to change. Opening one never costs you your own track — it is one <kbd>Ctrl</kbd>+<kbd>Z</kbd> away. A fresh track makes a link of a couple of hundred characters and a whole song a couple of thousand, because everything still sitting at its default is left out; draw every lane full of notes and the link says so, and Save writes a .json file instead.</li>
-      <li><b>Take it apart and mix it.</b> Beside Export MIDI is <b>Stems</b>: one WAV per layer — lead, arp, chords, bass, drums — offered one after another. Each one is the song rendered again with only that layer up, so it carries its own filter, its delay, reverb and chorus, the pump it takes from the kick and every sweep and fade of the arrangement, and nothing of the other four. They all start at the same moment and run the same length, so you drop the lot into a DAW at zero and the song is back together, this time with a fader on every layer. Only what you can actually hear gets a file: mute a layer or leave a lane empty and it is simply not in the folder, and soloing one exports just that one. The files are numbered in mixer order so they land the right way up. Two things are deliberately <em>not</em> baked in — the master <b>Warmth</b> and the bus compressor that glue the whole mix together — because those belong over the sum rather than on each layer; put them back on your master and the stems add up to the mix you heard. Everything else, the EQ included, is already in them.</li>
-      <li><b>Shape and leave.</b> Edit the arrangement, kits, the drum grid, patches and effects. Then export WAV, stems or MIDI and finish it anywhere.</li>
+      <li><b>Press Play.</b> That is a whole song, and every note of it is locked to one key, so nothing ever sounds off.</li>
+      <li><b>Roll the dice until you smile.</b> New track rerolls everything. Lock a tile to keep that layer, or hit its own dice. Moods pick the scale, the tempo and the sounds.</li>
+      <li><b>Play along.</b> Number keys are chords, letter keys are notes, and they all fit. Sketch chords into the tray and send them to the verse or the chorus.</li>
+      <li><b>Record your hook.</b> Press Rec and play over the looping section. Your notes replace the generated ones, snapped to the grid. Ctrl+Z is always there.</li>
+      <li><b>Go deeper when you want to.</b> Studio, in the top bar, opens the arrangement, the chord editor, the drum grid and every knob of every sound. Song, beside it, exports WAV, MIDI or stems.</li>
     </ol>
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>

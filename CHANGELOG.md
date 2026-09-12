@@ -2,6 +2,10 @@
 
 Newest first. Each entry is one roadmap item, finished, built, and verified with the theory check.
 
+## 2026-09-13
+
+- Jam and Studio. The app opens in Jam: Play, the four settings that matter (mood, key and scale, tempo, energy), one big New track dice, the song strip, the roll, five layer tiles that each carry a sound picker, a level, mute, solo, lock and a dice, the punch-in pads, Rec, the chord pads and the keys. Studio, in the top bar, opens everything else exactly where it was: the chord cards and editor, the arrangement inspector and length presets, the Track details (swing, humanize, evolve, transitions, warmth, saved songs) and the full Sound panel with the drum grid and master EQ. The nine header buttons became one Song menu (keep, copy link, save and open, WAV, MIDI, stems, track code). Clicking a section now plays it and double-clicking loops it. The help sheet is five short steps again; the long form lives in the README.
+
 ## 2026-09-11
 
 - Professional voice architecture. Every synth layer is now a complete voice: a real ADSR with Decay and Sustain, a 12 or 24 dB low-pass with its own Filter envelope amount, key tracking and velocity, per-layer Drive into a soft clip, unison that splits voices left and right through their own filter chains (the supersaw is seven voices wide, the bass stays centred), and a two-operator FM wave with a ratio and an amount for bells, keys and electric pianos. Leads, arps and chords are high-passed into the mix, and the reverb impulse is a designed room with pre-delay, early reflections and a tail whose highs decay first. Sixteen designed patches replace the old twelve, and every mood's sounds were retuned on the new voice. Drums: metallic hats on the 808, 909, Trap and House kits, two-tone snare bodies, 808 and Trap kicks driven into a soft clip, 909 and House kicks with a short knock. All of it in the WAV and stems exports.

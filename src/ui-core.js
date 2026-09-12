@@ -69,7 +69,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
-  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',
+  prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'jam',
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -140,7 +140,8 @@ function restore(p){
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
   if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
-  state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();
+  state.view=s.view==='studio'?'studio':'jam';
+  state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();if(ZUI.applyView)ZUI.applyView();
 }
 // autosave + undo history: every settled change becomes an undo step
 let persistTimer=null;const undo={stack:[],redo:[],last:null,quiet:false};
@@ -370,8 +371,9 @@ function selectSection(i,jump){
   if(E.playing&&(jump||E.loopSection))E.jump(i);
   renderArr();renderInsp();renderProg();buildRoll();if(state.layer==='drums')renderGrid();if(ZUI.renderRecInfo)ZUI.renderRecInfo();persist();
 }
-$('arr').addEventListener('click',e=>{const b=e.target.closest('.sec');if(b)selectSection(+b.dataset.i,false)});
-$('arr').addEventListener('dblclick',e=>{const b=e.target.closest('.sec');if(b)selectSection(+b.dataset.i,true)});
+// a click plays the section (and selects it for the inspector); a double-click loops it
+$('arr').addEventListener('click',e=>{const b=e.target.closest('.sec');if(b)selectSection(+b.dataset.i,true)});
+$('arr').addEventListener('dblclick',e=>{const b=e.target.closest('.sec');if(!b)return;if(!E.loopSection)$('loopSec').click();selectSection(+b.dataset.i,true)});
 function renderInsp(){
   const sec=state.sections[state.sel];if(!sec)return;
   $('secType').value=sec.type;$('secTrans').value=String(sec.transpose||0);

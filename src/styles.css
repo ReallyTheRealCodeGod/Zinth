@@ -315,6 +315,37 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 /* while Rec is armed the keys press in the colour of the layer you are recording into */
 .keys.armed .key.down,.keys.armed .key:active,.keys.armed .key.root.down{background:linear-gradient(180deg,#f4efe2,var(--c))}
 
+/* views: Jam shows the essentials, Studio shows everything */
+.app{grid-template-rows:auto auto auto auto}
+.app[data-view=jam] [data-studio]{display:none!important}
+.app[data-view=studio] [data-jam]{display:none!important}
+.app[data-view=jam] .main{grid-template-columns:1fr}
+.viewseg button{padding:0 14px;height:34px}
+.viewseg button.on{color:var(--amber);box-shadow:inset 0 -2px 0 var(--amber)}
+/* the jam strip: mood, key, tempo, energy and the dice */
+.jam{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.jam .jf{min-width:170px;flex:1 1 170px}
+.jam .jf.moods{flex:2 1 320px}
+.jam .jf.tempo-f{flex:1 1 230px}
+.jam .row2.tight{gap:6px}
+.jam .dice{flex:0 0 auto;height:56px;padding:0 22px;font-size:15px;border-color:rgba(245,165,36,.6);color:var(--amber);background:linear-gradient(180deg,#332a15,#262a3d);display:inline-flex;align-items:center;gap:10px}
+.jam .dice:hover{border-color:var(--amber);color:#ffd07a}
+.jam .dice .die{font-size:22px;display:inline-block;transition:transform .35s}
+.jam .dice:hover .die{transform:rotate(20deg)}
+.jam .dice:active .die{transform:rotate(380deg)}
+.jamhint{font-size:11px;color:var(--ink-mute);flex:1}
+/* the song menu */
+.menu-wrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:300px;background:var(--panel);border:1px solid var(--line-2);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.menu .btn{width:100%;justify-content:flex-start;text-align:left}
+.menu-row{display:flex;gap:6px}
+.menu-row .btn{flex:1;width:auto}
+.menu-row input{flex:1;min-width:0;height:36px;padding:0 10px;background:#0e1017;border:1px solid var(--line);border-radius:var(--r);font:500 12px var(--mono)}
+.menu-sep{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute);padding:6px 2px 0}
+.menu .btn.on{color:var(--rose);border-color:var(--rose)}
+/* layer tiles carry their own sound picker */
+.ch select{height:28px;font-size:12px;padding:0 24px 0 8px;width:100%}
+
 @media (max-width:1180px){.main{grid-template-columns:250px minmax(0,1fr)}.snd{grid-column:1/-1}}
 @media (max-width:760px){.main{grid-template-columns:1fr}.keys{grid-template-columns:repeat(7,1fr)}.transport{margin-left:0}.mixer{grid-template-columns:repeat(2,1fr)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
