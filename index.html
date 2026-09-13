@@ -572,7 +572,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         </div>
         <div class="row2" data-synth>
           <div class="field"><label for="p-fenv">Filter envelope <output id="o-fenv"></output></label><input type="range" id="p-fenv" min="0" max="100" value="40" title="How far the filter opens on each note before settling back over the decay: the pluck and the bite of a sound. Off leaves the filter still."></div>
-          <div class="field"><label>Slope</label><div class="seg" id="slopeSeg" role="group" aria-label="Filter slope" title="12 dB per octave is gentle and bright; 24 dB is two poles in series, steeper and darker, the classic ladder sound"><button data-v="12">12 dB</button><button data-v="24">24 dB</button></div></div>
+          <div class="field"><label>Slope</label><div class="seg" id="slopeSeg" role="group" aria-label="Filter slope" title="12 dB per octave is gentle and bright; 24 dB is two poles in series, steeper and darker, the classic ladder sound"><button data-v="12">12 dB</button><button data-v="24">24 dB</button><button data-v="36" title="A four-pole ladder with feedback, the Moog way, run as its own processor per voice">Ladder</button></div></div>
         </div>
         <div class="row2" data-synth>
           <div class="field"><label for="p-attack">Attack <output id="o-attack"></output></label><input type="range" id="p-attack" min="0" max="100" value="5" title="How long a note takes to reach full level"></div>
@@ -606,6 +606,11 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         <div class="field" data-master><label for="eq-mid">Mid <output id="o-eq-mid"></output></label><input class="bip" type="range" id="eq-mid" min="-100" max="100" value="0" title="Mid peak at 1 kHz: the body of the mix, where the chords and the lead sing. Left scoops it out, right pushes it forward. Centre is flat."></div>
         <div class="field" data-master><label for="eq-low">Low <output id="o-eq-low"></output></label><input class="bip" type="range" id="eq-low" min="-100" max="100" value="0" title="Low shelf at 160 Hz: the weight underneath — the kick and the bass. Left thins it out, right fills it in. Centre is flat."></div>
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
+        <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
+        <div class="row2" data-master>
+          <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>
+          <div class="field"><label for="rv-pre">Pre-delay <output id="o-rv-pre"></output></label><input type="range" id="rv-pre" min="0" max="120" value="15" title="The gap before the room answers, in milliseconds. A little keeps the attack clear in front of the wash."></div>
+        </div>
         <div class="field" data-master><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35" title="Sidechain pump: every kick ducks the whole mix under it for a moment, so the kick punches through and the track breathes. Right down is no ducking at all."></div>
         <div class="field" data-synth><label for="p-chorus">Chorus <output id="o-chorus"></output></label><input type="range" id="p-chorus" min="0" max="100" value="22" title="Chorus: send this layer into a stereo chorus — three slowly drifting delay lines spread across the field — so it comes back wide, thick and moving. It never bends a note far enough to change it, and the WAV export is chorused too."></div>
         <div class="row2" data-voice>
@@ -1695,6 +1700,135 @@ window.Z=Object.assign(window.Z||{},{Rng,randomSeed,NOTE_NAMES,SCALES,SCALE_GROU
 <script>
 (()=>{
 'use strict';
+/* DSP that Web Audio's built-in nodes cannot do: a lookahead limiter, an algorithmic reverb and a ladder
+   filter, each an AudioWorklet processor shipped as source text and loaded from a blob URL so the app stays
+   one file. Plus a BS.1770 loudness meter for the exports. Everything degrades: without worklets the engine
+   keeps its compressor, its convolver and its biquads. */
+const Z=window.Z;
+
+const WORKLETS=`
+// ---- limiter: a few milliseconds of lookahead, instant-in gain over the window, exponential release ----
+class ZinthLimiter extends AudioWorkletProcessor{
+  static get parameterDescriptors(){return [{name:'ceiling',defaultValue:0.891,minValue:0.05,maxValue:1,automationRate:'k-rate'},{name:'release',defaultValue:0.08,minValue:0.005,maxValue:2,automationRate:'k-rate'}]}
+  constructor(){super();this.la=Math.max(64,Math.round(sampleRate*0.003));this.ring=[new Float32Array(this.la),new Float32Array(this.la)];this.tg=new Float32Array(this.la).fill(1);this.w=0;this.g=1;this.att=1-Math.exp(-5/this.la)}
+  process(inputs,outputs,p){
+    const inp=inputs[0],out=outputs[0];if(!out||!out.length)return true;
+    const n=out[0].length,ch=Math.min(inp&&inp.length||0,out.length,2),ceil=p.ceiling[0],rel=Math.exp(-1/(sampleRate*p.release[0])),la=this.la,tg=this.tg;
+    for(let i=0;i<n;i++){
+      let pk=0;for(let c=0;c<ch;c++){const v=Math.abs(inp[c][i]);if(v>pk)pk=v}
+      const w=this.w;tg[w]=pk>ceil?ceil/pk:1;
+      let m=1;for(let j=0;j<la;j++){const v=tg[j];if(v<m)m=v}
+      if(m<this.g)this.g+=(m-this.g)*this.att;else this.g=m+(this.g-m)*rel;
+      for(let c=0;c<out.length;c++){const o=this.ring[c<2?c:1][w];if(c<ch)this.ring[c][w]=inp[c][i];out[c][i]=o*this.g}
+      if(ch===1)this.ring[1][w]=this.ring[0][w];
+      this.w=(w+1)%la;
+    }
+    return true;
+  }
+}
+registerProcessor('zinth-limiter',ZinthLimiter);
+// ---- reverb: an eight-line feedback delay network with a householder mix, damping in the loop, pre-delay ----
+class ZinthReverb extends AudioWorkletProcessor{
+  static get parameterDescriptors(){return [{name:'size',defaultValue:0.6,minValue:0,maxValue:1,automationRate:'k-rate'},{name:'damp',defaultValue:0.4,minValue:0,maxValue:1,automationRate:'k-rate'},{name:'predelay',defaultValue:0.015,minValue:0,maxValue:0.12,automationRate:'k-rate'}]}
+  constructor(){super();
+    const k=sampleRate/44100;this.N=8;this.base=[1123,1499,1783,2069,2371,2647,2917,3253].map(x=>Math.round(x*k));
+    this.max=this.base.map(b=>Math.round(b*1.05)+4);this.lines=this.max.map(L=>new Float32Array(L));this.pos=new Int32Array(this.N);
+    this.lp=new Float32Array(this.N);this.rd=new Float32Array(this.N);this.pre=new Float32Array(Math.round(sampleRate*0.125)+1);this.pp=0;
+  }
+  process(inputs,outputs,p){
+    const inp=inputs[0],out=outputs[0];if(!out||!out.length)return true;
+    const n=out[0].length,size=p.size[0],damp=Math.min(0.95,p.damp[0]*0.9),pd=Math.max(1,Math.min(this.pre.length-1,Math.round(p.predelay[0]*sampleRate)));
+    const N=this.N,fb=0.68+0.29*size,dmp=1-damp,L=out[0],R=out.length>1?out[1]:null,inL=inp&&inp[0],inR=inp&&inp.length>1?inp[1]:inL;
+    const lens=this.lens||(this.lens=new Int32Array(N));for(let j=0;j<N;j++)lens[j]=Math.max(32,Math.round(this.base[j]*(0.5+0.5*size)));
+    for(let i=0;i<n;i++){
+      const x=((inL?inL[i]:0)+(inR?inR[i]:0))*0.5;
+      const pre=this.pre,pl=pre.length,pin=this.pp;const xin=pre[(pin-pd+pl)%pl];pre[pin]=x;this.pp=(pin+1)%pl;
+      let s=0;
+      for(let j=0;j<N;j++){const line=this.lines[j],ml=this.max[j];const r=line[(this.pos[j]-lens[j]+ml)%ml];this.lp[j]+=(r-this.lp[j])*dmp;this.rd[j]=this.lp[j];s+=this.lp[j]}
+      const hh=s*(2/N);let l=0,rr=0;
+      for(let j=0;j<N;j++){const v=xin+fb*(this.rd[j]-hh);const line=this.lines[j];line[this.pos[j]]=v;this.pos[j]=(this.pos[j]+1)%this.max[j];if(j&1)rr+=this.rd[j];else l+=this.rd[j]}
+      L[i]=l*0.32;if(R)R[i]=rr*0.32;
+    }
+    return true;
+  }
+}
+registerProcessor('zinth-reverb',ZinthReverb);
+// ---- ladder: the four-pole lowpass with feedback, per voice; ends itself once its voice has stopped ----
+class ZinthLadder extends AudioWorkletProcessor{
+  static get parameterDescriptors(){return [{name:'cutoff',defaultValue:1000,minValue:20,maxValue:20000,automationRate:'a-rate'},{name:'reso',defaultValue:0.2,minValue:0,maxValue:1,automationRate:'k-rate'}]}
+  constructor(){super();this.s=[new Float64Array(8),new Float64Array(8)];this.idle=0}
+  process(inputs,outputs,p){
+    const inp=inputs[0],out=outputs[0];
+    if(!inp||!inp.length){this.idle++;return this.idle<4}
+    this.idle=0;const n=out[0].length,ch=Math.min(inp.length,out.length,2),cut=p.cutoff,res=p.reso[0]*3.9,mk=1+p.reso[0]*0.6;
+    for(let c=0;c<ch;c++){const st=this.s[c],x=inp[c],y=out[c];
+      for(let i=0;i<n;i++){
+        const hz=cut.length>1?cut[i]:cut[0],f=Math.min(0.99,2*hz/sampleRate),f2=f*f,fb=res*(1-0.15*f2);
+        let v=x[i]-st[7]*fb;v*=0.35013*f2*f2;
+        st[4]=v+0.3*st[0]+(1-f)*st[4];st[0]=v;
+        st[5]=st[4]+0.3*st[1]+(1-f)*st[5];st[1]=st[4];
+        st[6]=st[5]+0.3*st[2]+(1-f)*st[6];st[2]=st[5];
+        st[7]=st[6]+0.3*st[3]+(1-f)*st[7];st[3]=st[6];
+        y[i]=st[7]*mk;
+      }
+    }
+    for(let c=ch;c<out.length;c++)out[c].fill(0);
+    return true;
+  }
+}
+registerProcessor('zinth-ladder',ZinthLadder);
+`;
+let url=null;const ready=new WeakMap();
+// load the processors into a context once; resolves true when they are usable, false when the browser cannot
+function installWorklets(ctx){
+  if(!ctx||!ctx.audioWorklet)return Promise.resolve(false);
+  if(ready.has(ctx))return ready.get(ctx);
+  if(!url)url=URL.createObjectURL(new Blob([WORKLETS],{type:'application/javascript'}));
+  const p=ctx.audioWorklet.addModule(url).then(()=>true).catch(()=>false);
+  ready.set(ctx,p);return p;
+}
+
+/* ---- loudness (ITU-R BS.1770-4): K-weighting, 400 ms blocks, absolute and relative gating ---- */
+function biquad(b0,b1,b2,a1,a2){let x1=0,x2=0,y1=0,y2=0;return x=>{const y=b0*x+b1*x1+b2*x2-a1*y1-a2*y2;x2=x1;x1=x;y2=y1;y1=y;return y}}
+function kWeight(sr){
+  const shelf=(()=>{const f0=1681.974,G=3.99984,Q=0.7071752;const A=Math.pow(10,G/40),w0=2*Math.PI*f0/sr,al=Math.sin(w0)/(2*Q),cs=Math.cos(w0),sA=2*Math.sqrt(A)*al;
+    const b0=A*((A+1)+(A-1)*cs+sA),b1=-2*A*((A-1)+(A+1)*cs),b2=A*((A+1)+(A-1)*cs-sA),a0=(A+1)-(A-1)*cs+sA,a1=2*((A-1)-(A+1)*cs),a2=(A+1)-(A-1)*cs-sA;return biquad(b0/a0,b1/a0,b2/a0,a1/a0,a2/a0)})();
+  const hp=(()=>{const f0=38.13547,Q=0.5003270;const w0=2*Math.PI*f0/sr,al=Math.sin(w0)/(2*Q),cs=Math.cos(w0);const b0=(1+cs)/2,b1=-(1+cs),b2=(1+cs)/2,a0=1+al,a1=-2*cs,a2=1-al;return biquad(b0/a0,b1/a0,b2/a0,a1/a0,a2/a0)})();
+  return x=>hp(shelf(x));
+}
+function loudness(buf){
+  const sr=buf.sampleRate,ch=buf.numberOfChannels,n=buf.length,block=Math.round(sr*0.4),hop=Math.round(sr*0.1);
+  const chans=[],filt=[];for(let c=0;c<ch;c++){chans.push(buf.getChannelData(c));filt.push(kWeight(sr))}
+  const pre=new Float64Array(n+1);let peak=0;
+  for(let i=0;i<n;i++){let s=0;for(let c=0;c<ch;c++){const v=chans[c][i],a=v<0?-v:v;if(a>peak)peak=a;const w=filt[c](v);s+=w*w}pre[i+1]=pre[i]+s}
+  const blocks=[];for(let st=0;st+block<=n;st+=hop){const ms=(pre[st+block]-pre[st])/block;if(ms>0)blocks.push(ms)}
+  const lk=ms=>-0.691+10*Math.log10(ms);
+  const abs=blocks.filter(ms=>lk(ms)>-70);
+  if(!abs.length)return {lufs:-Infinity,peak,peakDb:peak>0?20*Math.log10(peak):-Infinity};
+  const relGate=lk(abs.reduce((a,b)=>a+b,0)/abs.length)-10;
+  const kept=abs.filter(ms=>lk(ms)>relGate);
+  const lufs=lk((kept.length?kept:abs).reduce((a,b)=>a+b,0)/(kept.length||abs.length));
+  return {lufs,peak,peakDb:peak>0?20*Math.log10(peak):-Infinity};
+}
+// the gain that brings a measurement to the target, capped so silence is never blown up
+function normGain(lufs,target){if(!isFinite(lufs))return 1;return Math.min(Math.pow(10,20/20),Math.pow(10,(target-lufs)/20))}
+// apply a gain and catch the peaks: the buffer through the lookahead limiter, offline
+async function limitBuffer(buf,gain,ceilingDb){
+  const off=new OfflineAudioContext(buf.numberOfChannels,buf.length,buf.sampleRate);
+  const ok=await installWorklets(off);
+  const src=off.createBufferSource();src.buffer=buf;const g=off.createGain();g.gain.value=gain;src.connect(g);
+  if(ok){const lim=new AudioWorkletNode(off,'zinth-limiter',{outputChannelCount:[buf.numberOfChannels]});lim.parameters.get('ceiling').value=Math.pow(10,(ceilingDb||-1)/20);g.connect(lim);lim.connect(off.destination)}
+  else{const c=off.createDynamicsCompressor();c.threshold.value=(ceilingDb||-1)-1;c.knee.value=0;c.ratio.value=20;c.attack.value=0.001;c.release.value=0.05;g.connect(c);c.connect(off.destination)}
+  src.start(0);return off.startRendering();
+}
+const REVERB={dflt:{size:60,damp:40,pre:15}};
+const LOUD={target:-14,ceiling:-1};
+Object.assign(Z,{installWorklets,loudness,normGain,limitBuffer,REVERB,LOUD});
+})();
+</script>
+<script>
+(()=>{
+'use strict';
 const Z=window.Z;
 /* ================= demo songs =================
    Six finished songs, one press away in the help sheet, so the first ten seconds of Zinth are the best ten
@@ -1964,6 +2098,8 @@ class Engine{
     this.glideFrom={};
     // the layer this engine is rendering on its own, when it is rendering a stem rather than the mix
     this.stem=null;
+    // the worklet-based stages arrive a moment after init(); until then the built-in nodes stand in
+    this.wl=null;this.worklets=false;this.reverbSettings=Object.assign({},(Z.REVERB&&Z.REVERB.dflt)||{size:60,damp:40,pre:15});
   }
   init(ctxIn){
     if(this.ctx)return;
@@ -2007,7 +2143,8 @@ class Engine{
     this.eqTrim.connect(glue?this.warmShape:this.sweep);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
     this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);this.setEq(this.eq,true);
     this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(glue?this.comp:this.limiter);
-    this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
+    this.lim2=ctx.createGain(); // the lookahead limiter slots in here once its worklet has loaded
+    this.comp.connect(this.limiter);this.limiter.connect(this.lim2);this.lim2.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
     this.delayIn=ctx.createGain();this.delay=ctx.createDelay(2);this.delayFilt=ctx.createBiquadFilter();this.delayFilt.type='lowpass';this.delayFilt.frequency.value=3000;
@@ -2051,6 +2188,28 @@ class Engine{
      g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs,in:busIn('chords',g)}}
     this.updateGains(true);
     this.noise=this.makeNoise(2);
+    this.wl=(Z.installWorklets?Z.installWorklets(ctx):Promise.resolve(false)).then(ok=>{if(ok)this.attachWorklets();return ok}).catch(()=>false);
+  }
+  // swap the stand-ins for the real thing: the lookahead limiter after the bus compressor, the FDN reverb
+  // in place of the convolver. Both keep the same connections, so nothing else in the chain notices.
+  attachWorklets(){
+    const ctx=this.ctx;if(!ctx||this.worklets)return;
+    try{
+      const lim=new AudioWorkletNode(ctx,'zinth-limiter',{outputChannelCount:[2]});
+      lim.parameters.get('ceiling').value=Math.pow(10,((Z.LOUD&&Z.LOUD.ceiling)||-1)/20);
+      this.limiter.disconnect(this.lim2);this.limiter.connect(lim);lim.connect(this.lim2);this.limNode=lim;
+      const rv=new AudioWorkletNode(ctx,'zinth-reverb',{outputChannelCount:[2]});
+      this.reverbIn.disconnect(this.reverb);this.reverbIn.connect(rv);rv.connect(this.reverbOut);this.reverbNode=rv;
+      this.worklets=true;this.setReverb(this.reverbSettings);
+    }catch(e){this.worklets=false}
+  }
+  // the room: size, damping and pre-delay, in 0..100 and milliseconds
+  setReverb(r){
+    this.reverbSettings=Object.assign(this.reverbSettings,r||{});
+    const n=this.reverbNode;if(!n)return;const s=this.reverbSettings,t=this.ctx.currentTime;
+    n.parameters.get('size').setTargetAtTime(Math.max(0,Math.min(1,s.size/100)),t,0.05);
+    n.parameters.get('damp').setTargetAtTime(Math.max(0,Math.min(1,s.damp/100)),t,0.05);
+    n.parameters.get('predelay').setTargetAtTime(Math.max(0,Math.min(0.12,s.pre/1000)),t,0.05);
   }
   // the reverb impulse: a short pre-delay, a handful of early reflections, then a diffuse tail whose highs
   // die faster than its lows, the way a real room does. Left and right are different noise, so the tail
@@ -2204,8 +2363,12 @@ class Engine{
       f.frequency.setTargetAtTime(floorCut,time+atk,Math.max(0.03,dec/3));
     };
     const mkChain=()=>{
+      // the ladder: a worklet per chain, with the same envelope on its cutoff; it ends itself when the voice does
+      if(p.slope===36&&this.worklets){
+        try{const n=new AudioWorkletNode(ctx,'zinth-ladder');n.parameters.get('reso').value=Math.max(0,Math.min(1,p.reso/100));filterEnv({frequency:n.parameters.get('cutoff')});return {in:n,out:n}}catch(e){}
+      }
       const f1=ctx.createBiquadFilter();f1.type='lowpass';f1.Q.value=qOf(p.reso);filterEnv(f1);
-      if(p.slope===24){const f2=ctx.createBiquadFilter();f2.type='lowpass';f2.Q.value=0.7;filterEnv(f2);f1.connect(f2);return {in:f1,out:f2}}
+      if(p.slope>=24){const f2=ctx.createBiquadFilter();f2.type='lowpass';f2.Q.value=0.7;filterEnv(f2);f1.connect(f2);return {in:f1,out:f2}}
       return {in:f1,out:f1};
     };
     // a sliding voice starts on the note before and ramps to its own; every other voice starts on pitch
@@ -2605,7 +2768,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
 };
 const rec={armed:false};
@@ -2670,7 +2833,7 @@ function restore(p){
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,
     humanize:s.humanize===undefined?Z.HUMAN.dflt:Z.humanAmt(s.humanize)*100,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),reverb:Object.assign({},Z.REVERB.dflt,s.reverb||{}),
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,countIn:s.countIn!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
@@ -2729,6 +2892,7 @@ function syncHumanize(){E.humanize=state.humanize;E.humanSeed=state.seeds.chords
 function syncControls(){
   $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('human').value=state.humanize;$('kit').value=state.kit;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
+  E.setReverb(state.reverb);['size','damp','pre'].forEach(k=>{const el=$('rv-'+k);if(el)el.value=state.reverb[k]});
   state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;syncHumanize();
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));
@@ -3226,7 +3390,7 @@ function renderSound(){
   renderArpFields();if(synth)renderVoiceFields(p);
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
-  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq()}
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb()}
   else if(synth)$('patch').value=patchName(p);
   else{$('kit').value=state.kit;renderGrid()}
 }
@@ -3355,6 +3519,12 @@ $('mixer').addEventListener('change',e=>{const s=e.target.closest('select[data-l
   else{const P=PATCHES[s.value];if(!P)return;for(const k in P)E.setParam(L,k,P[k]);U.setStatus(L+' → '+s.value)}
   if(state.layer===L)renderSound();renderMixer();U.persist()});
 
+/* ---------- the room: reverb size, damping and pre-delay on the master tab ---------- */
+const rvFmt={size:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',damp:v=>v+' %',pre:v=>v+' ms'};
+function renderReverb(){['size','damp','pre'].forEach(k=>{const el=$('rv-'+k);if(!el)return;el.value=state.reverb[k];U.fill(el);$('o-rv-'+k).textContent=rvFmt[k](state.reverb[k])})}
+['size','damp','pre'].forEach(k=>$('rv-'+k).addEventListener('input',e=>{state.reverb[k]=+e.target.value;E.setReverb(state.reverb);$('o-rv-'+k).textContent=rvFmt[k](state.reverb[k]);U.persist()}));
+$('rv-size').addEventListener('change',()=>U.setStatus(E.worklets?'Room: '+rvFmt.size(state.reverb.size)+', damping '+state.reverb.damp+' %, pre-delay '+state.reverb.pre+' ms. Every Reverb send goes into this room, and so does the export.':'This browser cannot run the algorithmic room, so a fixed room stands in. The controls take effect where worklets are available.'));
+
 /* ---------- theme: light or dark, following the system until you choose ---------- */
 function applyTheme(t){
   if(t)document.documentElement.dataset.theme=t;else delete document.documentElement.dataset.theme;
@@ -3445,18 +3615,29 @@ async function renderSong(stem){
   const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
   const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
   // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
-  R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.stem=stem||null;R.init(off);
+  R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.stem=stem||null;R.init(off);R.reverbSettings=Object.assign({},state.reverb);
+  await R.wl; // the limiter and the reverb are in place before a single note is scheduled
   let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
   return {buf:await off.startRendering(),secs:Math.round(steps*d)};
 }
 const wavBlob=buf=>new Blob([encodeWav(buf)],{type:'audio/wav'});
 // a breath between renders, so the status line gets a chance to paint before the next one starts
 const breathe=()=>new Promise(r=>setTimeout(r,0));
+// every export lands at streaming level: measured to BS.1770, brought to the target loudness, then
+// through the lookahead limiter so no peak crosses the ceiling. The status line reports what it measured.
+const dbf=v=>(v>0?'+':'−')+Math.abs(v).toFixed(1);
+async function master(buf){
+  const before=Z.loudness(buf),gain=Z.normGain(before.lufs,Z.LOUD.target);
+  const out=await Z.limitBuffer(buf,gain,Z.LOUD.ceiling),after=Z.loudness(out);
+  return {buf:out,gain,before,after,note:after.lufs.toFixed(1)+' LUFS · peak '+dbf(after.peakDb)+' dBFS'+(after.peakDb>Z.LOUD.ceiling+0.2?' · OVER':'')};
+}
 async function exportWav(){
   if(exporting)return;exportBusy(true);U.setStatus('Rendering…');
   try{
     const r=await renderSong(null),name=Z.stemSafe('zinth-'+state.seeds.chords)+'.wav';
-    U.setStatus(await saveFile(name,wavBlob(r.buf),'Saved '+name+' ('+r.secs+' s)'));
+    U.setStatus('Mastering…');await breathe();
+    const m=await master(r.buf);
+    U.setStatus(await saveFile(name,wavBlob(m.buf),'Saved '+name+' · '+r.secs+' s · '+m.note));
   }catch(err){U.setStatus('Export failed: '+(err&&err.message||err))}
   exportBusy(false);
 }
@@ -3470,13 +3651,17 @@ async function exportStems(){
     const plan=Z.stemPlan(song(),E.params,'zinth-'+state.seeds.chords);
     if(!plan.length)U.setStatus('No stems to export: every layer is muted or empty');
     else{
+      // the stems share one gain, measured on the full mix, so they add back up to the mastered song
+      U.setStatus('Measuring the mix…');await breathe();
+      const mix=await renderSong(null),gain=Z.normGain(Z.loudness(mix.buf).lufs,Z.LOUD.target);
       let saved=0,stopped='';
       for(let i=0;i<plan.length;i++){
         const s=plan[i];
         U.setStatus('Rendering '+s.layer+'… ('+(i+1)+' of '+plan.length+')');
         await breathe();
         const r=await renderSong(s.layer),done='Saved '+s.name;
-        const msg=await saveFile(s.name,wavBlob(r.buf),done);
+        const lim=await Z.limitBuffer(r.buf,gain,Z.LOUD.ceiling);
+        const msg=await saveFile(s.name,wavBlob(lim),done);
         if(msg!==done){stopped=msg;break}
         saved++;
       }
@@ -3931,7 +4116,7 @@ const SCREENS={
     knobs:()=>[
       {label:'Volume',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>+$('master').value,set:v=>setRange('master',v)},
       {label:'Warmth',min:0,max:100,step:1,fmt:v=>v?v+' %':'clean',get:()=>Math.round(state.warmth),set:v=>setRange('warmth',v)},
-      {label:'Humanize',min:0,max:100,step:1,fmt:v=>v?v<34?'a little':v<67?'played':'loose':'machine',get:()=>+$('human').value,set:v=>setRange('human',v)},
+      {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()}},
       {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)}},
     ],
     html:()=>'<div class="scr scr-mix" id="opMix"></div>',

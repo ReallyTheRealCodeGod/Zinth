@@ -105,7 +105,7 @@ const SCREENS={
     knobs:()=>[
       {label:'Volume',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>+$('master').value,set:v=>setRange('master',v)},
       {label:'Warmth',min:0,max:100,step:1,fmt:v=>v?v+' %':'clean',get:()=>Math.round(state.warmth),set:v=>setRange('warmth',v)},
-      {label:'Humanize',min:0,max:100,step:1,fmt:v=>v?v<34?'a little':v<67?'played':'loose':'machine',get:()=>+$('human').value,set:v=>setRange('human',v)},
+      {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()}},
       {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)}},
     ],
     html:()=>'<div class="scr scr-mix" id="opMix"></div>',

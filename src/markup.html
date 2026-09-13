@@ -157,7 +157,7 @@
         </div>
         <div class="row2" data-synth>
           <div class="field"><label for="p-fenv">Filter envelope <output id="o-fenv"></output></label><input type="range" id="p-fenv" min="0" max="100" value="40" title="How far the filter opens on each note before settling back over the decay: the pluck and the bite of a sound. Off leaves the filter still."></div>
-          <div class="field"><label>Slope</label><div class="seg" id="slopeSeg" role="group" aria-label="Filter slope" title="12 dB per octave is gentle and bright; 24 dB is two poles in series, steeper and darker, the classic ladder sound"><button data-v="12">12 dB</button><button data-v="24">24 dB</button></div></div>
+          <div class="field"><label>Slope</label><div class="seg" id="slopeSeg" role="group" aria-label="Filter slope" title="12 dB per octave is gentle and bright; 24 dB is two poles in series, steeper and darker, the classic ladder sound"><button data-v="12">12 dB</button><button data-v="24">24 dB</button><button data-v="36" title="A four-pole ladder with feedback, the Moog way, run as its own processor per voice">Ladder</button></div></div>
         </div>
         <div class="row2" data-synth>
           <div class="field"><label for="p-attack">Attack <output id="o-attack"></output></label><input type="range" id="p-attack" min="0" max="100" value="5" title="How long a note takes to reach full level"></div>
@@ -191,6 +191,11 @@
         <div class="field" data-master><label for="eq-mid">Mid <output id="o-eq-mid"></output></label><input class="bip" type="range" id="eq-mid" min="-100" max="100" value="0" title="Mid peak at 1 kHz: the body of the mix, where the chords and the lead sing. Left scoops it out, right pushes it forward. Centre is flat."></div>
         <div class="field" data-master><label for="eq-low">Low <output id="o-eq-low"></output></label><input class="bip" type="range" id="eq-low" min="-100" max="100" value="0" title="Low shelf at 160 Hz: the weight underneath — the kick and the bass. Left thins it out, right fills it in. Centre is flat."></div>
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
+        <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
+        <div class="row2" data-master>
+          <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>
+          <div class="field"><label for="rv-pre">Pre-delay <output id="o-rv-pre"></output></label><input type="range" id="rv-pre" min="0" max="120" value="15" title="The gap before the room answers, in milliseconds. A little keeps the attack clear in front of the wash."></div>
+        </div>
         <div class="field" data-master><label for="p-pump">Sidechain pump <output id="o-pump"></output></label><input type="range" id="p-pump" min="0" max="100" value="35" title="Sidechain pump: every kick ducks the whole mix under it for a moment, so the kick punches through and the track breathes. Right down is no ducking at all."></div>
         <div class="field" data-synth><label for="p-chorus">Chorus <output id="o-chorus"></output></label><input type="range" id="p-chorus" min="0" max="100" value="22" title="Chorus: send this layer into a stereo chorus — three slowly drifting delay lines spread across the field — so it comes back wide, thick and moving. It never bends a note far enough to change it, and the WAV export is chorused too."></div>
         <div class="row2" data-voice>

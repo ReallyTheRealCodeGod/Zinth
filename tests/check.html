@@ -1079,6 +1079,8 @@ class Engine{
     this.glideFrom={};
     // the layer this engine is rendering on its own, when it is rendering a stem rather than the mix
     this.stem=null;
+    // the worklet-based stages arrive a moment after init(); until then the built-in nodes stand in
+    this.wl=null;this.worklets=false;this.reverbSettings=Object.assign({},(Z.REVERB&&Z.REVERB.dflt)||{size:60,damp:40,pre:15});
   }
   init(ctxIn){
     if(this.ctx)return;
@@ -1122,7 +1124,8 @@ class Engine{
     this.eqTrim.connect(glue?this.warmShape:this.sweep);this.warmShape.connect(this.warmTone);this.warmTone.connect(this.warmTrim);
     this.warmTrim.connect(this.sweep);this.setWarmth(this.warmth,true);this.setEq(this.eq,true);
     this.sweep.connect(this.fxHP);this.fxHP.connect(this.fxLP);this.fxLP.connect(this.fxCrush);this.fxCrush.connect(this.fxGate);this.fxGate.connect(glue?this.comp:this.limiter);
-    this.comp.connect(this.limiter);this.limiter.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
+    this.lim2=ctx.createGain(); // the lookahead limiter slots in here once its worklet has loaded
+    this.comp.connect(this.limiter);this.limiter.connect(this.lim2);this.lim2.connect(this.fade);this.fade.connect(ctx.destination);this.fade.connect(this.analyser);
     this.duck=ctx.createGain();this.duck.connect(this.master);
     // delay bus
     this.delayIn=ctx.createGain();this.delay=ctx.createDelay(2);this.delayFilt=ctx.createBiquadFilter();this.delayFilt.type='lowpass';this.delayFilt.frequency.value=3000;
@@ -1166,6 +1169,28 @@ class Engine{
      g.connect(this.duck);g.connect(ds);ds.connect(this.delayIn);g.connect(rs);rs.connect(this.reverbIn);this.bus.live={g,ds,rs,cs,in:busIn('chords',g)}}
     this.updateGains(true);
     this.noise=this.makeNoise(2);
+    this.wl=(Z.installWorklets?Z.installWorklets(ctx):Promise.resolve(false)).then(ok=>{if(ok)this.attachWorklets();return ok}).catch(()=>false);
+  }
+  // swap the stand-ins for the real thing: the lookahead limiter after the bus compressor, the FDN reverb
+  // in place of the convolver. Both keep the same connections, so nothing else in the chain notices.
+  attachWorklets(){
+    const ctx=this.ctx;if(!ctx||this.worklets)return;
+    try{
+      const lim=new AudioWorkletNode(ctx,'zinth-limiter',{outputChannelCount:[2]});
+      lim.parameters.get('ceiling').value=Math.pow(10,((Z.LOUD&&Z.LOUD.ceiling)||-1)/20);
+      this.limiter.disconnect(this.lim2);this.limiter.connect(lim);lim.connect(this.lim2);this.limNode=lim;
+      const rv=new AudioWorkletNode(ctx,'zinth-reverb',{outputChannelCount:[2]});
+      this.reverbIn.disconnect(this.reverb);this.reverbIn.connect(rv);rv.connect(this.reverbOut);this.reverbNode=rv;
+      this.worklets=true;this.setReverb(this.reverbSettings);
+    }catch(e){this.worklets=false}
+  }
+  // the room: size, damping and pre-delay, in 0..100 and milliseconds
+  setReverb(r){
+    this.reverbSettings=Object.assign(this.reverbSettings,r||{});
+    const n=this.reverbNode;if(!n)return;const s=this.reverbSettings,t=this.ctx.currentTime;
+    n.parameters.get('size').setTargetAtTime(Math.max(0,Math.min(1,s.size/100)),t,0.05);
+    n.parameters.get('damp').setTargetAtTime(Math.max(0,Math.min(1,s.damp/100)),t,0.05);
+    n.parameters.get('predelay').setTargetAtTime(Math.max(0,Math.min(0.12,s.pre/1000)),t,0.05);
   }
   // the reverb impulse: a short pre-delay, a handful of early reflections, then a diffuse tail whose highs
   // die faster than its lows, the way a real room does. Left and right are different noise, so the tail
@@ -1319,8 +1344,12 @@ class Engine{
       f.frequency.setTargetAtTime(floorCut,time+atk,Math.max(0.03,dec/3));
     };
     const mkChain=()=>{
+      // the ladder: a worklet per chain, with the same envelope on its cutoff; it ends itself when the voice does
+      if(p.slope===36&&this.worklets){
+        try{const n=new AudioWorkletNode(ctx,'zinth-ladder');n.parameters.get('reso').value=Math.max(0,Math.min(1,p.reso/100));filterEnv({frequency:n.parameters.get('cutoff')});return {in:n,out:n}}catch(e){}
+      }
       const f1=ctx.createBiquadFilter();f1.type='lowpass';f1.Q.value=qOf(p.reso);filterEnv(f1);
-      if(p.slope===24){const f2=ctx.createBiquadFilter();f2.type='lowpass';f2.Q.value=0.7;filterEnv(f2);f1.connect(f2);return {in:f1,out:f2}}
+      if(p.slope>=24){const f2=ctx.createBiquadFilter();f2.type='lowpass';f2.Q.value=0.7;filterEnv(f2);f1.connect(f2);return {in:f1,out:f2}}
       return {in:f1,out:f1};
     };
     // a sliding voice starts on the note before and ramps to its own; every other voice starts on pitch

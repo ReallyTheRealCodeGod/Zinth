@@ -76,7 +76,7 @@ const FXKEYS={z:'lp',x:'hp',c:'gate8',v:'gate16',b:'crush',n:'throw',m:'wash'};
 
 const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
-  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),
+  mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
 };
 const rec={armed:false};
@@ -141,7 +141,7 @@ function restore(p){
   const s=p.state;
   Object.assign(state,{seeds:s.seeds,locks:s.locks||state.locks,mood:MOODS[s.mood]?s.mood:'chill',root:s.root,scale:Z.SCALES[s.scale]?s.scale:'dorian',bpm:s.bpm,energy:s.energy,swing:s.swing,
     humanize:s.humanize===undefined?Z.HUMAN.dflt:Z.humanAmt(s.humanize)*100,evolve:s.evolve!==false,sevenths:!!s.sevenths,gate:s.gate||0.7,
-    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),
+    warmth:s.warmth===undefined?Z.WARMTH.dflt:Z.warmthAmt(s.warmth)*100,eq:Z.normEq(s.eq),arp:Z.normArp(s.arp),reverb:Object.assign({},Z.REVERB.dflt,s.reverb||{}),
     prog:s.prog||{v:null,c:null},drumEdits:s.drumEdits||{v:null,c:null},leadEdits:s.leadEdits||{v:null,c:null},arpEdits:s.arpEdits||{v:null,c:null},bassEdits:s.bassEdits||{v:null,c:null},kit:Z.KITS[s.kit]?s.kit:'808',transitions:s.transitions!==false,countIn:s.countIn!==false,sections:(s.sections&&s.sections.length?s.sections:defaultSections()),sel:s.sel||0,layer:(Z.LAYERS.includes(s.layer)||s.layer==='master')?s.layer:'lead',recTarget:EDITS[s.recTarget]?s.recTarget:'lead'});
   state.sections.forEach(sec=>{sec.id=secId++;if(!SEC_TYPES[sec.type])sec.type='Verse';sec.sweep=sweepOf(sec);sec.fade=fadeOf(sec)});
   // a project saved before a sound setting existed simply does not carry it: fill from the defaults, so an
@@ -200,6 +200,7 @@ function syncHumanize(){E.humanize=state.humanize;E.humanSeed=state.seeds.chords
 function syncControls(){
   $('root').value=state.root;$('scale').value=state.scale;$('bpm').value=state.bpm;$('energy').value=state.energy;$('swing').value=state.swing;$('human').value=state.humanize;$('kit').value=state.kit;
   $('warmth').value=state.warmth;E.setWarmth(state.warmth);
+  E.setReverb(state.reverb);['size','damp','pre'].forEach(k=>{const el=$('rv-'+k);if(el)el.value=state.reverb[k]});
   state.eq=Z.normEq(state.eq);E.setEq(state.eq);Z.EQ.bands.forEach(b=>{$('eq-'+b).value=state.eq[b]});
   document.querySelectorAll('input[type=range]').forEach(fill);syncLabels();E.setBpm(state.bpm);E.swing=state.swing/100;syncHumanize();
   document.querySelectorAll('#moods .chip').forEach(b=>b.classList.toggle('on',b.dataset.mood===state.mood));

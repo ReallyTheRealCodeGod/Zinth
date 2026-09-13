@@ -136,7 +136,7 @@ function renderSound(){
   renderArpFields();if(synth)renderVoiceFields(p);
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
-  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq()}
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb()}
   else if(synth)$('patch').value=patchName(p);
   else{$('kit').value=state.kit;renderGrid()}
 }
@@ -265,6 +265,12 @@ $('mixer').addEventListener('change',e=>{const s=e.target.closest('select[data-l
   else{const P=PATCHES[s.value];if(!P)return;for(const k in P)E.setParam(L,k,P[k]);U.setStatus(L+' → '+s.value)}
   if(state.layer===L)renderSound();renderMixer();U.persist()});
 
+/* ---------- the room: reverb size, damping and pre-delay on the master tab ---------- */
+const rvFmt={size:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',damp:v=>v+' %',pre:v=>v+' ms'};
+function renderReverb(){['size','damp','pre'].forEach(k=>{const el=$('rv-'+k);if(!el)return;el.value=state.reverb[k];U.fill(el);$('o-rv-'+k).textContent=rvFmt[k](state.reverb[k])})}
+['size','damp','pre'].forEach(k=>$('rv-'+k).addEventListener('input',e=>{state.reverb[k]=+e.target.value;E.setReverb(state.reverb);$('o-rv-'+k).textContent=rvFmt[k](state.reverb[k]);U.persist()}));
+$('rv-size').addEventListener('change',()=>U.setStatus(E.worklets?'Room: '+rvFmt.size(state.reverb.size)+', damping '+state.reverb.damp+' %, pre-delay '+state.reverb.pre+' ms. Every Reverb send goes into this room, and so does the export.':'This browser cannot run the algorithmic room, so a fixed room stands in. The controls take effect where worklets are available.'));
+
 /* ---------- theme: light or dark, following the system until you choose ---------- */
 function applyTheme(t){
   if(t)document.documentElement.dataset.theme=t;else delete document.documentElement.dataset.theme;
@@ -355,18 +361,29 @@ async function renderSong(stem){
   const off=new OfflineAudioContext(2,Math.ceil(sr*dur),sr);
   const R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=state.bpm;R.swing=state.swing/100;R.masterLevel=E.masterLevel;R.song=S;R.kit=state.kit;R.transitions=state.transitions;R.warmth=state.warmth;R.eq=state.eq;
   // the same humanize amount and the same seed as the playback, so the render nudges every note the same way
-  R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.stem=stem||null;R.init(off);
+  R.humanize=state.humanize;R.humanSeed=state.seeds.chords||'';R.stem=stem||null;R.init(off);R.reverbSettings=Object.assign({},state.reverb);
+  await R.wl; // the limiter and the reverb are in place before a single note is scheduled
   let grid=0.05;S.forEach((sec,si)=>{for(let st=0;st<sec.bars*16;st++){const t=grid+(st%2?R.swing*d:0);R.scheduleStep(si,st,t);R.transitionAt(si,st,t);R.sweepAt(si,st,t);R.fadeAt(si,st,t);grid+=d}});
   return {buf:await off.startRendering(),secs:Math.round(steps*d)};
 }
 const wavBlob=buf=>new Blob([encodeWav(buf)],{type:'audio/wav'});
 // a breath between renders, so the status line gets a chance to paint before the next one starts
 const breathe=()=>new Promise(r=>setTimeout(r,0));
+// every export lands at streaming level: measured to BS.1770, brought to the target loudness, then
+// through the lookahead limiter so no peak crosses the ceiling. The status line reports what it measured.
+const dbf=v=>(v>0?'+':'−')+Math.abs(v).toFixed(1);
+async function master(buf){
+  const before=Z.loudness(buf),gain=Z.normGain(before.lufs,Z.LOUD.target);
+  const out=await Z.limitBuffer(buf,gain,Z.LOUD.ceiling),after=Z.loudness(out);
+  return {buf:out,gain,before,after,note:after.lufs.toFixed(1)+' LUFS · peak '+dbf(after.peakDb)+' dBFS'+(after.peakDb>Z.LOUD.ceiling+0.2?' · OVER':'')};
+}
 async function exportWav(){
   if(exporting)return;exportBusy(true);U.setStatus('Rendering…');
   try{
     const r=await renderSong(null),name=Z.stemSafe('zinth-'+state.seeds.chords)+'.wav';
-    U.setStatus(await saveFile(name,wavBlob(r.buf),'Saved '+name+' ('+r.secs+' s)'));
+    U.setStatus('Mastering…');await breathe();
+    const m=await master(r.buf);
+    U.setStatus(await saveFile(name,wavBlob(m.buf),'Saved '+name+' · '+r.secs+' s · '+m.note));
   }catch(err){U.setStatus('Export failed: '+(err&&err.message||err))}
   exportBusy(false);
 }
@@ -380,13 +397,17 @@ async function exportStems(){
     const plan=Z.stemPlan(song(),E.params,'zinth-'+state.seeds.chords);
     if(!plan.length)U.setStatus('No stems to export: every layer is muted or empty');
     else{
+      // the stems share one gain, measured on the full mix, so they add back up to the mastered song
+      U.setStatus('Measuring the mix…');await breathe();
+      const mix=await renderSong(null),gain=Z.normGain(Z.loudness(mix.buf).lufs,Z.LOUD.target);
       let saved=0,stopped='';
       for(let i=0;i<plan.length;i++){
         const s=plan[i];
         U.setStatus('Rendering '+s.layer+'… ('+(i+1)+' of '+plan.length+')');
         await breathe();
         const r=await renderSong(s.layer),done='Saved '+s.name;
-        const msg=await saveFile(s.name,wavBlob(r.buf),done);
+        const lim=await Z.limitBuffer(r.buf,gain,Z.LOUD.ceiling);
+        const msg=await saveFile(s.name,wavBlob(lim),done);
         if(msg!==done){stopped=msg;break}
         saved++;
       }
