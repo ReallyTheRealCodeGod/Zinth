@@ -36,7 +36,7 @@ const scope=$('scope'),sctx=scope.getContext('2d');
 function drawScope(){
   const w=scope.width,h=scope.height;sctx.clearRect(0,0,w,h);if(!E.ctx)return;
   const a=new Uint8Array(E.analyser.fftSize);E.analyser.getByteTimeDomainData(a);
-  sctx.strokeStyle=E.playing?'#4fd1c5':'#5a6180';sctx.lineWidth=2;sctx.beginPath();
+  sctx.strokeStyle=E.playing?U.TH.accent:U.TH.line;sctx.lineWidth=2;sctx.beginPath();
   for(let i=0;i<a.length;i++){const x=i/(a.length-1)*w,y=h/2+((a[i]-128)/128)*(h/2-4);if(i)sctx.lineTo(x,y);else sctx.moveTo(x,y)}
   sctx.stroke();
 }
@@ -264,6 +264,17 @@ $('mixer').addEventListener('change',e=>{const s=e.target.closest('select[data-l
   if(L==='drums'){state.kit=s.value;E.kit=state.kit;U.setStatus('Kit: '+state.kit)}
   else{const P=PATCHES[s.value];if(!P)return;for(const k in P)E.setParam(L,k,P[k]);U.setStatus(L+' → '+s.value)}
   if(state.layer===L)renderSound();renderMixer();U.persist()});
+
+/* ---------- theme: light or dark, following the system until you choose ---------- */
+function applyTheme(t){
+  if(t)document.documentElement.dataset.theme=t;else delete document.documentElement.dataset.theme;
+  try{if(t)localStorage.setItem('zinth.theme',t);else localStorage.removeItem('zinth.theme')}catch(e){}
+  const dark=t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  $('themeBtn').textContent=dark?'☀':'☾';$('themeBtn').title=dark?'Switch to the light theme':'Switch to the dark theme';
+  U.readColors();U.regenerate();if(U.opRefresh)U.opRefresh();
+}
+$('themeBtn').addEventListener('click',()=>{const cur=document.documentElement.dataset.theme,dark=cur?cur==='dark':matchMedia('(prefers-color-scheme: dark)').matches;applyTheme(dark?'light':'dark')});
+{const cur=document.documentElement.dataset.theme,dark=cur?cur==='dark':matchMedia('(prefers-color-scheme: dark)').matches;$('themeBtn').textContent=dark?'☀':'☾'}
 
 /* ---------- views & the song menu ---------- */
 function applyView(){

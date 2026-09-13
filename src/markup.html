@@ -1,4 +1,5 @@
-<div class="app" data-view="jam">
+<script>try{const t=localStorage.getItem("zinth.theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<div class="app" data-view="op">
   <header class="top">
     <div class="brand">
       <h1>Zin<span>th</span></h1>
@@ -38,6 +39,7 @@
         </div>
       </div>
       <input type="file" id="projFile" accept=".json,application/json" hidden>
+      <button class="theme" id="themeBtn" title="Switch theme" aria-label="Switch between light and dark">☾</button>
       <button class="btn icon" id="helpBtn" title="How Zinth works and every shortcut (?)">?</button>
       <span class="status" id="status" aria-live="polite"></span>
     </div>

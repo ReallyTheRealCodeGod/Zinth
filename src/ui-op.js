@@ -16,9 +16,9 @@ function borrow(el,into){if(!el)return;if(!homes.has(el))homes.set(el,{parent:el
 function giveBack(){for(const [el,h] of homes){if(h.parent)h.parent.insertBefore(el,h.next&&h.next.parentNode===h.parent?h.next:null)}homes.clear()}
 
 /* ---------- knobs ---------- */
-const COLS=['#4f8dff','#3ecf8e','#ece6d8','#f5a524'];
+const COLS=()=>[U.TH.accent,U.TH.ok,U.TH.inkHex,U.TH.amber];
 function knobHTML(i,k){
-  return '<div class="knob" data-i="'+i+'" style="--k:'+COLS[i]+'" tabindex="0" role="slider" aria-label="'+k.label+'">'+
+  return '<div class="knob" data-i="'+i+'" style="--k:'+COLS()[i]+'" tabindex="0" role="slider" aria-label="'+k.label+'">'+
     '<svg viewBox="0 0 84 84" aria-hidden="true"><circle class="kt" cx="42" cy="42" r="32"/><circle class="ka" cx="42" cy="42" r="32"/><line class="kp" x1="42" y1="42" x2="42" y2="14"/></svg>'+
     '<span class="kl">'+k.label+'</span><span class="kv"></span></div>';
 }
@@ -147,7 +147,7 @@ function waveLoop(){
     g.lineWidth=3;g.strokeStyle=COLORS[synthLayer];g.lineJoin='round';g.beginPath();
     for(let i=0;i<n;i++){let s=0;for(let j=0;j<win;j++)s+=pts[i+j];const y=H/2-(s/win)*(H*0.36)*(0.6+0.4*(p.level/100));const x=i/(n-1)*W;if(i)g.lineTo(x,y);else g.moveTo(x,y)}
     g.stroke();
-    g.strokeStyle='rgba(236,230,216,.12)';g.lineWidth=1;g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();
+    g.strokeStyle='rgba('+U.TH.ink+',.15)';g.lineWidth=1;g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();
   }
 }
 

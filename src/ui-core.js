@@ -4,7 +4,15 @@ const Z=window.Z,E=Z.engine,$=id=>document.getElementById(id),ZUI=window.ZUI=win
 // these live in the second UI script; delegate through the shared ZUI namespace
 const renderKeys=()=>ZUI.renderKeys(),renderPads=()=>ZUI.renderPads(),renderMixer=()=>ZUI.renderMixer(),renderFavs=()=>ZUI.renderFavs(),renderSound=()=>ZUI.renderSound(),renderGrid=()=>ZUI.renderGrid(),syncLabels=()=>ZUI.syncLabels();
 // one colour per layer, and a cool blue for the master strip, which belongs to no single layer
-const COLORS={lead:'#f5a524',arp:'#4fd1c5',chords:'#a78bfa',bass:'#f26d85',drums:'#d9c9a3',master:'#7ea8ff'};
+// layer colours and the canvas palette come from the stylesheet's tokens, so both themes draw right
+const COLORS={lead:'',arp:'',chords:'',bass:'',drums:'',master:''};
+const TH={};
+function readColors(){
+  const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();
+  for(const k in COLORS)COLORS[k]=g('--'+k)||COLORS[k];
+  Object.assign(TH,{screen:g('--screen'),ink:g('--ink-rgb'),accent:g('--accent'),lav:g('--lav-rgb'),line:g('--line-2'),ok:g('--ok'),amber:g('--amber'),inkHex:g('--ink'),mono:g('--mono')||'monospace'});
+}
+readColors();
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
 const EDITS={lead:'leadEdits',arp:'arpEdits',bass:'bassEdits'},LANE_ROW={lead:0,arp:1,bass:3},NEW_DUR={lead:2,arp:2,bass:4};
 const MOODS={
@@ -419,13 +427,13 @@ function buildRoll(){
   rollCache=document.createElement('canvas');rollCache.width=W*dpr;rollCache.height=H*dpr;
   const c=rollCache.getContext('2d');c.scale(dpr,dpr);
   const gx=74,gw=W-gx,laneH=H/5,steps=rollBars*16,sw=gw/steps;
-  c.fillStyle='#0e1017';c.fillRect(0,0,W,H);
-  track.chords.forEach((ch,i)=>{c.fillStyle=i%2?'rgba(167,139,250,.05)':'rgba(167,139,250,.02)';c.fillRect(gx+ch.bar0*16*sw,0,ch.bars*16*sw,H)});
-  for(let s=0;s<=steps;s+=4){c.strokeStyle=s%16===0?'rgba(236,230,216,.18)':'rgba(236,230,216,.05)';c.lineWidth=1;c.beginPath();c.moveTo(gx+s*sw+.5,0);c.lineTo(gx+s*sw+.5,H);c.stroke()}
-  for(let i=1;i<5;i++){c.strokeStyle='rgba(236,230,216,.12)';c.beginPath();c.moveTo(0,i*laneH+.5);c.lineTo(W,i*laneH+.5);c.stroke()}
-  c.fillStyle='rgba(236,230,216,.35)';c.font='500 10px IBM Plex Mono, monospace';
+  c.fillStyle=TH.screen;c.fillRect(0,0,W,H);
+  track.chords.forEach((ch,i)=>{c.fillStyle='rgba('+TH.lav+(i%2?',.08)':',.03)');c.fillRect(gx+ch.bar0*16*sw,0,ch.bars*16*sw,H)});
+  for(let s=0;s<=steps;s+=4){c.strokeStyle='rgba('+TH.ink+(s%16===0?',.18)':',.06)');c.lineWidth=1;c.beginPath();c.moveTo(gx+s*sw+.5,0);c.lineTo(gx+s*sw+.5,H);c.stroke()}
+  for(let i=1;i<5;i++){c.strokeStyle='rgba('+TH.ink+',.12)';c.beginPath();c.moveTo(0,i*laneH+.5);c.lineTo(W,i*laneH+.5);c.stroke()}
+  c.fillStyle='rgba('+TH.ink+',.4)';c.font='500 10px '+TH.mono;
   for(let b=0;b<rollBars;b++)c.fillText(String(b+1),gx+b*16*sw+4,11);
-  const rest=(y)=>{c.fillStyle='rgba(236,230,216,.22)';c.font='500 10px IBM Plex Mono, monospace';c.fillText('— rests in this section —',gx+8,y)};
+  const rest=(y)=>{c.fillStyle='rgba('+TH.ink+',.3)';c.font='500 10px '+TH.mono;c.fillText('— rests in this section —',gx+8,y)};
   const lane=(i,evs,getMidi)=>{
     const L=Z.LAYERS[i],y0=i*laneH+14,h=laneH-22;
     if(!lay[L]){rest(y0+h/2+4);return}
@@ -463,11 +471,11 @@ function drawFrame(step){
   if(!rollCache)return;const dpr=Math.min(2,window.devicePixelRatio||1);
   ctx2.setTransform(1,0,0,1,0,0);ctx2.drawImage(rollCache,0,0);
   if(step>=0){const W=canvas.width/dpr,gx=74,sw=(W-gx)/(rollBars*16),s=step%(rollBars*16);ctx2.scale(dpr,dpr);
-    ctx2.fillStyle='rgba(245,165,36,.10)';ctx2.fillRect(gx+s*sw,0,sw,canvas.height/dpr);
-    ctx2.fillStyle='#f5a524';ctx2.fillRect(gx+s*sw,0,1.5,canvas.height/dpr)}
+    ctx2.globalAlpha=.12;ctx2.fillStyle=TH.accent;ctx2.fillRect(gx+s*sw,0,sw,canvas.height/dpr);ctx2.globalAlpha=1;
+    ctx2.fillStyle=TH.accent;ctx2.fillRect(gx+s*sw,0,1.5,canvas.height/dpr)}
   if(dragPreview){ctx2.setTransform(dpr,0,0,dpr,0,0);
     ctx2.globalAlpha=.55;ctx2.fillStyle=dragPreview.color;ctx2.fillRect(dragPreview.x,dragPreview.y,dragPreview.w,dragPreview.h);ctx2.globalAlpha=1;
-    ctx2.strokeStyle='#ece6d8';ctx2.lineWidth=1;ctx2.strokeRect(dragPreview.x+.5,dragPreview.y+.5,dragPreview.w-1,dragPreview.h-1)}
+    ctx2.strokeStyle=TH.inkHex;ctx2.lineWidth=1;ctx2.strokeRect(dragPreview.x+.5,dragPreview.y+.5,dragPreview.w-1,dragPreview.h-1)}
 }
 
 /* ---------- note editing in the roll: lead, arp and bass ---------- */
@@ -547,5 +555,5 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+Object.assign(ZUI,{state,rec,COLORS,TH,readColors,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();
