@@ -231,11 +231,46 @@ function renderGrid(){
   $('fillTgl').classList.toggle('on',!!P.fill);$('fillTgl').setAttribute('aria-pressed',!!P.fill);$('gridReset').disabled=!edited;
   $('grid').innerHTML=Z.DRUM_KINDS.map(k=>{
     const nm=rowName(k),tip=k==='perc'?'perc · the '+state.kit+' kit plays a '+nm+' here':nm;
-    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+'"></button>').join('')+'</div>';
+    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+(v?' · '+Math.round(v*100)+' %':'')+' — click to cycle, drag up or down for velocity"><div class="vel" style="height:'+Math.round(v*100)+'%"></div></button>').join('')+'</div>';
   }).join('');
+  renderVoices();
 }
+/* the drum voices: a sample or the synth, with its own pitch and decay. Drop a file on a row to load it. */
+function renderVoices(){
+  const box=$('voices');if(!box)return;
+  box.innerHTML=Z.DRUM_KINDS.map(k=>{const ref=state.samples[k],v=E.voiceOf(k),nm=rowName(k),pitch=v.pitch||0;
+    return '<div class="vrow" data-kind="'+k+'" title="Drop an audio file here to play it as the '+nm+'"><b>'+nm+'</b><span class="vname'+(ref&&ref.missing?' missing':'')+'">'+(ref?(ref.missing?ref.name+' · missing':ref.name):'synth')+'</span>'+
+      '<button class="opt" data-a="load" title="Load a sample: wav, mp3, ogg, aiff">Load</button><button class="opt" data-a="clear"'+(ref?'':' disabled')+' title="Back to the synthesised voice">×</button>'+
+      '<span class="vp"><button class="opt" data-a="pdn" title="A semitone down">−</button><output title="Pitch in semitones">'+(pitch>0?'+':'')+pitch+'</output><button class="opt" data-a="pup" title="A semitone up">+</button></span>'+
+      '<input type="range" min="10" max="100" value="'+(v.decay===undefined?100:v.decay)+'" data-a="decay" aria-label="'+nm+' decay" title="How much of the sound plays: right is all of it, left is a tight snap"></div>'}).join('');
+  box.querySelectorAll('input[type=range]').forEach(U.fill);
+}
+function setVoice(k,key,v){state.voice[k]=Object.assign({pitch:0,decay:100},state.voice[k]||{},{[key]:v});E.voice=state.voice;U.persist()}
+async function loadSampleInto(k,file){
+  try{U.setStatus('Loading '+file.name+'…');const rec=await Z.samples.importFile(file);E.samples[k]=rec;state.samples[k]={id:rec.id,name:rec.name};renderVoices();U.persist();
+    U.setStatus(rowName(k)+' now plays '+rec.name+' ('+rec.buffer.duration.toFixed(2)+' s). Pitch and decay are yours; a closed hat still chokes an open one.')}
+  catch(err){U.setStatus('Could not load '+file.name+': '+(err&&err.message||'not an audio file'))}
+}
+$('voices').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;const k=b.closest('.vrow').dataset.kind,a=b.dataset.a,v=E.voiceOf(k);
+  if(a==='load'){$('sampleFile').dataset.kind=k;$('sampleFile').click()}
+  else if(a==='clear'){delete E.samples[k];state.samples[k]=null;renderVoices();U.persist();U.setStatus(rowName(k)+' is back to the synth voice')}
+  else if(a==='pdn'||a==='pup'){setVoice(k,'pitch',Math.max(-24,Math.min(24,(v.pitch||0)+(a==='pup'?1:-1))));renderVoices()}});
+$('voices').addEventListener('input',e=>{const r=e.target.closest('input[data-a=decay]');if(!r)return;setVoice(r.closest('.vrow').dataset.kind,'decay',+r.value);U.fill(r)});
+$('voices').addEventListener('dragover',e=>{if(e.target.closest('.vrow')){e.preventDefault();e.dataTransfer.dropEffect='copy'}});
+$('voices').addEventListener('drop',e=>{const row=e.target.closest('.vrow');if(!row||!e.dataTransfer.files.length)return;e.preventDefault();loadSampleInto(row.dataset.kind,e.dataTransfer.files[0])});
+$('sampleFile').addEventListener('change',e=>{const f=e.target.files[0],k=e.target.dataset.kind;if(f&&k)loadSampleInto(k,f);e.target.value=''});
 function editPattern(fn){const sec=song()[U.viewSection];if(!sec)return;const P=JSON.parse(JSON.stringify(sec.track.drumPattern));fn(P);state.drumEdits[sec.part]=P;U.regenerate()}
-$('grid').addEventListener('click',e=>{const c=e.target.closest('.cell');if(!c)return;editPattern(P=>{const k=c.dataset.k,s=+c.dataset.s,v=P[k][s];P[k][s]=v===0?1:v>=0.8?0.55:0})});
+// a click cycles a cell: off, hit, ghost; a drag up or down sets its velocity exactly
+{let gd=null;
+  $('grid').addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');if(!c)return;e.preventDefault();try{c.setPointerCapture(e.pointerId)}catch(err){}gd={c,k:c.dataset.k,s:+c.dataset.s,y:e.clientY,v0:null,v:0,moved:false}});
+  $('grid').addEventListener('pointermove',e=>{if(!gd)return;const dy=gd.y-e.clientY;if(!gd.moved&&Math.abs(dy)<4)return;gd.moved=true;
+    if(gd.v0===null){const sec=song()[U.viewSection];gd.v0=(sec&&sec.track.drumPattern[gd.k][gd.s])||0.6}
+    gd.v=Math.max(0.15,Math.min(1,gd.v0+dy/70));const f=gd.c.querySelector('.vel');if(f)f.style.height=Math.round(gd.v*100)+'%';gd.c.classList.add('on');gd.c.classList.remove('soft')});
+  const end=()=>{if(!gd)return;const g=gd;gd=null;
+    if(g.moved){const v=Math.round(g.v*100)/100;editPattern(P=>{P[g.k][g.s]=v})}
+    else editPattern(P=>{const v=P[g.k][g.s];P[g.k][g.s]=v===0?1:v>=0.8?0.55:0})};
+  $('grid').addEventListener('pointerup',end);$('grid').addEventListener('pointercancel',end);
+}
 $('fillTgl').addEventListener('click',()=>editPattern(P=>{P.fill=!P.fill}));
 $('gridReset').addEventListener('click',()=>{const sec=song()[U.viewSection];if(sec){state.drumEdits[sec.part]=null;U.regenerate();U.setStatus('Drums back to the generated pattern')}});
 
@@ -487,7 +522,7 @@ function midiFile(){
   return out;
 }
 $('exportMid').addEventListener('click',async()=>{try{const name='zinth-'+state.seeds.chords+'.mid';U.setStatus(await saveFile(name,new Blob([midiFile()],{type:'audio/midi'}),'Saved '+name+' (5 tracks, drums on channel 10)'))}catch(err){U.setStatus('MIDI export failed: '+(err&&err.message||err))}});
-$('saveProj').addEventListener('click',async()=>{const name='zinth-'+state.seeds.chords+'.json';U.setStatus(await saveFile(name,new Blob([JSON.stringify(U.snapshot(),null,1)],{type:'application/json'}),'Saved '+name))});
+$('saveProj').addEventListener('click',async()=>{const name='zinth-'+state.seeds.chords+'.json';U.setStatus(await saveFile(name,new Blob([JSON.stringify(U.snapshotWithSamples(),null,1)],{type:'application/json'}),'Saved '+name+(Object.keys(E.samples).length?' with its drum samples':'')))});
 $('openProj').addEventListener('click',()=>$('projFile').click());
 $('projFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{U.restore(JSON.parse(r.result));U.setStatus('Opened '+f.name)}catch(err){U.setStatus('Could not open: '+err.message)}};r.readAsText(f);e.target.value=''});
 
@@ -741,7 +776,7 @@ $('keys').addEventListener('pointercancel',e=>{const k=e.target.closest('.key');
 window.addEventListener('blur',()=>{Object.keys(held).forEach(i=>keyOff(i));if(!cb.hold)chordOff()});
 
 /* ---------- boot ---------- */
-Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,syncLabels,renderRecInfo,midiFile,setRec,applyView});
+Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();

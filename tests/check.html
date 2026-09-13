@@ -1081,7 +1081,10 @@ class Engine{
     this.stem=null;
     // the worklet-based stages arrive a moment after init(); until then the built-in nodes stand in
     this.wl=null;this.worklets=false;this.reverbSettings=Object.assign({},(Z.REVERB&&Z.REVERB.dflt)||{size:60,damp:40,pre:15});
+    // sample-based drum voices, per kind, and each voice's own pitch (semitones) and decay (percent of full)
+    this.samples={};this.voice={};this.choked=null;
   }
+  voiceOf(kind){return this.voice[kind]||{pitch:0,decay:100}}
   init(ctxIn){
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
@@ -1417,16 +1420,30 @@ class Engine{
   /* ---- drums ---- */
   playDrum(kind,vel,time){
     const ctx=this.ctx,bus=this.bus.drums.g,K=KITS[this.kit]||KITS['808'];
+    const vo=this.voiceOf(kind),pt=Math.pow(2,(vo.pitch||0)/12),dm=Math.max(0.05,(vo.decay===undefined?100:vo.decay)/100);
+    if(kind==='kick'){const pump=(this.params.drums.pump||0)/100;
+      if(pump>0){const d=this.duck.gain;d.cancelScheduledValues(time);d.setValueAtTime(1,time);d.linearRampToValueAtTime(1-pump*0.8,time+0.012);d.setTargetAtTime(1,time+0.03,0.07+pump*0.08)}}
+    // a closed hat chokes the open one, sampled or synthesised, the way a real hi-hat does
+    if(kind==='hat'&&this.choked){try{this.choked.stop(time)}catch(e){}this.choked=null}
+    // a sample takes the voice over completely: pitched, shortened, and choked like the synth voice would be
+    const smp=this.samples[kind];
+    if(smp&&smp.buffer){
+      const s=ctx.createBufferSource();s.buffer=smp.buffer;s.playbackRate.value=pt;
+      const full=smp.buffer.duration/pt,dec=Math.max(0.03,full*dm),g=ctx.createGain();
+      g.gain.setValueAtTime(vel*0.9,time);if(dm<0.999){g.gain.setValueAtTime(vel*0.9,time+dec*0.7);g.gain.linearRampToValueAtTime(0.0001,time+dec)}
+      s.connect(g);g.connect(bus);s.start(time);s.stop(time+dec+0.05);
+      if(kind==='ohat')this.choked=s;
+      return;
+    }
     if(kind==='kick'){
-      const k=K.kick,pump=(this.params.drums.pump||0)/100;
-      if(pump>0){const d=this.duck.gain;d.cancelScheduledValues(time);d.setValueAtTime(1,time);d.linearRampToValueAtTime(1-pump*0.8,time+0.012);d.setTargetAtTime(1,time+0.03,0.07+pump*0.08)}
+      const k=K.kick;
       const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';
-      o.frequency.setValueAtTime(k.f0,time);o.frequency.exponentialRampToValueAtTime(k.f1,time+0.09);
-      g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+      o.frequency.setValueAtTime(k.f0*pt,time);o.frequency.exponentialRampToValueAtTime(k.f1*pt,time+0.09);
+      g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay*dm);
       let dest=bus;if(k.lp){const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=k.lp;f.connect(bus);dest=f}
       // an 808-style body is driven into a soft clip, which is where its weight and growl come from
       if(k.drive>0){const ws=ctx.createWaveShaper();ws.curve=driveCurve(k.drive);ws.oversample='2x';const tr=ctx.createGain();tr.gain.value=driveTrim(k.drive)*1.15;ws.connect(tr);tr.connect(dest);dest=ws}
-      o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay+0.05);
+      o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay*dm+0.05);
       // a 909-style knock: a short burst an octave and a bit above the body, gone in thirty milliseconds
       if(k.punch>0){const po=ctx.createOscillator(),pg=ctx.createGain();po.type='sine';po.frequency.setValueAtTime(k.f0*2.4,time);po.frequency.exponentialRampToValueAtTime(k.f1*2,time+0.03);
         pg.gain.setValueAtTime(vel*k.punch,time);pg.gain.exponentialRampToValueAtTime(0.001,time+0.035);po.connect(pg);pg.connect(bus);po.start(time);po.stop(time+0.04)}
@@ -1435,10 +1452,10 @@ class Engine{
       // the rattle: noise through a bandpass for the crack and a high-pass so it never muddies the body
       const k=K.snare,n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=0.7;
       const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=900;
-      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise*1.15,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
-      n.connect(f);f.connect(hp);hp.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise*1.15,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay*dm);
+      n.connect(f);f.connect(hp);hp.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay*dm+0.03);
       // the body: two tuned oscillators, the fundamental and the shell's overtone, both dropping in pitch
-      [[k.tone,0.35,0.11],[k.tone*1.83,0.18,0.07]].forEach(([hz,lv,dur])=>{
+      [[k.tone*pt,0.35,0.11*dm],[k.tone*pt*1.83,0.18,0.07*dm]].forEach(([hz,lv,dur])=>{
         const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(hz*1.25,time);o.frequency.exponentialRampToValueAtTime(hz*0.8,time+0.06);
         og.gain.setValueAtTime(vel*lv,time);og.gain.exponentialRampToValueAtTime(0.001,time+dur);o.connect(og);og.connect(bus);o.start(time);o.stop(time+dur+0.01)});
       // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
@@ -1477,14 +1494,17 @@ class Engine{
         const g=ctx.createGain(),last=i===3,t0=time+off;g.gain.setValueAtTime(vel*0.4,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(last?k.decay:0.012));
         n.connect(f);f.connect(g);g.connect(bus);n.start(t0);n.stop(t0+(last?k.decay:0.015)+0.01)});
     }else{
-      const k=K.hat,open=kind==='ohat',dur=open?k.open:k.decay;
+      const k=K.hat,open=kind==='ohat',dur=(open?k.open:k.decay)*dm;
       const g=ctx.createGain();g.gain.setValueAtTime(vel*(open?k.level*1.2:k.level),time);g.gain.exponentialRampToValueAtTime(0.001,time+dur);g.connect(bus);
-      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;f.connect(g);
+      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=Math.min(16000,k.hp*pt);f.connect(g);
+      // the open hat is choked by the next closed one: its gain is what gets cut
+      const choke={stop:t=>{g.gain.cancelScheduledValues(t);g.gain.setValueAtTime(g.gain.value,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.02)}};
+      if(open)this.choked=choke;
       if(k.metal){
         // the metallic recipe: six square waves at inharmonic ratios through a bandpass, plus a little noise
-        const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=Math.min(16000,k.hp*1.3);bp.Q.value=1.1;
+        const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=Math.min(16000,k.hp*1.3*pt);bp.Q.value=1.1;
         const mg=ctx.createGain();mg.gain.value=0.85;bp.connect(mg);mg.connect(f);
-        for(const hz of HAT_PARTIALS){const o=ctx.createOscillator();o.type='square';o.frequency.value=hz*(k.tone||1);o.connect(bp);o.start(time);o.stop(time+dur+0.02)}
+        for(const hz of HAT_PARTIALS){const o=ctx.createOscillator();o.type='square';o.frequency.value=hz*(k.tone||1)*pt;o.connect(bp);o.start(time);o.stop(time+dur+0.02)}
         const n=ctx.createBufferSource();n.buffer=this.noise;const ng=ctx.createGain();ng.gain.value=0.4;n.connect(ng);ng.connect(f);n.start(time);n.stop(time+dur+0.02);
       }else{
         const n=ctx.createBufferSource();n.buffer=this.noise;n.connect(f);n.start(time);n.stop(time+dur+0.02);

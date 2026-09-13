@@ -288,10 +288,22 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 .grow .gn{font:600 9px var(--disp);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-dim)}
 .cell{height:18px;border-radius:4px;background:var(--panel-3);border:1px solid transparent;padding:0;position:relative;overflow:hidden}
 .cell:nth-child(4n+2){border-left-color:var(--line-2)}
-.cell.on{background:var(--drums)}
-.cell.soft{background:color-mix(in srgb,var(--drums) 45%,transparent)}
+.cell{cursor:ns-resize;touch-action:none}
+.cell .vel{position:absolute;left:0;right:0;bottom:0;background:var(--drums);pointer-events:none;border-radius:3px 3px 0 0}
+.cell.soft .vel{opacity:.55}
 .cell.now{outline:2px solid var(--accent);outline-offset:-2px}
-.cell .vel{position:absolute;left:0;right:0;bottom:0;background:var(--drums);pointer-events:none}
+.voices{display:flex;flex-direction:column;gap:4px}
+.vrow{display:grid;grid-template-columns:52px minmax(0,1fr) auto auto auto 70px;gap:6px;align-items:center;padding:4px 6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
+.vrow b{font:600 10px var(--disp);letter-spacing:.04em;text-transform:uppercase;color:var(--drums)}
+.vrow .vname{font:400 11px var(--mono);color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vrow .vname.missing{color:var(--bad)}
+.vrow .opt{height:24px;padding:0 7px;font-size:11px}
+.vrow .vp{display:inline-flex;align-items:center;gap:2px}
+.vrow .vp output{font:500 11px var(--mono);min-width:26px;text-align:center;color:var(--ink-dim)}
+.vrow input[type=range]{height:16px}
+.vrow input[type=range]::-webkit-slider-thumb{width:12px;height:12px;margin-top:-4px}
+.vrow.over{border-color:var(--accent);background:var(--accent-soft)}
+.scr-voices .vrow{grid-template-columns:70px minmax(0,1fr) auto auto auto 120px}
 
 /* ---------- the device ---------- */
 .op{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
@@ -606,6 +618,8 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         <div class="field" data-master><label for="eq-mid">Mid <output id="o-eq-mid"></output></label><input class="bip" type="range" id="eq-mid" min="-100" max="100" value="0" title="Mid peak at 1 kHz: the body of the mix, where the chords and the lead sing. Left scoops it out, right pushes it forward. Centre is flat."></div>
         <div class="field" data-master><label for="eq-low">Low <output id="o-eq-low"></output></label><input class="bip" type="range" id="eq-low" min="-100" max="100" value="0" title="Low shelf at 160 Hz: the weight underneath — the kick and the bass. Left thins it out, right fills it in. Centre is flat."></div>
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
+        <div class="field" data-drums><label>Voices <output>sample or synth · pitch · decay</output></label><div class="voices" id="voices"></div></div>
+        <input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.ogg,.aif,.aiff,.flac" hidden>
         <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
         <div class="row2" data-master>
           <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>
@@ -1829,6 +1843,33 @@ Object.assign(Z,{installWorklets,loudness,normGain,limitBuffer,REVERB,LOUD});
 <script>
 (()=>{
 'use strict';
+/* Your own drum sounds. A dropped file is decoded once and kept in IndexedDB, so it is still there
+   tomorrow; a project file carries the bytes along, a link carries only the name. */
+const Z=window.Z;
+const DB='zinth',STORE='samples';
+function db(){return new Promise((res,rej)=>{if(!window.indexedDB)return rej(new Error('no IndexedDB'));const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function put(id,rec){const d=await db();return new Promise((res,rej)=>{const t=d.transaction(STORE,'readwrite');t.objectStore(STORE).put(rec,id);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
+async function get(id){const d=await db();return new Promise((res,rej)=>{const t=d.transaction(STORE,'readonly'),q=t.objectStore(STORE).get(id);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error)})}
+const b64=ab=>{let s='';const u=new Uint8Array(ab);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const unb64=s=>{const bin=atob(s),u=new Uint8Array(bin.length);for(let i=0;i<u.length;i++)u[i]=bin.charCodeAt(i);return u.buffer};
+let scratch=null;
+function decode(ab){const ctx=Z.engine.ctx||scratch||(scratch=new (window.AudioContext||window.webkitAudioContext)());return ctx.decodeAudioData(ab.slice(0))}
+const newId=()=>'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+// bring a File in: keep its bytes, decode it, hand back everything the engine and the project need
+async function importFile(file){
+  const ab=await file.arrayBuffer(),id=newId(),buffer=await decode(ab);
+  try{await put(id,{name:file.name,data:ab,type:file.type||''})}catch(e){}
+  return {id,name:file.name,buffer,data:ab};
+}
+// bring stored bytes in (from a project file): keep them under their own id, decode them
+async function importBytes(id,name,ab){const buffer=await decode(ab);try{await put(id,{name,data:ab,type:''})}catch(e){}return {id,name,buffer,data:ab}}
+async function load(id){try{const rec=await get(id);if(!rec)return null;return {id,name:rec.name,buffer:await decode(rec.data),data:rec.data}}catch(e){return null}}
+Object.assign(Z,{samples:{importFile,importBytes,load,get,put,b64,unb64}});
+})();
+</script>
+<script>
+(()=>{
+'use strict';
 const Z=window.Z;
 /* ================= demo songs =================
    Six finished songs, one press away in the help sheet, so the first ten seconds of Zinth are the best ten
@@ -2100,7 +2141,10 @@ class Engine{
     this.stem=null;
     // the worklet-based stages arrive a moment after init(); until then the built-in nodes stand in
     this.wl=null;this.worklets=false;this.reverbSettings=Object.assign({},(Z.REVERB&&Z.REVERB.dflt)||{size:60,damp:40,pre:15});
+    // sample-based drum voices, per kind, and each voice's own pitch (semitones) and decay (percent of full)
+    this.samples={};this.voice={};this.choked=null;
   }
+  voiceOf(kind){return this.voice[kind]||{pitch:0,decay:100}}
   init(ctxIn){
     if(this.ctx)return;
     const ctx=this.ctx=ctxIn||new (window.AudioContext||window.webkitAudioContext)();
@@ -2436,16 +2480,30 @@ class Engine{
   /* ---- drums ---- */
   playDrum(kind,vel,time){
     const ctx=this.ctx,bus=this.bus.drums.g,K=KITS[this.kit]||KITS['808'];
+    const vo=this.voiceOf(kind),pt=Math.pow(2,(vo.pitch||0)/12),dm=Math.max(0.05,(vo.decay===undefined?100:vo.decay)/100);
+    if(kind==='kick'){const pump=(this.params.drums.pump||0)/100;
+      if(pump>0){const d=this.duck.gain;d.cancelScheduledValues(time);d.setValueAtTime(1,time);d.linearRampToValueAtTime(1-pump*0.8,time+0.012);d.setTargetAtTime(1,time+0.03,0.07+pump*0.08)}}
+    // a closed hat chokes the open one, sampled or synthesised, the way a real hi-hat does
+    if(kind==='hat'&&this.choked){try{this.choked.stop(time)}catch(e){}this.choked=null}
+    // a sample takes the voice over completely: pitched, shortened, and choked like the synth voice would be
+    const smp=this.samples[kind];
+    if(smp&&smp.buffer){
+      const s=ctx.createBufferSource();s.buffer=smp.buffer;s.playbackRate.value=pt;
+      const full=smp.buffer.duration/pt,dec=Math.max(0.03,full*dm),g=ctx.createGain();
+      g.gain.setValueAtTime(vel*0.9,time);if(dm<0.999){g.gain.setValueAtTime(vel*0.9,time+dec*0.7);g.gain.linearRampToValueAtTime(0.0001,time+dec)}
+      s.connect(g);g.connect(bus);s.start(time);s.stop(time+dec+0.05);
+      if(kind==='ohat')this.choked=s;
+      return;
+    }
     if(kind==='kick'){
-      const k=K.kick,pump=(this.params.drums.pump||0)/100;
-      if(pump>0){const d=this.duck.gain;d.cancelScheduledValues(time);d.setValueAtTime(1,time);d.linearRampToValueAtTime(1-pump*0.8,time+0.012);d.setTargetAtTime(1,time+0.03,0.07+pump*0.08)}
+      const k=K.kick;
       const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';
-      o.frequency.setValueAtTime(k.f0,time);o.frequency.exponentialRampToValueAtTime(k.f1,time+0.09);
-      g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
+      o.frequency.setValueAtTime(k.f0*pt,time);o.frequency.exponentialRampToValueAtTime(k.f1*pt,time+0.09);
+      g.gain.setValueAtTime(vel*0.95,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay*dm);
       let dest=bus;if(k.lp){const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=k.lp;f.connect(bus);dest=f}
       // an 808-style body is driven into a soft clip, which is where its weight and growl come from
       if(k.drive>0){const ws=ctx.createWaveShaper();ws.curve=driveCurve(k.drive);ws.oversample='2x';const tr=ctx.createGain();tr.gain.value=driveTrim(k.drive)*1.15;ws.connect(tr);tr.connect(dest);dest=ws}
-      o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay+0.05);
+      o.connect(g);g.connect(dest);o.start(time);o.stop(time+k.decay*dm+0.05);
       // a 909-style knock: a short burst an octave and a bit above the body, gone in thirty milliseconds
       if(k.punch>0){const po=ctx.createOscillator(),pg=ctx.createGain();po.type='sine';po.frequency.setValueAtTime(k.f0*2.4,time);po.frequency.exponentialRampToValueAtTime(k.f1*2,time+0.03);
         pg.gain.setValueAtTime(vel*k.punch,time);pg.gain.exponentialRampToValueAtTime(0.001,time+0.035);po.connect(pg);pg.connect(bus);po.start(time);po.stop(time+0.04)}
@@ -2454,10 +2512,10 @@ class Engine{
       // the rattle: noise through a bandpass for the crack and a high-pass so it never muddies the body
       const k=K.snare,n=ctx.createBufferSource();n.buffer=this.noise;const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=k.bp;f.Q.value=0.7;
       const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=900;
-      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise*1.15,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay);
-      n.connect(f);f.connect(hp);hp.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay+0.03);
+      const g=ctx.createGain();g.gain.setValueAtTime(vel*k.noise*1.15,time);g.gain.exponentialRampToValueAtTime(0.001,time+k.decay*dm);
+      n.connect(f);f.connect(hp);hp.connect(g);g.connect(bus);n.start(time);n.stop(time+k.decay*dm+0.03);
       // the body: two tuned oscillators, the fundamental and the shell's overtone, both dropping in pitch
-      [[k.tone,0.35,0.11],[k.tone*1.83,0.18,0.07]].forEach(([hz,lv,dur])=>{
+      [[k.tone*pt,0.35,0.11*dm],[k.tone*pt*1.83,0.18,0.07*dm]].forEach(([hz,lv,dur])=>{
         const o=ctx.createOscillator(),og=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(hz*1.25,time);o.frequency.exponentialRampToValueAtTime(hz*0.8,time+0.06);
         og.gain.setValueAtTime(vel*lv,time);og.gain.exponentialRampToValueAtTime(0.001,time+dur);o.connect(og);og.connect(bus);o.start(time);o.stop(time+dur+0.01)});
       // a room tail: a soft, dark second burst behind the snare, so a dusty kit sounds like it was in a room.
@@ -2496,14 +2554,17 @@ class Engine{
         const g=ctx.createGain(),last=i===3,t0=time+off;g.gain.setValueAtTime(vel*0.4,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+(last?k.decay:0.012));
         n.connect(f);f.connect(g);g.connect(bus);n.start(t0);n.stop(t0+(last?k.decay:0.015)+0.01)});
     }else{
-      const k=K.hat,open=kind==='ohat',dur=open?k.open:k.decay;
+      const k=K.hat,open=kind==='ohat',dur=(open?k.open:k.decay)*dm;
       const g=ctx.createGain();g.gain.setValueAtTime(vel*(open?k.level*1.2:k.level),time);g.gain.exponentialRampToValueAtTime(0.001,time+dur);g.connect(bus);
-      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=k.hp;f.connect(g);
+      const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=Math.min(16000,k.hp*pt);f.connect(g);
+      // the open hat is choked by the next closed one: its gain is what gets cut
+      const choke={stop:t=>{g.gain.cancelScheduledValues(t);g.gain.setValueAtTime(g.gain.value,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.02)}};
+      if(open)this.choked=choke;
       if(k.metal){
         // the metallic recipe: six square waves at inharmonic ratios through a bandpass, plus a little noise
-        const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=Math.min(16000,k.hp*1.3);bp.Q.value=1.1;
+        const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=Math.min(16000,k.hp*1.3*pt);bp.Q.value=1.1;
         const mg=ctx.createGain();mg.gain.value=0.85;bp.connect(mg);mg.connect(f);
-        for(const hz of HAT_PARTIALS){const o=ctx.createOscillator();o.type='square';o.frequency.value=hz*(k.tone||1);o.connect(bp);o.start(time);o.stop(time+dur+0.02)}
+        for(const hz of HAT_PARTIALS){const o=ctx.createOscillator();o.type='square';o.frequency.value=hz*(k.tone||1)*pt;o.connect(bp);o.start(time);o.stop(time+dur+0.02)}
         const n=ctx.createBufferSource();n.buffer=this.noise;const ng=ctx.createGain();ng.gain.value=0.4;n.connect(ng);ng.connect(f);n.start(time);n.stop(time+dur+0.02);
       }else{
         const n=ctx.createBufferSource();n.buffer=this.noise;n.connect(f);n.start(time);n.stop(time+dur+0.02);
@@ -2770,6 +2831,7 @@ const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
+  samples:{},voice:{},
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -2828,6 +2890,17 @@ function setStatus(t){$('status').textContent=t;$('status').title=t;clearTimeout
 
 /* ---------- project model ---------- */
 function snapshot(){const s=JSON.parse(JSON.stringify(state));delete s.loop;s.sections=s.sections.map(x=>{const y=Object.assign({},x);delete y.id;return y});return {app:'zinth',v:2,state:s,params:JSON.parse(JSON.stringify(E.params)),master:+$('master').value}}
+// a project file carries the drum samples themselves (up to a few MB each); autosave and links carry names
+function snapshotWithSamples(){const p=snapshot();p.samples={};for(const k in E.samples){const r=E.samples[k];if(r&&r.data&&r.data.byteLength<6e6)p.samples[k]={id:r.id,name:r.name,data:Z.samples.b64(r.data)}}return p}
+async function loadSamples(embedded){
+  E.samples={};E.voice=state.voice;
+  for(const kind of Object.keys(state.samples||{})){
+    const ref=state.samples[kind];if(!ref)continue;let rec=null;
+    try{if(embedded&&embedded[kind]&&embedded[kind].data)rec=await Z.samples.importBytes(ref.id,ref.name,Z.samples.unb64(embedded[kind].data));else rec=await Z.samples.load(ref.id)}catch(e){rec=null}
+    if(rec){E.samples[kind]=rec;delete ref.missing}else ref.missing=true;
+  }
+  if(ZUI.renderVoices)ZUI.renderVoices();
+}
 function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
@@ -2840,8 +2913,9 @@ function restore(p){
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
   if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
-  state.view=s.view==='studio'?'studio':'op';
+  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();if(ZUI.applyView)ZUI.applyView();
+  loadSamples(p.samples);
 }
 // autosave + undo history: every settled change becomes an undo step
 let persistTimer=null;const undo={stack:[],redo:[],last:null,quiet:false};
@@ -3248,7 +3322,7 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,TH,readColors,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();
 </script>
 <script>
@@ -3485,11 +3559,46 @@ function renderGrid(){
   $('fillTgl').classList.toggle('on',!!P.fill);$('fillTgl').setAttribute('aria-pressed',!!P.fill);$('gridReset').disabled=!edited;
   $('grid').innerHTML=Z.DRUM_KINDS.map(k=>{
     const nm=rowName(k),tip=k==='perc'?'perc · the '+state.kit+' kit plays a '+nm+' here':nm;
-    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+'"></button>').join('')+'</div>';
+    return '<div class="grow"><span class="gn" title="'+tip+'">'+nm+'</span>'+P[k].map((v,s)=>'<button class="cell'+(v>=0.8?' on':v>0?' soft':'')+'" data-k="'+k+'" data-s="'+s+'" title="'+nm+' · step '+(s+1)+(v?' · '+Math.round(v*100)+' %':'')+' — click to cycle, drag up or down for velocity"><div class="vel" style="height:'+Math.round(v*100)+'%"></div></button>').join('')+'</div>';
   }).join('');
+  renderVoices();
 }
+/* the drum voices: a sample or the synth, with its own pitch and decay. Drop a file on a row to load it. */
+function renderVoices(){
+  const box=$('voices');if(!box)return;
+  box.innerHTML=Z.DRUM_KINDS.map(k=>{const ref=state.samples[k],v=E.voiceOf(k),nm=rowName(k),pitch=v.pitch||0;
+    return '<div class="vrow" data-kind="'+k+'" title="Drop an audio file here to play it as the '+nm+'"><b>'+nm+'</b><span class="vname'+(ref&&ref.missing?' missing':'')+'">'+(ref?(ref.missing?ref.name+' · missing':ref.name):'synth')+'</span>'+
+      '<button class="opt" data-a="load" title="Load a sample: wav, mp3, ogg, aiff">Load</button><button class="opt" data-a="clear"'+(ref?'':' disabled')+' title="Back to the synthesised voice">×</button>'+
+      '<span class="vp"><button class="opt" data-a="pdn" title="A semitone down">−</button><output title="Pitch in semitones">'+(pitch>0?'+':'')+pitch+'</output><button class="opt" data-a="pup" title="A semitone up">+</button></span>'+
+      '<input type="range" min="10" max="100" value="'+(v.decay===undefined?100:v.decay)+'" data-a="decay" aria-label="'+nm+' decay" title="How much of the sound plays: right is all of it, left is a tight snap"></div>'}).join('');
+  box.querySelectorAll('input[type=range]').forEach(U.fill);
+}
+function setVoice(k,key,v){state.voice[k]=Object.assign({pitch:0,decay:100},state.voice[k]||{},{[key]:v});E.voice=state.voice;U.persist()}
+async function loadSampleInto(k,file){
+  try{U.setStatus('Loading '+file.name+'…');const rec=await Z.samples.importFile(file);E.samples[k]=rec;state.samples[k]={id:rec.id,name:rec.name};renderVoices();U.persist();
+    U.setStatus(rowName(k)+' now plays '+rec.name+' ('+rec.buffer.duration.toFixed(2)+' s). Pitch and decay are yours; a closed hat still chokes an open one.')}
+  catch(err){U.setStatus('Could not load '+file.name+': '+(err&&err.message||'not an audio file'))}
+}
+$('voices').addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;const k=b.closest('.vrow').dataset.kind,a=b.dataset.a,v=E.voiceOf(k);
+  if(a==='load'){$('sampleFile').dataset.kind=k;$('sampleFile').click()}
+  else if(a==='clear'){delete E.samples[k];state.samples[k]=null;renderVoices();U.persist();U.setStatus(rowName(k)+' is back to the synth voice')}
+  else if(a==='pdn'||a==='pup'){setVoice(k,'pitch',Math.max(-24,Math.min(24,(v.pitch||0)+(a==='pup'?1:-1))));renderVoices()}});
+$('voices').addEventListener('input',e=>{const r=e.target.closest('input[data-a=decay]');if(!r)return;setVoice(r.closest('.vrow').dataset.kind,'decay',+r.value);U.fill(r)});
+$('voices').addEventListener('dragover',e=>{if(e.target.closest('.vrow')){e.preventDefault();e.dataTransfer.dropEffect='copy'}});
+$('voices').addEventListener('drop',e=>{const row=e.target.closest('.vrow');if(!row||!e.dataTransfer.files.length)return;e.preventDefault();loadSampleInto(row.dataset.kind,e.dataTransfer.files[0])});
+$('sampleFile').addEventListener('change',e=>{const f=e.target.files[0],k=e.target.dataset.kind;if(f&&k)loadSampleInto(k,f);e.target.value=''});
 function editPattern(fn){const sec=song()[U.viewSection];if(!sec)return;const P=JSON.parse(JSON.stringify(sec.track.drumPattern));fn(P);state.drumEdits[sec.part]=P;U.regenerate()}
-$('grid').addEventListener('click',e=>{const c=e.target.closest('.cell');if(!c)return;editPattern(P=>{const k=c.dataset.k,s=+c.dataset.s,v=P[k][s];P[k][s]=v===0?1:v>=0.8?0.55:0})});
+// a click cycles a cell: off, hit, ghost; a drag up or down sets its velocity exactly
+{let gd=null;
+  $('grid').addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');if(!c)return;e.preventDefault();try{c.setPointerCapture(e.pointerId)}catch(err){}gd={c,k:c.dataset.k,s:+c.dataset.s,y:e.clientY,v0:null,v:0,moved:false}});
+  $('grid').addEventListener('pointermove',e=>{if(!gd)return;const dy=gd.y-e.clientY;if(!gd.moved&&Math.abs(dy)<4)return;gd.moved=true;
+    if(gd.v0===null){const sec=song()[U.viewSection];gd.v0=(sec&&sec.track.drumPattern[gd.k][gd.s])||0.6}
+    gd.v=Math.max(0.15,Math.min(1,gd.v0+dy/70));const f=gd.c.querySelector('.vel');if(f)f.style.height=Math.round(gd.v*100)+'%';gd.c.classList.add('on');gd.c.classList.remove('soft')});
+  const end=()=>{if(!gd)return;const g=gd;gd=null;
+    if(g.moved){const v=Math.round(g.v*100)/100;editPattern(P=>{P[g.k][g.s]=v})}
+    else editPattern(P=>{const v=P[g.k][g.s];P[g.k][g.s]=v===0?1:v>=0.8?0.55:0})};
+  $('grid').addEventListener('pointerup',end);$('grid').addEventListener('pointercancel',end);
+}
 $('fillTgl').addEventListener('click',()=>editPattern(P=>{P.fill=!P.fill}));
 $('gridReset').addEventListener('click',()=>{const sec=song()[U.viewSection];if(sec){state.drumEdits[sec.part]=null;U.regenerate();U.setStatus('Drums back to the generated pattern')}});
 
@@ -3741,7 +3850,7 @@ function midiFile(){
   return out;
 }
 $('exportMid').addEventListener('click',async()=>{try{const name='zinth-'+state.seeds.chords+'.mid';U.setStatus(await saveFile(name,new Blob([midiFile()],{type:'audio/midi'}),'Saved '+name+' (5 tracks, drums on channel 10)'))}catch(err){U.setStatus('MIDI export failed: '+(err&&err.message||err))}});
-$('saveProj').addEventListener('click',async()=>{const name='zinth-'+state.seeds.chords+'.json';U.setStatus(await saveFile(name,new Blob([JSON.stringify(U.snapshot(),null,1)],{type:'application/json'}),'Saved '+name))});
+$('saveProj').addEventListener('click',async()=>{const name='zinth-'+state.seeds.chords+'.json';U.setStatus(await saveFile(name,new Blob([JSON.stringify(U.snapshotWithSamples(),null,1)],{type:'application/json'}),'Saved '+name+(Object.keys(E.samples).length?' with its drum samples':'')))});
 $('openProj').addEventListener('click',()=>$('projFile').click());
 $('projFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{U.restore(JSON.parse(r.result));U.setStatus('Opened '+f.name)}catch(err){U.setStatus('Could not open: '+err.message)}};r.readAsText(f);e.target.value=''});
 
@@ -3995,7 +4104,7 @@ $('keys').addEventListener('pointercancel',e=>{const k=e.target.closest('.key');
 window.addEventListener('blur',()=>{Object.keys(held).forEach(i=>keyOff(i));if(!cb.hold)chordOff()});
 
 /* ---------- boot ---------- */
-Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,syncLabels,renderRecInfo,midiFile,setRec,applyView});
+Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();
@@ -4107,8 +4216,8 @@ const SCREENS={
       {label:'Pump',min:0,max:100,step:1,fmt:v=>v?v+' %':'off',get:()=>E.params.drums.pump,set:v=>{E.setParam('drums','pump',v);U.persist()}},
       {label:'Level',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>E.params.drums.level,set:v=>{E.setParam('drums','level',v);U.renderMixer();U.persist()}},
     ],
-    html:()=>'<div class="scr scr-drum"><div class="scr-foot top"><span class="scr-patch" id="opKit"></span><span class="scr-btns"><button class="opb" data-a="fill" id="opFill" title="Snare roll into the next section">Fill</button><button class="opb" data-a="dlock" id="opDLock" title="Lock: New track keeps the drums">🔒 Lock</button><button class="opb" data-a="ddice" title="Reroll only the drums">🎲 Roll</button><button class="opb" data-a="dreset" title="Back to the generated pattern">↺</button></span></div><div class="scr-grid" id="opGrid"></div><div class="scr-line">Click a cell: off → hit → ghost. The grid is the pattern of the selected section.</div></div>',
-    mount:()=>{state.layer='drums';U.renderSound();borrow($('grid'),$('opGrid'))},
+    html:()=>'<div class="scr scr-drum"><div class="scr-foot top"><span class="scr-patch" id="opKit"></span><span class="scr-btns"><button class="opb" data-a="fill" id="opFill" title="Snare roll into the next section">Fill</button><button class="opb" data-a="dlock" id="opDLock" title="Lock: New track keeps the drums">🔒 Lock</button><button class="opb" data-a="ddice" title="Reroll only the drums">🎲 Roll</button><button class="opb" data-a="dreset" title="Back to the generated pattern">↺</button></span></div><div class="scr-grid" id="opGrid"></div><div class="scr-line">Click a cell: off → hit → ghost. Drag a cell up or down for its velocity. Drop a sound on a voice to play your own.</div><div class="scr-voices" id="opVoices"></div></div>',
+    mount:()=>{state.layer='drums';U.renderSound();borrow($('grid'),$('opGrid'));borrow($('voices'),$('opVoices'))},
     refresh:()=>{const sec=(U.song||[])[U.viewSection];$('opKit').innerHTML='<b style="color:'+COLORS.drums+'">'+state.kit+'</b> · '+(sec?(sec.part==='v'?'A verse':'B chorus'):'')+(sec&&state.drumEdits[sec.part]?' · edited':'');
       $('opDLock').classList.toggle('on',!!state.locks.drums);const P=sec&&sec.track.drumPattern;$('opFill').classList.toggle('on',!!(P&&P.fill))},
   },

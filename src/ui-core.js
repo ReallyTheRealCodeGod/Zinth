@@ -78,6 +78,7 @@ const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
+  samples:{},voice:{},
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -136,6 +137,17 @@ function setStatus(t){$('status').textContent=t;$('status').title=t;clearTimeout
 
 /* ---------- project model ---------- */
 function snapshot(){const s=JSON.parse(JSON.stringify(state));delete s.loop;s.sections=s.sections.map(x=>{const y=Object.assign({},x);delete y.id;return y});return {app:'zinth',v:2,state:s,params:JSON.parse(JSON.stringify(E.params)),master:+$('master').value}}
+// a project file carries the drum samples themselves (up to a few MB each); autosave and links carry names
+function snapshotWithSamples(){const p=snapshot();p.samples={};for(const k in E.samples){const r=E.samples[k];if(r&&r.data&&r.data.byteLength<6e6)p.samples[k]={id:r.id,name:r.name,data:Z.samples.b64(r.data)}}return p}
+async function loadSamples(embedded){
+  E.samples={};E.voice=state.voice;
+  for(const kind of Object.keys(state.samples||{})){
+    const ref=state.samples[kind];if(!ref)continue;let rec=null;
+    try{if(embedded&&embedded[kind]&&embedded[kind].data)rec=await Z.samples.importBytes(ref.id,ref.name,Z.samples.unb64(embedded[kind].data));else rec=await Z.samples.load(ref.id)}catch(e){rec=null}
+    if(rec){E.samples[kind]=rec;delete ref.missing}else ref.missing=true;
+  }
+  if(ZUI.renderVoices)ZUI.renderVoices();
+}
 function restore(p){
   if(!p||p.app!=='zinth'||!p.state)throw new Error('Not a Zinth project');
   const s=p.state;
@@ -148,8 +160,9 @@ function restore(p){
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
   if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
-  state.view=s.view==='studio'?'studio':'op';
+  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();if(ZUI.applyView)ZUI.applyView();
+  loadSamples(p.samples);
 }
 // autosave + undo history: every settled change becomes an undo step
 let persistTimer=null;const undo={stack:[],redo:[],last:null,quiet:false};
@@ -556,5 +569,5 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,TH,readColors,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();

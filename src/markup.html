@@ -191,6 +191,8 @@
         <div class="field" data-master><label for="eq-mid">Mid <output id="o-eq-mid"></output></label><input class="bip" type="range" id="eq-mid" min="-100" max="100" value="0" title="Mid peak at 1 kHz: the body of the mix, where the chords and the lead sing. Left scoops it out, right pushes it forward. Centre is flat."></div>
         <div class="field" data-master><label for="eq-low">Low <output id="o-eq-low"></output></label><input class="bip" type="range" id="eq-low" min="-100" max="100" value="0" title="Low shelf at 160 Hz: the weight underneath — the kick and the bass. Left thins it out, right fills it in. Centre is flat."></div>
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
+        <div class="field" data-drums><label>Voices <output>sample or synth · pitch · decay</output></label><div class="voices" id="voices"></div></div>
+        <input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.ogg,.aif,.aiff,.flac" hidden>
         <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
         <div class="row2" data-master>
           <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>
