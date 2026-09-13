@@ -83,6 +83,16 @@
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
         <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
         <div class="field"><label for="warmth">Warmth <output id="warmthVal"></output></label><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
+        <div class="field"><label>MIDI <output id="midiState">off</output></label>
+          <div class="stack midi" id="midiBox">
+            <button class="btn sm" id="midiOn" title="Ask the browser for MIDI: your keyboard plays and records in key, your controller turns the knobs, and hardware can follow the clock">Enable MIDI</button>
+            <div class="stack" id="midiPorts" hidden>
+              <div class="row2"><select class="sm" id="midiIn" aria-label="MIDI input"></select><select class="sm" id="midiOut" aria-label="MIDI output"></select></div>
+              <div class="opts"><button class="opt" id="midiClock" title="Send MIDI clock, start and stop, so hardware follows the transport">Clock out</button><button class="opt" id="midiNotes" title="Send every note the song plays: lead, arp, chords and bass on channels 1 to 4, drums on 10">Notes out</button></div>
+              <div class="opts" id="midiLearn" title="Map controller knobs to the four device knobs"></div>
+            </div>
+          </div>
+        </div>
         <div class="field"><label>Saved songs</label><div class="saved" id="saved"></div></div>
       </div>
     </section>
@@ -193,6 +203,7 @@
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
         <div class="field" data-drums><label>Voices <output>sample or synth · pitch · decay</output></label><div class="voices" id="voices"></div></div>
         <input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.ogg,.aif,.aiff,.flac" hidden>
+        <div class="field" data-master><label for="outDev">Output device <output id="outNote"></output></label><select class="sm" id="outDev" title="Which speakers or interface the mix plays through"></select></div>
         <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
         <div class="row2" data-master>
           <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>

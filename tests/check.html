@@ -1586,6 +1586,7 @@ class Engine{
     const plan=countIn?Z.countInPlan(this.stepSec()):null;
     if(plan){for(const b of plan.beats)this.click(b.step,this.grid+b.t);this.grid+=plan.dur;this.countInEnd=this.grid}
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
+    if(this.onTransport)this.onTransport(true);
   }
   // how many beats of the count-in are still to come: 4 down to 1 while it counts, 0 the rest of the time
   countdown(){
@@ -1594,7 +1595,7 @@ class Engine{
     if(left<=0)return 0;
     return Math.max(1,Math.min(Z.COUNTIN.beats,Math.ceil(left/(this.stepSec()*4))));
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}if(this.onTransport)this.onTransport(false)}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -1602,6 +1603,7 @@ class Engine{
       const d=this.stepSec(),sec=this.song[this.section]||this.song[0];
       const t=this.grid+(this.step%2===1?this.swing*d:0);
       this.scheduleStep(this.section,this.step,t);
+      if(this.onStep)this.onStep(this.step,t,d);
       this.transitionAt(this.section,this.step,t);
       this.sweepAt(this.section,this.step,t);
       this.fadeAt(this.section,this.step,t);
@@ -1630,14 +1632,14 @@ class Engine{
         const vel=h.vel,t=Math.max(0,time+h.shift);
         if(L==='drums'){
           if(lay[L]==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&s%16!==0)))continue;
-          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
+          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);if(this.onDrum)this.onDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
         }else if(L==='chords'){
-          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,t,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
+          const n=e.notes.length,dur=e.dur*d-0.02;e.notes.forEach((m,k)=>{this.playNote(L,m,vel,t,dur,(k/(n-1||1)-0.5)*0.5);if(this.onNote)this.onNote(L,m,vel,t,dur)});
         }else if(L==='arp'){
-          this.playNote(L,e.midi,vel,t,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
+          const dur=Math.max(0.05,e.dur*d*0.95);this.playNote(L,e.midi,vel,t,dur,e.midi%2?0.3:-0.3);if(this.onNote)this.onNote(L,e.midi,vel,t,dur);
         }else{
           const dur=Math.max(0.05,e.dur*d*0.95);
-          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);
+          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);if(this.onNote)this.onNote(L,e.midi,vel,t,dur);
           if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,t,dur,-0.22);
         }
       }

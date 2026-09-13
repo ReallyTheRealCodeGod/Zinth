@@ -62,7 +62,7 @@ const SCREENS={
       {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v)},
       {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v)},
     ],
-    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">🎲 New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
+    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">🎲 New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
     mount:()=>{borrow($('arr'),$('opSongMain'));borrow($('roll'),$('opSongMain'));U.buildRoll()},
     refresh:()=>{
       $('opKey').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+scaleName()+'</em>';$('opScale').textContent=scaleName();
@@ -70,6 +70,7 @@ const SCREENS={
       $('opLine').textContent=MOODS[state.mood].label+' · '+state.bpm+' bpm · '+bars+' bars';
       $('opNotes').innerHTML=Z.SCALES[state.scale].steps.map((s,i)=>'<span class="note'+(i===0?' root':'')+'">'+Z.NOTE_NAMES[(state.root+s)%12]+'</span>').join('');
       $('opRec').classList.toggle('on',U.rec.armed);$('opLoop').classList.toggle('on',E.loopSection);
+      $('opMotifLane').textContent=state.recTarget;
     },
   },
   synth:{
@@ -108,11 +109,30 @@ const SCREENS={
       {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()}},
       {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)}},
     ],
-    html:()=>'<div class="scr scr-mix" id="opMix"></div>',
-    mount:()=>{renderFaders()},
-    refresh:()=>{renderFaders()},
+    html:()=>'<div class="scr"><div class="scenes" id="opScenes"></div><div class="scr-mix" id="opMix"></div></div>',
+    mount:()=>{renderFaders();renderScenes()},
+    refresh:()=>{renderFaders();renderScenes()},
   },
 };
+/* scenes: four snapshots of every sound and the mix, to flip between while the song plays */
+let storeMode=false;
+function sceneSnap(){return {params:JSON.parse(JSON.stringify(E.params)),master:+$('master').value,warmth:state.warmth,eq:JSON.parse(JSON.stringify(state.eq)),reverb:Object.assign({},state.reverb),kit:state.kit,voice:JSON.parse(JSON.stringify(state.voice||{}))}}
+function sceneApply(s){
+  for(const L of Z.LAYERS)for(const k in s.params[L]||{})E.setParam(L,k,s.params[L][k]);
+  setRange('master',s.master);setRange('warmth',s.warmth);
+  state.eq=Z.normEq(s.eq);E.setEq(state.eq);state.reverb=Object.assign({},s.reverb);E.setReverb(state.reverb);
+  if(Z.KITS[s.kit]){state.kit=s.kit;E.kit=s.kit}state.voice=s.voice||{};E.voice=state.voice;
+  U.renderMixer();U.renderSound();U.persist();
+}
+function renderScenes(){
+  const box=$('opScenes');if(!box)return;
+  box.innerHTML='<span class="scr-line">Scenes</span>'+['A','B','C','D'].map((n,i)=>'<button class="opb'+(state.scenes[i]?' has':'')+(storeMode?' store':'')+'" data-scene="'+i+'" title="'+(storeMode?'Store the current sounds and mix as scene '+n:state.scenes[i]?'Recall scene '+n:'Empty. Press Store, then this, to keep the current sounds and mix here')+'">'+n+'</button>').join('')+'<button class="opb'+(storeMode?' on':'')+'" data-a="store" title="Then pick a letter to store the current sounds and mix there">Store</button>';
+}
+$('opScreen').addEventListener('click',e=>{const b=e.target.closest('[data-scene]');if(!b)return;const i=+b.dataset.scene;
+  if(storeMode){state.scenes[i]=sceneSnap();storeMode=false;U.persist();U.setStatus('Scene '+'ABCD'[i]+' stored: every sound, the kit, the EQ, the room and the mix')}
+  else if(state.scenes[i]){sceneApply(state.scenes[i]);U.setStatus('Scene '+'ABCD'[i])}
+  else U.setStatus('Scene '+'ABCD'[i]+' is empty. Press Store, then '+'ABCD'[i]+'.');
+  renderScenes();refresh()});
 function renderFaders(){
   const box=$('opMix');if(!box)return;
   box.innerHTML=Z.LAYERS.map(L=>{const p=E.params[L],on=E.audible(L);return '<div class="fader'+(on?'':' off')+'" data-l="'+L+'" style="--c:'+COLORS[L]+'"><div class="ftrack" title="Drag to set the level"><div class="ffill" style="height:'+p.level+'%"></div></div><b>'+L+'</b><span class="fv">'+p.level+'</span><div class="fbt"><button data-a="mute" class="'+(p.mute?'on':'')+'" title="Mute">M</button><button data-a="lock" class="'+(state.locks[L]?'on':'')+'" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
@@ -169,6 +189,8 @@ $('opScreen').addEventListener('click',e=>{
     if(a==='mute')E.setParam(L,'mute',!E.params[L].mute);else if(a==='lock')state.locks[L]=!state.locks[L];else if(a==='dice'){U.dice(L);return}
     U.renderMixer();U.persist();refresh();return}
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
+  if(a==='store'){storeMode=!storeMode;renderScenes();return}
+  if(a.startsWith('m:')){U.transformLane(state.recTarget,a.slice(2));return}
   if(a==='dice')U.newTrack();else if(a==='rec'){const t=recTargetFor(synthLayer);if(state.recTarget!==t){const tb=$('recTarget').querySelector('[data-v="'+t+'"]');if(tb)tb.click()}$('recBtn').click()}
   else if(a==='loop')$('loopSec').click();else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
   else if(a==='lock'){state.locks[synthLayer]=!state.locks[synthLayer];U.renderMixer();U.persist()}else if(a==='ldice')U.dice(synthLayer);
@@ -182,6 +204,7 @@ setInterval(()=>{if(state.view!=='op')return;const sig=[state.root,state.scale,s
 
 function enter(){render()}
 function leave(){cancelAnimationFrame(raf);giveBack();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}
-Object.assign(U,{opEnter:enter,opLeave:leave,opRefresh:refresh});
+function knobFrac(i,f){const k=knobs[i];if(!k||state.view!=='op')return;const [lo,hi]=range(k);knobSet(i,lo+Math.max(0,Math.min(1,f))*(hi-lo));U.persist()}
+Object.assign(U,{opEnter:enter,opLeave:leave,opRefresh:refresh,opKnobFrac:knobFrac});
 if(state.view!=='studio')enter(); // this script loads last, after the app has already chosen its view
 })();

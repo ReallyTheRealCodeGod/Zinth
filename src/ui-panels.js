@@ -136,7 +136,7 @@ function renderSound(){
   renderArpFields();if(synth)renderVoiceFields(p);
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
-  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb()}
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb();renderOutputs()}
   else if(synth)$('patch').value=patchName(p);
   else{$('kit').value=state.kit;renderGrid()}
 }
@@ -463,6 +463,10 @@ function midiFile(){
   // the room a nudge needs either side of a step, in ticks, so a humanized note never runs into the next one
   const hpad=2+(HUMAN>0?Math.ceil(Z.humanSpan(stepSec)/stepSec*T16):0);
   const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
+  // a section sweep travels as CC74 brightness, sampled every beat along the same plan playback uses
+  const anySweep=S.some(sec=>Z.SWEEP_MODES.indexOf(sec.sweep)>0);
+  const sweepHz=(plan,t)=>{let prev=plan[0];for(const p of plan){if(t<p.t){if(!p.ramp||!prev.hz)return prev.hz;const f=(t-prev.t)/Math.max(1e-6,p.t-prev.t);return prev.hz*Math.pow(p.hz/prev.hz,f)}prev=p}return prev.hz};
+  const cc74=hz=>Math.max(0,Math.min(127,Math.round(127*Math.log(Math.max(200,hz)/200)/Math.log(20000/200))));
   // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
   const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
   const vlq=n=>{const b=[n&0x7f];while((n>>=7)>0)b.unshift((n&0x7f)|0x80);return b};
@@ -488,6 +492,9 @@ function midiFile(){
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
         else evs.push({tick:offset,cc:7,val:127})}
+      if(anySweep&&L!=='drums'){const sp=Z.sweepPlan(sec.sweep,steps,stepSec);
+        if(sp)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:74,val:cc74(sweepHz(sp,st*stepSec))});
+        else evs.push({tick:offset,cc:74,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
         for(let i=0;i<list.length;i++){const e=list[i];
           // humanize: the very nudge and velocity this note was played with, as ticks of the grid, so a loose
@@ -770,13 +777,34 @@ function keyOff(i){
   if(h.start)recordNote(h.start,h.midi,t);
   const el=$('keys').children[i];if(el)el.classList.remove('down');
 }
+// a note from a controller: the same path as a key, for any pitch the scale allows
+const liveHeld={};
+function liveNoteOn(midi){if(liveHeld[midi])return;const rel=E.noteOn(midi,recLayer()),h={rel,start:null,midi};if(rec.armed&&E.playing)h.start=E.nearestStep(E.ctx.currentTime);liveHeld[midi]=h;
+  const i=kbPitches.findIndex(p=>p.midi===midi);if(i>=0){const el=$('keys').children[i];if(el)el.classList.add('down')}}
+function liveNoteOff(midi){const h=liveHeld[midi];if(!h)return;const t=E.ctx.currentTime;h.rel(t);delete liveHeld[midi];if(h.start)recordNote(h.start,h.midi,t);
+  const i=kbPitches.findIndex(p=>p.midi===midi);if(i>=0){const el=$('keys').children[i];if(el)el.classList.remove('down')}}
+
+/* ---------- output device: which speakers or interface the mix goes to ---------- */
+async function listOutputs(){if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return [];try{return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audiooutput')}catch(e){return []}}
+async function renderOutputs(){const sel=$('outDev');if(!sel)return;const devs=await listOutputs(),cur=(E.ctx&&E.ctx.sinkId)||'';
+  sel.innerHTML='<option value="">System default</option>'+devs.map((d,i)=>'<option value="'+d.deviceId+'"'+(d.deviceId===cur?' selected':'')+'>'+(d.label||'Output '+(i+1))+'</option>').join('');
+  $('outNote').textContent=(E.ctx?E.ctx.setSinkId:AudioContext.prototype.setSinkId)?(devs.some(d=>d.label)?'':'names appear once a microphone permission is granted'):'not supported in this browser'}
+$('outDev').addEventListener('focus',renderOutputs);
+$('outDev').addEventListener('change',async e=>{E.init();if(!E.ctx.setSinkId){U.setStatus('This browser cannot switch the output device');return}
+  try{await E.ctx.setSinkId(e.target.value);U.setStatus(e.target.value?'Playing through '+e.target.selectedOptions[0].textContent:'Playing through the system default')}catch(err){U.setStatus('Could not switch output: '+err.message)}});
+
+/* ---------- install: a manifest and, where a server is serving us, a service worker for offline ---------- */
+{const icon="data:image/svg+xml;utf8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='#0a84ff'/><text x='32' y='45' font-family='Inter,Arial,sans-serif' font-weight='700' font-size='36' fill='white' text-anchor='middle'>Z</text></svg>");
+  const m={name:'Zinth',short_name:'Zinth',start_url:'.',scope:'.',display:'standalone',background_color:'#ececee',theme_color:'#0a84ff',icons:[{src:icon,sizes:'any',type:'image/svg+xml'}]};
+  const l=document.createElement('link');l.rel='manifest';l.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(m));document.head.appendChild(l);
+  if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});}
 $('keys').addEventListener('pointerdown',e=>{const k=e.target.closest('.key');if(!k)return;e.preventDefault();try{k.setPointerCapture(e.pointerId)}catch(err){}keyOn(+k.dataset.i)});
 $('keys').addEventListener('pointerup',e=>{const k=e.target.closest('.key');if(k)keyOff(+k.dataset.i)});
 $('keys').addEventListener('pointercancel',e=>{const k=e.target.closest('.key');if(k)keyOff(+k.dataset.i)});
 window.addEventListener('blur',()=>{Object.keys(held).forEach(i=>keyOff(i));if(!cb.hold)chordOff()});
 
 /* ---------- boot ---------- */
-Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView});
+Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView,liveNoteOn,liveNoteOff,renderOutputs});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();

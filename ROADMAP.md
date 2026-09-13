@@ -24,6 +24,16 @@ This file is the work queue for the background agent. Items are in priority orde
 - [x] **Per-section filter sweeps.** A "Sweep" choice per section in the inspector: none, up, down. Up opens a master low-pass from 300 Hz to open over the section's length, down closes it over the last bar. Rendered in the WAV export. (2026-09-10: a Sweep segment in the inspector, a master low-pass between the mix and the punch-in chain, scheduled per section by `Z.sweepPlan` in playback and in the offline render; intros, pre-choruses and breaks open up and outros close down by default, a swept section shows ↗ or ↘ in the arrangement, and the theory check proves a plan never leaves its section, never reaches 0 Hz and always hands the next section an open mix.)
 - [x] **Section fades.** Intro fade-in and outro fade-out as inspector options, applied in playback and export. (2026-09-10: a Fade segment beside Sweep — ◢ in rises from silence over a section's first two bars, ◣ out falls to silence over its last two; a master gain after the limiter carries it, `Z.fadePlan` shapes it with a knee so the fade sweeps the audible range, outros fade out by default, the WAV render and MIDI CC7 volume follow the same plan, and the theory check proves a fade moves one way, stays in its section and never mutes the section after it.)
 
+## Professional pass (2026-09-13, by hand)
+
+- [x] **Design system.** Flat neutral greys, Inter, one accent, light and dark, tokens everywhere including the canvases.
+- [x] **Master chain.** AudioWorklet lookahead limiter, FDN reverb with size, damping and pre-delay, ladder filter option, exports mastered to −14 LUFS under −1 dBFS with figures reported; stems share the mix gain.
+- [x] **Sample drums.** IndexedDB sample store, samples inside project files, per-voice pitch and decay, hat choke, velocity by drag on every cell.
+- [x] **Web MIDI.** Input quantised to the scale and recorded, CC learn onto the four knobs, clock and start/stop out, notes out per layer with drums on channel 10, sweeps exported as CC74.
+- [x] **Workflow.** Phrase tools (vary, reverse, invert, octave), four scenes, output device picker.
+- [x] **Install and test.** Inline manifest and service worker, PowerShell static server, Playwright e2e suite.
+- [ ] **Still open from that plan.** Odd meters and polymeter (needs the generators and the theory check to become meter-aware); parameter locks per step on synth lanes; per-section automation lanes beyond sweeps and fades; a visible undo history; recording knob moves and punch-ins as a performance; a headphone-only click through a second output; stems with tails and dry-send options; sync between two browsers.
+
 ## Sound
 
 - [x] **Professional voice architecture.** ADSR with decay and sustain, 12 or 24 dB filter with envelope amount, key tracking and velocity, per-layer drive, stereo unison through split filter chains, two-operator FM, bus high-passing, a designed reverb impulse, metallic hats, two-tone snares, kick drive and punch per kit, a sixteen-patch library and retuned moods. (2026-09-11: done by hand, verified by rendering every patch and every drum of every kit offline.)

@@ -354,6 +354,11 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 .scr-grid .cell{height:30px;border-radius:6px}
 .scr-grid .gn{font-size:11px}
 .scr-mix{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:end;min-height:292px;padding:6px 10px}
+.scenes{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scenes .opb.has{border-color:var(--ink-mute);color:var(--ink)}
+.scenes .opb.store{border-color:var(--accent);color:var(--accent)}
+.scr-btns.motif .opb{font-size:11.5px}
+.midi .opts{flex-wrap:wrap}
 .fader{display:flex;flex-direction:column;align-items:center;gap:6px}
 .fader.off{opacity:.45}
 .ftrack{width:34px;height:170px;border-radius:8px;background:var(--panel-3);border:1px solid var(--line);position:relative;overflow:hidden;cursor:ns-resize;touch-action:none}
@@ -510,6 +515,16 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
         <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
         <div class="field"><label for="warmth">Warmth <output id="warmthVal"></output></label><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
+        <div class="field"><label>MIDI <output id="midiState">off</output></label>
+          <div class="stack midi" id="midiBox">
+            <button class="btn sm" id="midiOn" title="Ask the browser for MIDI: your keyboard plays and records in key, your controller turns the knobs, and hardware can follow the clock">Enable MIDI</button>
+            <div class="stack" id="midiPorts" hidden>
+              <div class="row2"><select class="sm" id="midiIn" aria-label="MIDI input"></select><select class="sm" id="midiOut" aria-label="MIDI output"></select></div>
+              <div class="opts"><button class="opt" id="midiClock" title="Send MIDI clock, start and stop, so hardware follows the transport">Clock out</button><button class="opt" id="midiNotes" title="Send every note the song plays: lead, arp, chords and bass on channels 1 to 4, drums on 10">Notes out</button></div>
+              <div class="opts" id="midiLearn" title="Map controller knobs to the four device knobs"></div>
+            </div>
+          </div>
+        </div>
         <div class="field"><label>Saved songs</label><div class="saved" id="saved"></div></div>
       </div>
     </section>
@@ -620,6 +635,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
         <div class="eqbar" data-master><button class="btn sm" id="eqFlat" title="Set all three bands back to flat, so the mix passes through the EQ untouched">Flat</button><span class="note" id="eqNote"></span></div>
         <div class="field" data-drums><label>Voices <output>sample or synth · pitch · decay</output></label><div class="voices" id="voices"></div></div>
         <input type="file" id="sampleFile" accept="audio/*,.wav,.mp3,.ogg,.aif,.aiff,.flac" hidden>
+        <div class="field" data-master><label for="outDev">Output device <output id="outNote"></output></label><select class="sm" id="outDev" title="Which speakers or interface the mix plays through"></select></div>
         <div class="field" data-master><label for="rv-size">Room size <output id="o-rv-size"></output></label><input type="range" id="rv-size" min="0" max="100" value="60" title="The reverb every layer's Reverb send goes into: from a booth to a cathedral. An algorithmic room, so it changes as you turn it."></div>
         <div class="row2" data-master>
           <div class="field"><label for="rv-damp">Damping <output id="o-rv-damp"></output></label><input type="range" id="rv-damp" min="0" max="100" value="40" title="How fast the highs die in the room: left is bright and tiled, right is soft and furnished"></div>
@@ -2646,6 +2662,7 @@ class Engine{
     const plan=countIn?Z.countInPlan(this.stepSec()):null;
     if(plan){for(const b of plan.beats)this.click(b.step,this.grid+b.t);this.grid+=plan.dur;this.countInEnd=this.grid}
     clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),25);this.tick();
+    if(this.onTransport)this.onTransport(true);
   }
   // how many beats of the count-in are still to come: 4 down to 1 while it counts, 0 the rest of the time
   countdown(){
@@ -2654,7 +2671,7 @@ class Engine{
     if(left<=0)return 0;
     return Math.max(1,Math.min(Z.COUNTIN.beats,Math.ceil(left/(this.stepSec()*4))));
   }
-  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}}
+  stop(){clearInterval(this.timer);this.timer=null;this.playing=false;this.queue=[];this.glideFrom={};this.countInEnd=0;if(this.ctx){for(const n of ['lp','hp','crush','throw','wash','gate8','gate16'])this.fxOff(n);this.resetSweep();this.resetFade()}if(this.onTransport)this.onTransport(false)}
   jump(section){this.section=section;this.step=0}
   tick(){
     const ctx=this.ctx;if(!this.song.length)return;
@@ -2662,6 +2679,7 @@ class Engine{
       const d=this.stepSec(),sec=this.song[this.section]||this.song[0];
       const t=this.grid+(this.step%2===1?this.swing*d:0);
       this.scheduleStep(this.section,this.step,t);
+      if(this.onStep)this.onStep(this.step,t,d);
       this.transitionAt(this.section,this.step,t);
       this.sweepAt(this.section,this.step,t);
       this.fadeAt(this.section,this.step,t);
@@ -2690,14 +2708,14 @@ class Engine{
         const vel=h.vel,t=Math.max(0,time+h.shift);
         if(L==='drums'){
           if(lay[L]==='lite'&&(e.kind==='snare'||e.kind==='clap'||(e.kind==='kick'&&s%16!==0)))continue;
-          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
+          this.playDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);if(this.onDrum)this.onDrum(e.kind,lay[L]==='lite'?vel*0.6:vel,t);
         }else if(L==='chords'){
-          const n=e.notes.length;e.notes.forEach((m,k)=>this.playNote(L,m,vel,t,e.dur*d-0.02,(k/(n-1||1)-0.5)*0.5));
+          const n=e.notes.length,dur=e.dur*d-0.02;e.notes.forEach((m,k)=>{this.playNote(L,m,vel,t,dur,(k/(n-1||1)-0.5)*0.5);if(this.onNote)this.onNote(L,m,vel,t,dur)});
         }else if(L==='arp'){
-          this.playNote(L,e.midi,vel,t,Math.max(0.05,e.dur*d*0.95),e.midi%2?0.3:-0.3);
+          const dur=Math.max(0.05,e.dur*d*0.95);this.playNote(L,e.midi,vel,t,dur,e.midi%2?0.3:-0.3);if(this.onNote)this.onNote(L,e.midi,vel,t,dur);
         }else{
           const dur=Math.max(0.05,e.dur*d*0.95);
-          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);
+          this.playNote(L,e.midi,vel,t,dur,L==='lead'?0.08:0);if(this.onNote)this.onNote(L,e.midi,vel,t,dur);
           if(L==='lead'&&sec.double)this.playNote(L,e.midi+12,vel*0.42,t,dur,-0.22);
         }
       }
@@ -2831,7 +2849,7 @@ const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
-  samples:{},voice:{},
+  samples:{},voice:{},scenes:[null,null,null,null],
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -2913,7 +2931,7 @@ function restore(p){
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
   if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
-  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;
+  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;state.scenes=Array.isArray(s.scenes)&&s.scenes.length===4?s.scenes:[null,null,null,null];
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();if(ZUI.applyView)ZUI.applyView();
   loadSamples(p.samples);
 }
@@ -3322,7 +3340,25 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+/* ---------- motif tools: turn the phrase you have into the next one, without leaving the key ---------- */
+function transformLane(L,op){
+  const sec=song[state.sel];if(!sec||!EDITS[L])return;
+  const key=EDITS[L],own=state[key][sec.part];
+  let list=own?JSON.parse(JSON.stringify(own)):sec.track[L].map(e=>({step:e.step,dur:e.dur,midi:e.midi-(sec.transpose||0),vel:e.vel}));
+  if(!list.length){setStatus('Nothing in the '+LANE_NAME[L]+' to change yet');return}
+  const pitches=Z.scalePitches({root:state.root,scale:state.scale},L==='bass'?36:48,L==='bass'?59:96).filter(p=>!p.passing).map(p=>p.midi);
+  const snap=m=>pitches.reduce((a,b)=>Math.abs(b-m)<Math.abs(a-m)?b:a,pitches[0]);
+  const rng=new Z.Rng(state.seeds[L]+':vary:'+Date.now());
+  const said={reverse:'played backwards',invert:'turned upside down',up:'an octave up',down:'an octave down',vary:'varied a little'};
+  if(op==='reverse')list=list.map(e=>Object.assign({},e,{step:Z.TOTAL-e.step-e.dur})).filter(e=>e.step>=0);
+  else if(op==='invert'){const lo=Math.min(...list.map(e=>e.midi)),hi=Math.max(...list.map(e=>e.midi));list=list.map(e=>Object.assign({},e,{midi:snap(lo+hi-e.midi)}))}
+  else if(op==='up'||op==='down')list=list.map(e=>Object.assign({},e,{midi:snap(e.midi+(op==='up'?12:-12))}));
+  else if(op==='vary')list=list.map(e=>{if(!rng.chance(0.3))return e;const i=pitches.indexOf(snap(e.midi)),j=Math.max(0,Math.min(pitches.length-1,i+rng.pick([-2,-1,1,2])));return Object.assign({},e,{midi:pitches[j]})});
+  else return;
+  list.sort((a,b)=>a.step-b.step);state[key][sec.part]=list;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
+  setStatus('The '+LANE_NAME[L]+' of the '+(sec.part==='v'?'A verse':'B chorus')+' sections is '+said[op]+', still in key. Ctrl+Z if it was better before.');
+}
+Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,transformLane,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();
 </script>
 <script>
@@ -3464,7 +3500,7 @@ function renderSound(){
   renderArpFields();if(synth)renderVoiceFields(p);
   $('waves').querySelectorAll('.wave').forEach(b=>b.classList.toggle('on',b.dataset.wave===p.wave));
   PARAMS.forEach(k=>{const pp=E.params[paramLayer(k)]||{};if(pp[k]===undefined)return;const i=$('p-'+k);i.value=pp[k];U.fill(i);$('o-'+k).textContent=fmt[k](pp[k])});
-  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb()}
+  if(master){const v=+$('master').value;$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %';renderEq();renderReverb();renderOutputs()}
   else if(synth)$('patch').value=patchName(p);
   else{$('kit').value=state.kit;renderGrid()}
 }
@@ -3791,6 +3827,10 @@ function midiFile(){
   // the room a nudge needs either side of a step, in ticks, so a humanized note never runs into the next one
   const hpad=2+(HUMAN>0?Math.ceil(Z.humanSpan(stepSec)/stepSec*T16):0);
   const anyFade=S.some(sec=>Z.FADE_MODES.indexOf(sec.fade)>0);
+  // a section sweep travels as CC74 brightness, sampled every beat along the same plan playback uses
+  const anySweep=S.some(sec=>Z.SWEEP_MODES.indexOf(sec.sweep)>0);
+  const sweepHz=(plan,t)=>{let prev=plan[0];for(const p of plan){if(t<p.t){if(!p.ramp||!prev.hz)return prev.hz;const f=(t-prev.t)/Math.max(1e-6,p.t-prev.t);return prev.hz*Math.pow(p.hz/prev.hz,f)}prev=p}return prev.hz};
+  const cc74=hz=>Math.max(0,Math.min(127,Math.round(127*Math.log(Math.max(200,hz)/200)/Math.log(20000/200))));
   // GM reads CC7 as 40·log10(value/127) dB, so the square root of the gain is the value that matches the mix
   const ccOf=g=>Math.max(0,Math.min(127,Math.round(127*Math.sqrt(g))));
   const vlq=n=>{const b=[n&0x7f];while((n>>=7)>0)b.unshift((n&0x7f)|0x80);return b};
@@ -3816,6 +3856,9 @@ function midiFile(){
       if(anyFade){const plan=Z.fadePlan(sec.fade,steps,stepSec);
         if(plan)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:7,val:ccOf(Z.fadeGain(plan,st*stepSec))});
         else evs.push({tick:offset,cc:7,val:127})}
+      if(anySweep&&L!=='drums'){const sp=Z.sweepPlan(sec.sweep,steps,stepSec);
+        if(sp)for(let st=0;st<steps;st+=4)evs.push({tick:offset+st*T16,cc:74,val:cc74(sweepHz(sp,st*stepSec))});
+        else evs.push({tick:offset,cc:74,val:127})}
       if(lay)for(let st=0;st<steps;st++){const list=sec.track.byStep[L][st%128];if(!list)continue;
         for(let i=0;i<list.length;i++){const e=list[i];
           // humanize: the very nudge and velocity this note was played with, as ticks of the grid, so a loose
@@ -4098,13 +4141,34 @@ function keyOff(i){
   if(h.start)recordNote(h.start,h.midi,t);
   const el=$('keys').children[i];if(el)el.classList.remove('down');
 }
+// a note from a controller: the same path as a key, for any pitch the scale allows
+const liveHeld={};
+function liveNoteOn(midi){if(liveHeld[midi])return;const rel=E.noteOn(midi,recLayer()),h={rel,start:null,midi};if(rec.armed&&E.playing)h.start=E.nearestStep(E.ctx.currentTime);liveHeld[midi]=h;
+  const i=kbPitches.findIndex(p=>p.midi===midi);if(i>=0){const el=$('keys').children[i];if(el)el.classList.add('down')}}
+function liveNoteOff(midi){const h=liveHeld[midi];if(!h)return;const t=E.ctx.currentTime;h.rel(t);delete liveHeld[midi];if(h.start)recordNote(h.start,h.midi,t);
+  const i=kbPitches.findIndex(p=>p.midi===midi);if(i>=0){const el=$('keys').children[i];if(el)el.classList.remove('down')}}
+
+/* ---------- output device: which speakers or interface the mix goes to ---------- */
+async function listOutputs(){if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return [];try{return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audiooutput')}catch(e){return []}}
+async function renderOutputs(){const sel=$('outDev');if(!sel)return;const devs=await listOutputs(),cur=(E.ctx&&E.ctx.sinkId)||'';
+  sel.innerHTML='<option value="">System default</option>'+devs.map((d,i)=>'<option value="'+d.deviceId+'"'+(d.deviceId===cur?' selected':'')+'>'+(d.label||'Output '+(i+1))+'</option>').join('');
+  $('outNote').textContent=(E.ctx?E.ctx.setSinkId:AudioContext.prototype.setSinkId)?(devs.some(d=>d.label)?'':'names appear once a microphone permission is granted'):'not supported in this browser'}
+$('outDev').addEventListener('focus',renderOutputs);
+$('outDev').addEventListener('change',async e=>{E.init();if(!E.ctx.setSinkId){U.setStatus('This browser cannot switch the output device');return}
+  try{await E.ctx.setSinkId(e.target.value);U.setStatus(e.target.value?'Playing through '+e.target.selectedOptions[0].textContent:'Playing through the system default')}catch(err){U.setStatus('Could not switch output: '+err.message)}});
+
+/* ---------- install: a manifest and, where a server is serving us, a service worker for offline ---------- */
+{const icon="data:image/svg+xml;utf8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='#0a84ff'/><text x='32' y='45' font-family='Inter,Arial,sans-serif' font-weight='700' font-size='36' fill='white' text-anchor='middle'>Z</text></svg>");
+  const m={name:'Zinth',short_name:'Zinth',start_url:'.',scope:'.',display:'standalone',background_color:'#ececee',theme_color:'#0a84ff',icons:[{src:icon,sizes:'any',type:'image/svg+xml'}]};
+  const l=document.createElement('link');l.rel='manifest';l.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(m));document.head.appendChild(l);
+  if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});}
 $('keys').addEventListener('pointerdown',e=>{const k=e.target.closest('.key');if(!k)return;e.preventDefault();try{k.setPointerCapture(e.pointerId)}catch(err){}keyOn(+k.dataset.i)});
 $('keys').addEventListener('pointerup',e=>{const k=e.target.closest('.key');if(k)keyOff(+k.dataset.i)});
 $('keys').addEventListener('pointercancel',e=>{const k=e.target.closest('.key');if(k)keyOff(+k.dataset.i)});
 window.addEventListener('blur',()=>{Object.keys(held).forEach(i=>keyOff(i));if(!cb.hold)chordOff()});
 
 /* ---------- boot ---------- */
-Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView});
+Object.assign(U,{renderKeys,renderPads,renderMixer,renderFavs,renderSound,renderGrid,renderVoices,syncLabels,renderRecInfo,midiFile,setRec,applyView,liveNoteOn,liveNoteOff,renderOutputs});
 let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(song().length)U.buildRoll()},120)});
 let saved=null,seen=false;try{saved=JSON.parse(localStorage.getItem('zinth.project'));seen=!!localStorage.getItem('zinth.seen')}catch(e){}
 if(saved){try{U.restore(saved);U.setStatus('Restored your last session')}catch(e){U.newTrack()}}else U.newTrack();
@@ -4182,7 +4246,7 @@ const SCREENS={
       {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v)},
       {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v)},
     ],
-    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">🎲 New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
+    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">🎲 New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
     mount:()=>{borrow($('arr'),$('opSongMain'));borrow($('roll'),$('opSongMain'));U.buildRoll()},
     refresh:()=>{
       $('opKey').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+scaleName()+'</em>';$('opScale').textContent=scaleName();
@@ -4190,6 +4254,7 @@ const SCREENS={
       $('opLine').textContent=MOODS[state.mood].label+' · '+state.bpm+' bpm · '+bars+' bars';
       $('opNotes').innerHTML=Z.SCALES[state.scale].steps.map((s,i)=>'<span class="note'+(i===0?' root':'')+'">'+Z.NOTE_NAMES[(state.root+s)%12]+'</span>').join('');
       $('opRec').classList.toggle('on',U.rec.armed);$('opLoop').classList.toggle('on',E.loopSection);
+      $('opMotifLane').textContent=state.recTarget;
     },
   },
   synth:{
@@ -4228,11 +4293,30 @@ const SCREENS={
       {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()}},
       {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)}},
     ],
-    html:()=>'<div class="scr scr-mix" id="opMix"></div>',
-    mount:()=>{renderFaders()},
-    refresh:()=>{renderFaders()},
+    html:()=>'<div class="scr"><div class="scenes" id="opScenes"></div><div class="scr-mix" id="opMix"></div></div>',
+    mount:()=>{renderFaders();renderScenes()},
+    refresh:()=>{renderFaders();renderScenes()},
   },
 };
+/* scenes: four snapshots of every sound and the mix, to flip between while the song plays */
+let storeMode=false;
+function sceneSnap(){return {params:JSON.parse(JSON.stringify(E.params)),master:+$('master').value,warmth:state.warmth,eq:JSON.parse(JSON.stringify(state.eq)),reverb:Object.assign({},state.reverb),kit:state.kit,voice:JSON.parse(JSON.stringify(state.voice||{}))}}
+function sceneApply(s){
+  for(const L of Z.LAYERS)for(const k in s.params[L]||{})E.setParam(L,k,s.params[L][k]);
+  setRange('master',s.master);setRange('warmth',s.warmth);
+  state.eq=Z.normEq(s.eq);E.setEq(state.eq);state.reverb=Object.assign({},s.reverb);E.setReverb(state.reverb);
+  if(Z.KITS[s.kit]){state.kit=s.kit;E.kit=s.kit}state.voice=s.voice||{};E.voice=state.voice;
+  U.renderMixer();U.renderSound();U.persist();
+}
+function renderScenes(){
+  const box=$('opScenes');if(!box)return;
+  box.innerHTML='<span class="scr-line">Scenes</span>'+['A','B','C','D'].map((n,i)=>'<button class="opb'+(state.scenes[i]?' has':'')+(storeMode?' store':'')+'" data-scene="'+i+'" title="'+(storeMode?'Store the current sounds and mix as scene '+n:state.scenes[i]?'Recall scene '+n:'Empty. Press Store, then this, to keep the current sounds and mix here')+'">'+n+'</button>').join('')+'<button class="opb'+(storeMode?' on':'')+'" data-a="store" title="Then pick a letter to store the current sounds and mix there">Store</button>';
+}
+$('opScreen').addEventListener('click',e=>{const b=e.target.closest('[data-scene]');if(!b)return;const i=+b.dataset.scene;
+  if(storeMode){state.scenes[i]=sceneSnap();storeMode=false;U.persist();U.setStatus('Scene '+'ABCD'[i]+' stored: every sound, the kit, the EQ, the room and the mix')}
+  else if(state.scenes[i]){sceneApply(state.scenes[i]);U.setStatus('Scene '+'ABCD'[i])}
+  else U.setStatus('Scene '+'ABCD'[i]+' is empty. Press Store, then '+'ABCD'[i]+'.');
+  renderScenes();refresh()});
 function renderFaders(){
   const box=$('opMix');if(!box)return;
   box.innerHTML=Z.LAYERS.map(L=>{const p=E.params[L],on=E.audible(L);return '<div class="fader'+(on?'':' off')+'" data-l="'+L+'" style="--c:'+COLORS[L]+'"><div class="ftrack" title="Drag to set the level"><div class="ffill" style="height:'+p.level+'%"></div></div><b>'+L+'</b><span class="fv">'+p.level+'</span><div class="fbt"><button data-a="mute" class="'+(p.mute?'on':'')+'" title="Mute">M</button><button data-a="lock" class="'+(state.locks[L]?'on':'')+'" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
@@ -4289,6 +4373,8 @@ $('opScreen').addEventListener('click',e=>{
     if(a==='mute')E.setParam(L,'mute',!E.params[L].mute);else if(a==='lock')state.locks[L]=!state.locks[L];else if(a==='dice'){U.dice(L);return}
     U.renderMixer();U.persist();refresh();return}
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
+  if(a==='store'){storeMode=!storeMode;renderScenes();return}
+  if(a.startsWith('m:')){U.transformLane(state.recTarget,a.slice(2));return}
   if(a==='dice')U.newTrack();else if(a==='rec'){const t=recTargetFor(synthLayer);if(state.recTarget!==t){const tb=$('recTarget').querySelector('[data-v="'+t+'"]');if(tb)tb.click()}$('recBtn').click()}
   else if(a==='loop')$('loopSec').click();else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
   else if(a==='lock'){state.locks[synthLayer]=!state.locks[synthLayer];U.renderMixer();U.persist()}else if(a==='ldice')U.dice(synthLayer);
@@ -4302,7 +4388,71 @@ setInterval(()=>{if(state.view!=='op')return;const sig=[state.root,state.scale,s
 
 function enter(){render()}
 function leave(){cancelAnimationFrame(raf);giveBack();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}
-Object.assign(U,{opEnter:enter,opLeave:leave,opRefresh:refresh});
+function knobFrac(i,f){const k=knobs[i];if(!k||state.view!=='op')return;const [lo,hi]=range(k);knobSet(i,lo+Math.max(0,Math.min(1,f))*(hi-lo));U.persist()}
+Object.assign(U,{opEnter:enter,opLeave:leave,opRefresh:refresh,opKnobFrac:knobFrac});
 if(state.view!=='studio')enter(); // this script loads last, after the app has already chosen its view
+})();
+</script>
+<script>
+(()=>{
+'use strict';
+/* Web MIDI. In: a keyboard plays and records through the same path as the letter keys, locked to the scale,
+   and any CC can be learned onto one of the four knobs. Out: clock at 24 pulses per quarter with start and
+   stop, and every note the song plays, one channel per layer and drums on 10, so hardware can follow along. */
+const Z=window.Z,U=window.ZUI,E=Z.engine,$=id=>document.getElementById(id);
+const M={access:null,inputs:[],outputs:[],inp:null,out:null,inId:'',outId:'',clock:true,notesOut:true,learn:-1,map:{},on:false,held:{}};
+const CH={lead:0,arp:1,chords:2,bass:3},GM={kick:36,snare:38,clap:39,hat:42,ohat:46,perc:56},KNOBS=['blue','green','white','orange'];
+function load(){try{const s=JSON.parse(localStorage.getItem('zinth.midi')||'{}');Object.assign(M,{inId:s.inId||'',outId:s.outId||'',clock:s.clock!==false,notesOut:s.notesOut!==false,map:s.map||{}})}catch(e){}}
+function save(){try{localStorage.setItem('zinth.midi',JSON.stringify({inId:M.inId,outId:M.outId,clock:M.clock,notesOut:M.notesOut,map:M.map}))}catch(e){}}
+async function enable(){
+  if(!navigator.requestMIDIAccess){U.setStatus('This browser has no Web MIDI. Chrome, Edge and Opera do, over https or on localhost.');return false}
+  try{M.access=await navigator.requestMIDIAccess({sysex:false})}catch(e){U.setStatus('MIDI access was refused: '+(e&&e.message||e));return false}
+  M.on=true;M.access.onstatechange=()=>refreshPorts();refreshPorts();
+  U.setStatus(M.inputs.length||M.outputs.length?'MIDI on: '+M.inputs.length+' input'+(M.inputs.length===1?'':'s')+', '+M.outputs.length+' output'+(M.outputs.length===1?'':'s')+'. Play your keyboard: every note lands in key.':'MIDI on, but no devices are connected yet');
+  return true;
+}
+function refreshPorts(){
+  M.inputs=[...M.access.inputs.values()];M.outputs=[...M.access.outputs.values()];
+  M.inputs.forEach(i=>{i.onmidimessage=null});
+  M.inp=M.inputs.find(i=>i.id===M.inId)||M.inputs[0]||null;if(M.inp){M.inId=M.inp.id;M.inp.onmidimessage=onMsg}
+  M.out=M.outputs.find(o=>o.id===M.outId)||null;if(M.out)M.outId=M.out.id;
+  render();save();
+}
+// an incoming note is locked to the key like the keys are: the nearest note of the scale plays and records
+function quantize(n){const p=Z.scalePitches(U.cfg(),Math.max(0,n-6),Math.min(127,n+6)).filter(x=>!x.passing);if(!p.length)return n;return p.reduce((a,b)=>Math.abs(b.midi-n)<Math.abs(a.midi-n)?b:a).midi}
+function onMsg(e){
+  const d=e.data,type=d[0]&0xf0,d1=d[1],d2=d[2];
+  if(type===0x90&&d2>0){if(M.held[d1]!==undefined)return;const q=quantize(d1);M.held[d1]=q;U.liveNoteOn(q,d2/127)}
+  else if(type===0x80||(type===0x90&&d2===0)){const q=M.held[d1];if(q===undefined)return;delete M.held[d1];U.liveNoteOff(q)}
+  else if(type===0xb0){
+    if(M.learn>=0){M.map[d1]=M.learn;U.setStatus('The '+KNOBS[M.learn]+' knob follows CC '+d1+' now');M.learn=-1;save();render();return}
+    const k=M.map[d1];if(k!==undefined&&U.opKnobFrac)U.opKnobFrac(k,d2/127);
+  }
+}
+// out: audio time to the MIDI clock's time base
+function perfTime(t){const ot=E.ctx&&E.ctx.getOutputTimestamp?E.ctx.getOutputTimestamp():null;if(!ot||ot.performanceTime===undefined)return performance.now()+Math.max(0,(t-E.ctx.currentTime)*1000);return ot.performanceTime+(t-ot.contextTime)*1000}
+const send=(bytes,t)=>{if(!M.out)return;try{M.out.send(bytes,t===undefined?undefined:Math.max(performance.now(),perfTime(t)))}catch(e){}};
+E.onTransport=on=>{if(!M.out)return;if(M.clock)send(on?[0xFA]:[0xFC]);if(!on)for(let c=0;c<16;c++)send([0xB0|c,123,0])};
+E.onStep=(step,t,d)=>{if(!M.out||!M.clock)return;for(let k=0;k<6;k++)send([0xF8],t+k*d/6)};
+E.onNote=(L,midi,vel,t,dur)=>{if(!M.out||!M.notesOut||CH[L]===undefined)return;const ch=CH[L],v=Math.max(1,Math.min(127,Math.round(vel*127)));send([0x90|ch,midi,v],t);send([0x80|ch,midi,0],t+Math.max(0.03,dur))};
+E.onDrum=(kind,vel,t)=>{if(!M.out||!M.notesOut)return;const n=GM[kind];if(!n)return;send([0x99,n,Math.max(1,Math.min(127,Math.round(vel*127)))],t);send([0x89,n,0],t+0.1)};
+function render(){
+  const box=$('midiBox');if(!box)return;
+  $('midiState').textContent=M.on?(M.inp?M.inp.name:'no input')+(M.out?' → '+M.out.name:''):'off';
+  $('midiOn').hidden=M.on;$('midiPorts').hidden=!M.on;
+  if(!M.on)return;
+  const opt=(list,cur,none)=>'<option value="">'+none+'</option>'+list.map(p=>'<option value="'+p.id+'"'+(p.id===cur?' selected':'')+'>'+p.name+'</option>').join('');
+  $('midiIn').innerHTML=opt(M.inputs,M.inId,'no input');$('midiOut').innerHTML=opt(M.outputs,M.outId,'no output');
+  $('midiClock').classList.toggle('on',M.clock);$('midiNotes').classList.toggle('on',M.notesOut);
+  $('midiLearn').innerHTML=KNOBS.map((n,i)=>{const cc=Object.keys(M.map).find(c=>M.map[c]===i);return '<button class="opt'+(M.learn===i?' on':'')+'" data-learn="'+i+'" title="Click, then move a control on your controller">'+n+(cc!==undefined?' · CC '+cc:'')+'</button>'}).join('');
+}
+$('midiOn').addEventListener('click',enable);
+$('midiIn').addEventListener('change',e=>{M.inId=e.target.value;refreshPorts()});
+$('midiOut').addEventListener('change',e=>{M.outId=e.target.value;refreshPorts()});
+$('midiClock').addEventListener('click',()=>{M.clock=!M.clock;save();render()});
+$('midiNotes').addEventListener('click',()=>{M.notesOut=!M.notesOut;save();render()});
+$('midiLearn').addEventListener('click',e=>{const b=e.target.closest('[data-learn]');if(!b)return;M.learn=M.learn===+b.dataset.learn?-1:+b.dataset.learn;render();if(M.learn>=0)U.setStatus('Move a knob or fader on your controller to map it to the '+KNOBS[M.learn]+' knob')});
+load();render();
+Object.assign(U,{midi:M,midiEnable:enable});
 })();
 </script>

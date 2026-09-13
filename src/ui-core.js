@@ -78,7 +78,7 @@ const state={
   seeds:{chords:'',lead:'',arp:'',bass:'',drums:''},locks:{chords:false,lead:false,arp:false,bass:false,drums:false},
   mood:'chill',root:2,scale:'dorian',bpm:92,energy:45,swing:28,humanize:Z.HUMAN.dflt,evolve:true,sevenths:true,gate:0.7,warmth:Z.WARMTH.dflt,eq:Z.normEq(null),arp:Z.normArp(null),reverb:Object.assign({},Z.REVERB.dflt),
   prog:{v:null,c:null},drumEdits:{v:null,c:null},leadEdits:{v:null,c:null},arpEdits:{v:null,c:null},bassEdits:{v:null,c:null},kit:'808',transitions:true,countIn:true,sections:[],sel:0,loop:0,layer:'lead',recTarget:'lead',view:'op',
-  samples:{},voice:{},
+  samples:{},voice:{},scenes:[null,null,null,null],
 };
 const rec={armed:false};
 let song=[],viewSection=0,rollCache=null,statusTimer=null,exporting=false,secId=1,hits={},drag=null,dragPreview=null;
@@ -160,7 +160,7 @@ function restore(p){
   // old song opens sounding like a fresh one rather than inheriting whatever this session happened to have
   if(p.params)for(const L of Z.LAYERS){const src=Object.assign({},Z.DEFAULTS[L],p.params[L]||{});for(const k in src)E.setParam(L,k,src[k])}
   E.kit=state.kit;E.transitions=state.transitions;if(p.master!==undefined){$('master').value=p.master;E.setMaster(p.master)}
-  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;
+  state.view=s.view==='studio'?'studio':'op';state.samples=s.samples||{};state.voice=s.voice||{};E.voice=state.voice;state.scenes=Array.isArray(s.scenes)&&s.scenes.length===4?s.scenes:[null,null,null,null];
   state.loop=0;viewSection=Math.min(state.sel,state.sections.length-1);syncControls();regenerate();if(ZUI.applyView)ZUI.applyView();
   loadSamples(p.samples);
 }
@@ -569,5 +569,23 @@ canvas.addEventListener('pointercancel',()=>{drag=null;dragPreview=null});
 canvas.addEventListener('pointerleave',()=>{if(!drag)canvas.style.cursor=''});
 // live accessors (Object.assign would copy the getter's value once, so define them as properties)
 Object.defineProperties(ZUI,{song:{get:()=>song},viewSection:{get:()=>viewSection,set:v=>{viewSection=v}}});
-Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
+/* ---------- motif tools: turn the phrase you have into the next one, without leaving the key ---------- */
+function transformLane(L,op){
+  const sec=song[state.sel];if(!sec||!EDITS[L])return;
+  const key=EDITS[L],own=state[key][sec.part];
+  let list=own?JSON.parse(JSON.stringify(own)):sec.track[L].map(e=>({step:e.step,dur:e.dur,midi:e.midi-(sec.transpose||0),vel:e.vel}));
+  if(!list.length){setStatus('Nothing in the '+LANE_NAME[L]+' to change yet');return}
+  const pitches=Z.scalePitches({root:state.root,scale:state.scale},L==='bass'?36:48,L==='bass'?59:96).filter(p=>!p.passing).map(p=>p.midi);
+  const snap=m=>pitches.reduce((a,b)=>Math.abs(b-m)<Math.abs(a-m)?b:a,pitches[0]);
+  const rng=new Z.Rng(state.seeds[L]+':vary:'+Date.now());
+  const said={reverse:'played backwards',invert:'turned upside down',up:'an octave up',down:'an octave down',vary:'varied a little'};
+  if(op==='reverse')list=list.map(e=>Object.assign({},e,{step:Z.TOTAL-e.step-e.dur})).filter(e=>e.step>=0);
+  else if(op==='invert'){const lo=Math.min(...list.map(e=>e.midi)),hi=Math.max(...list.map(e=>e.midi));list=list.map(e=>Object.assign({},e,{midi:snap(lo+hi-e.midi)}))}
+  else if(op==='up'||op==='down')list=list.map(e=>Object.assign({},e,{midi:snap(e.midi+(op==='up'?12:-12))}));
+  else if(op==='vary')list=list.map(e=>{if(!rng.chance(0.3))return e;const i=pitches.indexOf(snap(e.midi)),j=Math.max(0,Math.min(pitches.length-1,i+rng.pick([-2,-1,1,2])));return Object.assign({},e,{midi:pitches[j]})});
+  else return;
+  list.sort((a,b)=>a.step-b.step);state[key][sec.part]=list;rebuild();if(ZUI.renderRecInfo)ZUI.renderRecInfo();
+  setStatus('The '+LANE_NAME[L]+' of the '+(sec.part==='v'?'A verse':'B chorus')+' sections is '+said[op]+', still in key. Ctrl+Z if it was better before.');
+}
+Object.assign(ZUI,{state,rec,COLORS,TH,readColors,snapshotWithSamples,loadSamples,transformLane,EDITS,LANE_NAME,MOODS,PATCHES,FX,FXKEYS,SEC_TYPES,ARP_MODE_NAMES,ARP_SAYS,fill,setStatus,snapshot,restore,persist,undoStep,redoStep,code,newTrack,dice,loadCode,regenerate,rebuild,cfg,renderArr,renderProg,renderInsp,buildRoll,drawFrame,selectSection,syncControls,defaultSections,clearEdits,closeChordEdit,nudgeChordEdit});
 })();

@@ -351,6 +351,11 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 .scr-grid .cell{height:30px;border-radius:6px}
 .scr-grid .gn{font-size:11px}
 .scr-mix{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:end;min-height:292px;padding:6px 10px}
+.scenes{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scenes .opb.has{border-color:var(--ink-mute);color:var(--ink)}
+.scenes .opb.store{border-color:var(--accent);color:var(--accent)}
+.scr-btns.motif .opb{font-size:11.5px}
+.midi .opts{flex-wrap:wrap}
 .fader{display:flex;flex-direction:column;align-items:center;gap:6px}
 .fader.off{opacity:.45}
 .ftrack{width:34px;height:170px;border-radius:8px;background:var(--panel-3);border:1px solid var(--line);position:relative;overflow:hidden;cursor:ns-resize;touch-action:none}
