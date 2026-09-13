@@ -315,11 +315,73 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 /* while Rec is armed the keys press in the colour of the layer you are recording into */
 .keys.armed .key.down,.keys.armed .key:active,.keys.armed .key.root.down{background:linear-gradient(180deg,#f4efe2,var(--c))}
 
-/* views: Jam shows the essentials, Studio shows everything */
-.app{grid-template-rows:auto auto auto auto}
-.app[data-view=jam] [data-studio]{display:none!important}
+/* views: Play is the device, Studio shows everything */
+.app{grid-template-rows:auto auto auto auto auto}
+.app[data-view=op] [data-studio]{display:none!important}
+.app[data-view=op] .main{display:none!important}
+.app[data-view=studio] [data-op]{display:none!important}
 .app[data-view=studio] [data-jam]{display:none!important}
-.app[data-view=jam] .main{grid-template-columns:1fr}
+/* the device */
+.op{background:linear-gradient(180deg,#1e2130,#181b27);border:1px solid var(--line-2);border-radius:16px;padding:14px 16px 18px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+.op-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.op-modes{display:flex;gap:6px}
+.op-modes button{height:38px;padding:0 18px;border-radius:9px;font:700 12px var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line-2);background:var(--panel-2);box-shadow:0 2px 0 #0f1119}
+.op-modes button:hover{color:var(--ink);border-color:var(--ink-mute)}
+.op-modes button.on{color:#1a1200;background:var(--amber);border-color:var(--amber)}
+.op-hint{margin-left:auto;font-size:11px;color:var(--ink-mute)}
+.op-screen{background:#0b0d14;border:1px solid var(--line);border-radius:12px;min-height:320px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:inset 0 0 40px rgba(0,0,0,.5)}
+.op-knobs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding-top:4px}
+.knob{display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;border-radius:10px;padding:4px}
+.knob:focus-visible{outline:2px solid var(--k);outline-offset:2px}
+.knob svg{width:92px;height:92px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4))}
+.knob .kt{fill:#151826;stroke:#2a2f45;stroke-width:8;stroke-linecap:round}
+.knob .ka{fill:none;stroke:var(--k);stroke-width:8;stroke-linecap:round;transition:stroke-dasharray .06s linear}
+.knob .kp{stroke:var(--k);stroke-width:3;stroke-linecap:round}
+.knob.turning svg{transform:scale(1.04)}
+.knob .kl{font:600 11px var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--k)}
+.knob .kv{font:500 13px var(--mono);color:var(--ink);min-height:18px;text-align:center}
+/* screens */
+.scr{display:flex;flex-direction:column;gap:12px;min-height:292px}
+.scr-song{display:grid;grid-template-columns:230px minmax(0,1fr);gap:18px;align-items:start}
+.scr-info{display:flex;flex-direction:column;gap:10px}
+.scr-key{font:700 34px/1 var(--disp);letter-spacing:.02em}
+.scr-key em{font-style:normal;color:var(--teal);display:block;font-size:20px;margin-top:4px}
+.scr-scale{display:flex;align-items:center;gap:6px;font:500 12px var(--mono);color:var(--ink-dim)}
+.scr-scale span{flex:1;text-align:center}
+.scr-line{font-size:12px;color:var(--ink-mute)}
+.scr-btns{display:flex;gap:6px;flex-wrap:wrap}
+.opb{height:32px;padding:0 12px;border:1px solid var(--line-2);border-radius:7px;background:var(--panel-2);color:var(--ink-dim);font-weight:500;font-size:12px;box-shadow:0 2px 0 #0f1119}
+.opb:hover{color:var(--ink);border-color:var(--ink-mute)}
+.opb:active{transform:translateY(1px);box-shadow:none}
+.opb.on{color:var(--amber);border-color:var(--amber);background:var(--amber-soft)}
+.opb.big{height:40px;padding:0 16px;font:700 13px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--amber);border-color:rgba(245,165,36,.6)}
+.opb.rec{color:var(--rose);border-color:rgba(242,109,133,.5)}
+.opb.rec.on{color:#fff;background:var(--rose);border-color:var(--rose)}
+.scr-main{display:flex;flex-direction:column;gap:10px;min-width:0}
+.scr-main .roll{border-radius:8px}
+.scr-tabs{display:flex;gap:6px}
+.scr-tabs button{height:32px;padding:0 14px;border-radius:7px;border:1px solid var(--line-2);background:var(--panel-2);font:600 11px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-mute)}
+.scr-tabs button.on{color:var(--c);border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.scr-wave{width:100%;height:190px;display:block}
+.scr-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.scr-patch{font:500 15px var(--disp);letter-spacing:.06em}
+.scr-grid .grid{gap:5px}
+.scr-grid .grow{grid-template-columns:70px repeat(16,1fr);gap:4px}
+.scr-grid .cell{height:30px;border-radius:5px}
+.scr-grid .gn{font-size:11px}
+.scr-mix{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:end;min-height:292px;padding:6px 10px}
+.fader{display:flex;flex-direction:column;align-items:center;gap:6px}
+.fader.off{opacity:.45}
+.ftrack{width:34px;height:170px;border-radius:8px;background:#151826;border:1px solid #2a2f45;position:relative;overflow:hidden;cursor:ns-resize;touch-action:none}
+.ffill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 70%,#fff 0%),var(--c));border-top:2px solid #fff3}
+.fader b{font:600 11px var(--disp);letter-spacing:.16em;text-transform:uppercase;color:var(--c)}
+.fader .fv{font:500 12px var(--mono);color:var(--ink-dim)}
+.fbt{display:flex;gap:4px}
+.fbt button{height:26px;padding:0 8px;border-radius:5px;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-mute);font:600 10px var(--disp)}
+.fbt button.on{color:var(--amber);border-color:var(--amber);background:var(--amber-soft)}
+.app[data-view=op] .kb{padding-top:10px}
+.app[data-view=op] .cb{margin-bottom:8px;padding-bottom:8px}
+@media (max-width:900px){.scr-song{grid-template-columns:1fr}.op-knobs{grid-template-columns:repeat(2,1fr)}}
 .viewseg button{padding:0 14px;height:34px}
 .viewseg button.on{color:var(--amber);box-shadow:inset 0 -2px 0 var(--amber)}
 /* the jam strip: mood, key, tempo, energy and the dice */

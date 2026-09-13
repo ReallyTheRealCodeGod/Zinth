@@ -11,8 +11,8 @@
       <div class="readout"><b id="bpmOut">112</b><span>bpm</span></div>
       <div class="readout"><b id="posOut">1.1</b><span id="posLabel">bar . beat</span></div>
       <button class="btn tgl" id="loopSec" aria-pressed="false" title="Repeat the selected section while you work on it (L)">Loop section</button>
-      <div class="seg viewseg" id="viewSeg" role="group" aria-label="View" title="Jam shows just what making music needs. Studio opens every control: the arrangement inspector, the chord editor, the full Sound panel, the drum grid, the master EQ.">
-        <button data-v="jam" class="on">Jam</button><button data-v="studio">Studio</button>
+      <div class="seg viewseg" id="viewSeg" role="group" aria-label="View" title="Play is the device: one screen at a time and four knobs. Studio opens every control: the arrangement inspector, the chord editor, the full Sound panel, the drum grid, the master EQ.">
+        <button data-v="op" class="on">Play</button><button data-v="studio">Studio</button>
       </div>
       <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
       <div class="menu-wrap">
@@ -43,7 +43,21 @@
     </div>
   </header>
 
-  <section class="jam" aria-label="Track settings">
+  <section class="op" id="op" aria-label="Zinth device" data-op>
+    <div class="op-top">
+      <div class="op-modes" id="opModes" role="tablist" aria-label="Screen">
+        <button data-m="song" class="on" title="The song: key, mood, the arrangement and the roll">Song</button>
+        <button data-m="synth" title="The synths: lead, arp, chords and bass">Synth</button>
+        <button data-m="drum" title="The drums: kit and step grid">Drum</button>
+        <button data-m="mix" title="The mix: levels, warmth, tone">Mix</button>
+      </div>
+      <span class="op-hint">turn a knob by dragging it up or down</span>
+    </div>
+    <div class="op-screen" id="opScreen"></div>
+    <div class="op-knobs" id="opKnobs"></div>
+  </section>
+
+  <section class="jam" aria-label="Track settings" data-studio>
     <div class="field jf moods"><label>Mood</label><div class="chips" id="moods" role="group" aria-label="Mood presets"></div></div>
     <div class="field jf"><label for="root">Key</label><div class="row2 tight"><select id="root" aria-label="Key"></select><select id="scale" aria-label="Scale"></select></div></div>
     <div class="field jf tempo-f"><label for="bpm">Tempo <output id="bpmVal">112 bpm</output></label><input type="range" id="bpm" min="60" max="180" value="112">
@@ -187,7 +201,7 @@
   </div>
 
   <footer class="kb" aria-label="Play-along keyboard">
-    <div class="head">
+    <div class="head" data-studio>
       <h2 style="margin:0;font:600 12px var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)">Play along</h2>
       <p id="kbHint">Everything below is locked to the key, so the chord pads and the letter-key notes all fit the track.</p>
       <div class="opts recbar">
@@ -205,7 +219,7 @@
       </div>
     </div>
     <div class="cb" aria-label="Chord box">
-      <div class="cb-head">
+      <div class="cb-head" data-studio>
         <span class="cb-title">Chords</span>
         <p>Number keys <kbd>1</kbd>–<kbd>7</kbd> or tap. Every pad is a chord of the key, so any order works.</p>
         <div class="opts">
@@ -235,10 +249,10 @@
     <div class="demos" id="demos" role="group" aria-label="Demo songs"></div>
     <ol class="steps">
       <li><b>Press Play.</b> That is a whole song, and every note of it is locked to one key, so nothing ever sounds off.</li>
-      <li><b>Roll the dice until you smile.</b> New track rerolls everything. Lock a tile to keep that layer, or hit its own dice. Moods pick the scale, the tempo and the sounds.</li>
+      <li><b>Turn the knobs, roll the dice.</b> Four knobs per screen, dragged up or down. On Song they are mood, key, tempo and energy; New track rerolls everything. Lock a layer on the Synth or Mix screen to keep it, or roll just that one.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, and they all fit. Sketch chords into the tray and send them to the verse or the chorus.</li>
       <li><b>Record your hook.</b> Press Rec and play over the looping section. Your notes replace the generated ones, snapped to the grid. Ctrl+Z is always there.</li>
-      <li><b>Go deeper when you want to.</b> Studio, in the top bar, opens the arrangement, the chord editor, the drum grid and every knob of every sound. Song, beside it, exports WAV, MIDI or stems.</li>
+      <li><b>Four screens, then deeper if you like.</b> Song, Synth, Drum and Mix are the whole instrument. Studio, in the top bar, opens the arrangement inspector, the chord editor and every parameter of every sound. Song ▾ beside it exports WAV, MIDI or stems.</li>
     </ol>
     <div class="keysheet">
       <div><kbd>Space</kbd> play / stop</div><div><kbd>L</kbd> loop the selected section</div>

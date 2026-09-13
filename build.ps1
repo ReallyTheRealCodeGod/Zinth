@@ -4,7 +4,7 @@ $fonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 $parts = @('<title>Zinth</title>', $fonts, '<style>', (Get-Content src/styles.css -Raw), '</style>', (Get-Content src/markup.html -Raw))
-foreach ($f in 'theory','demos','engine','ui-core','ui-panels') { $parts += '<script>'; $parts += (Get-Content "src/$f.js" -Raw); $parts += '</script>' }
+foreach ($f in 'theory','demos','engine','ui-core','ui-panels','ui-op') { $parts += '<script>'; $parts += (Get-Content "src/$f.js" -Raw); $parts += '</script>' }
 [IO.File]::WriteAllText("$PSScriptRoot/index.html", ($parts -join "`n"), $utf8)
 
 New-Item -ItemType Directory -Force tests | Out-Null

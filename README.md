@@ -4,9 +4,18 @@ A scale-locked song studio in a single HTML file. Every layer, every chord pad a
 
 No build tools or dependencies. Open `index.html` in a browser.
 
-## Two views
+## The device
 
-Zinth opens in **Jam**: Play, mood, key and scale, tempo, energy, one big dice, the song strip, the roll, a tile per layer with its sound, level, mute, lock and its own dice, the punch-in pads, Rec, the chord pads and the keys. That is everything making music needs. **Studio**, in the top bar, opens the rest: the chord cards and editor, the arrangement inspector and length presets, swing, humanize, transitions and warmth, saved songs, and the full Sound panel with every knob of every voice, the drum grid and the master EQ. The **Song** menu holds keep, copy link, save and open, and the WAV, MIDI and stems exports.
+Zinth opens as an instrument in the spirit of the OP-1: one screen at a time, four colour-coded knobs whose meaning changes with the screen, and the keys underneath. Drag a knob up or down, spin the wheel over it, or focus it and use the arrow keys.
+
+| Screen | What you see | Blue · Green · White · Orange |
+| --- | --- | --- |
+| **Song** | Key and scale, the notes, the song strip, the roll, New track, Rec, Loop | Mood · Key · Tempo · Energy |
+| **Synth** | Lead, arp, chords or bass; an animated picture of its wave; lock, roll, mute | Sound · Cutoff · Envelope · Space |
+| **Drum** | The kit and the step grid; fill, lock, roll, reset | Kit · Swing · Pump · Level |
+| **Mix** | Five faders with mute, lock and dice | Volume · Warmth · Humanize · Tone |
+
+Chord pads and keys sit under every screen. **Studio**, in the top bar, opens everything else: the chord cards and editor, the arrangement inspector and length presets, swing, humanize, transitions and warmth, saved songs, and the full Sound panel with every parameter of every voice, the drum grid and the master EQ. The **Song ▾** menu holds keep, copy link, save and open, and the WAV, MIDI and stems exports.
 
 ## What it does
 

@@ -10,7 +10,7 @@ FONTS='<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cha
   echo "$FONTS"
   echo '<style>'; cat src/styles.css; echo '</style>'
   cat src/markup.html
-  for f in theory demos engine ui-core ui-panels; do
+  for f in theory demos engine ui-core ui-panels ui-op; do
     echo '<script>'; cat "src/$f.js"; echo '</script>'
   done
 } > index.html

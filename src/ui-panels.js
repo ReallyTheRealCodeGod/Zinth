@@ -267,13 +267,13 @@ $('mixer').addEventListener('change',e=>{const s=e.target.closest('select[data-l
 
 /* ---------- views & the song menu ---------- */
 function applyView(){
-  const v=state.view==='studio'?'studio':'jam';document.querySelector('.app').dataset.view=v;
+  const v=state.view==='studio'?'studio':'op';state.view=v;document.querySelector('.app').dataset.view=v;
   $('viewSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   $('warmthVal').textContent=Math.round(state.warmth)+' %';
-  U.buildRoll();
+  if(v==='op'){if(U.opEnter)U.opEnter()}else{if(U.opLeave)U.opLeave();U.buildRoll()}
 }
 $('viewSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.v===state.view)return;state.view=b.dataset.v;applyView();U.persist();
-  U.setStatus(state.view==='studio'?'Studio: every control is out. Jam tucks them away again.':'Jam: just the essentials. Studio opens everything.')});
+  U.setStatus(state.view==='studio'?'Studio: every control is out. Play tucks them away again.':'Play: one screen, four knobs. Studio opens everything.')});
 function menuOpen(on){$('fileMenu').hidden=!on;$('fileBtn').setAttribute('aria-expanded',on)}
 $('fileBtn').addEventListener('click',e=>{e.stopPropagation();menuOpen($('fileMenu').hidden)});
 document.addEventListener('click',e=>{if(!$('fileMenu').hidden&&!e.target.closest('.menu-wrap'))menuOpen(false)});
