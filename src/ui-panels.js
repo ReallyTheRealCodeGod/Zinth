@@ -284,7 +284,7 @@ function tileSelect(L){
   return '<select class="sm" data-l="'+L+'" aria-label="'+L+' sound" title="The sound of the '+L+'. Studio has every knob behind it.">'+Object.keys(PATCHES).map(k=>'<option value="'+k+'"'+(k===cur?' selected':'')+'>'+k+'</option>').join('')+'<option value=""'+(cur?'':' selected')+'>custom</option></select>';
 }
 function renderMixer(){
-  $('mixer').innerHTML=Z.LAYERS.map(L=>{const p=E.params[L];return '<div class="ch'+(E.audible(L)?'':' dim')+'" style="--c:'+COLORS[L]+'"><div class="nm"><b>'+L+'</b><output>'+p.level+'</output></div>'+tileSelect(L)+'<input type="range" min="0" max="100" value="'+p.level+'" data-l="'+L+'" aria-label="'+L+' level"><div class="bt"><button class="m'+(p.mute?' on':'')+'" data-l="'+L+'" data-a="mute" title="Mute">M</button><button class="s'+(p.solo?' on':'')+'" data-l="'+L+'" data-a="solo" title="Solo">S</button><button class="l'+(state.locks[L]?' on':'')+'" data-l="'+L+'" data-a="lock" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-l="'+L+'" data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
+  $('mixer').innerHTML=Z.LAYERS.map(L=>{const p=E.params[L];return '<div class="ch'+(E.audible(L)?'':' dim')+'" style="--c:'+COLORS[L]+'"><div class="nm"><b>'+L+'</b><output>'+p.level+'</output></div>'+tileSelect(L)+'<input type="range" min="0" max="100" value="'+p.level+'" data-l="'+L+'" aria-label="'+L+' level"><div class="bt"><button class="m'+(p.mute?' on':'')+'" data-l="'+L+'" data-a="mute" title="Mute">M</button><button class="s'+(p.solo?' on':'')+'" data-l="'+L+'" data-a="solo" title="Solo">S</button><button class="l'+(state.locks[L]?' on':'')+'" data-l="'+L+'" data-a="lock" title="Lock: New track keeps this layer">L</button><button data-l="'+L+'" data-a="dice" title="Reroll only this layer">R</button></div></div>'}).join('');
   $('mixer').querySelectorAll('input').forEach(r=>{U.fill(r);r.addEventListener('input',e=>{const L=e.target.dataset.l,v=+e.target.value;E.setParam(L,'level',v);U.fill(e.target);e.target.parentElement.querySelector('output').textContent=v;
     if(state.layer===L){$('p-level').value=v;U.fill($('p-level'));$('o-level').textContent=v+' %'}U.persist()})});
   $('lanes').querySelectorAll('button[data-l]').forEach(b=>b.classList.toggle('muted',!E.audible(b.dataset.l)));
@@ -657,12 +657,11 @@ $('sheet').addEventListener('click',e=>{if(e.target===$('sheet'))showSheet(false
 /* Six finished songs at the top of the help sheet. A demo is a project snapshot like any other, so loading
    one goes through restore(): it autosaves, it undoes, and every note of it is yours to change. Playback
    starts on the press, because the point of a demo is to hear it. */
-const DEMO_C={chill:'var(--teal)',drive:'var(--amber)',dark:'var(--rose)',retro:'var(--sand)',uplift:'var(--lav)',odd:'#7ea8ff'};
 function renderDemos(){
   $('demos').innerHTML=Z.DEMOS.map((d,i)=>{
     const m=MOODS[d.mood]||MOODS.chill,sc=Z.SCALES[d.scale];
     const meta=m.label+' · '+Z.NOTE_NAMES[d.root]+' '+sc.name+' · '+d.bpm+' bpm · '+d.kit;
-    return '<button class="demo" data-i="'+i+'" style="--c:'+(DEMO_C[d.id]||'var(--teal)')+'" title="'+d.name+' — '+d.blurb+
+    return '<button class="demo" data-i="'+i+'" title="'+d.name+' — '+d.blurb+
       '. Loads the whole project and plays it; press '+(i+1)+' in this sheet for the same thing, and Ctrl+Z brings your own track back.'+
       '"><b>'+d.name+'<span class="k">'+(i+1)+'</span></b><span class="d">'+d.blurb+'</span><em>'+meta+'</em></button>';
   }).join('');
@@ -794,8 +793,8 @@ $('outDev').addEventListener('change',async e=>{E.init();if(!E.ctx.setSinkId){U.
   try{await E.ctx.setSinkId(e.target.value);U.setStatus(e.target.value?'Playing through '+e.target.selectedOptions[0].textContent:'Playing through the system default')}catch(err){U.setStatus('Could not switch output: '+err.message)}});
 
 /* ---------- install: a manifest and, where a server is serving us, a service worker for offline ---------- */
-{const icon="data:image/svg+xml;utf8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='#0a84ff'/><text x='32' y='45' font-family='Inter,Arial,sans-serif' font-weight='700' font-size='36' fill='white' text-anchor='middle'>Z</text></svg>");
-  const m={name:'Zinth',short_name:'Zinth',start_url:'.',scope:'.',display:'standalone',background_color:'#ececee',theme_color:'#0a84ff',icons:[{src:icon,sizes:'any',type:'image/svg+xml'}]};
+{const icon="data:image/svg+xml;utf8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='6' fill='#1a1a19'/><text x='32' y='45' font-family='Inter,Arial,sans-serif' font-weight='700' font-size='36' fill='white' text-anchor='middle'>Z</text></svg>");
+  const m={name:'Zinth',short_name:'Zinth',start_url:'.',scope:'.',display:'standalone',background_color:'#f2f2f1',theme_color:'#f2f2f1',icons:[{src:icon,sizes:'any',type:'image/svg+xml'}]};
   const l=document.createElement('link');l.rel='manifest';l.href='data:application/manifest+json,'+encodeURIComponent(JSON.stringify(m));document.head.appendChild(l);
   if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});}
 $('keys').addEventListener('pointerdown',e=>{const k=e.target.closest('.key');if(!k)return;e.preventDefault();try{k.setPointerCapture(e.pointerId)}catch(err){}keyOn(+k.dataset.i)});

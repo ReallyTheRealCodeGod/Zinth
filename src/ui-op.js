@@ -15,31 +15,76 @@ const homes=new Map();
 function borrow(el,into){if(!el)return;if(!homes.has(el))homes.set(el,{parent:el.parentNode,next:el.nextSibling});into.appendChild(el)}
 function giveBack(){for(const [el,h] of homes){if(h.parent)h.parent.insertBefore(el,h.next&&h.next.parentNode===h.parent?h.next:null)}homes.clear()}
 
+/* The punch-in pads live in a Studio panel that the device hides, so the seven momentary effects used to be
+   playable on Z–M with nothing on screen to show for it. The device keeps them for as long as it is up, under
+   the knobs, on every screen: they belong to performing, and this is the mode you perform in. This borrow is
+   deliberately outside `homes`, which `render()` hands back on every screen change. */
+let fxHome=null;
+function takeFx(){const f=$('fx'),into=$('opFx');if(!f||!into||f.parentNode===into)return;
+  if(!fxHome)fxHome={parent:f.parentNode,next:f.nextSibling};into.appendChild(f)}
+function dropFx(){const f=$('fx');if(!f||!fxHome||f.parentNode!==$('opFx'))return;
+  fxHome.parent.insertBefore(f,fxHome.next&&fxHome.next.parentNode===fxHome.parent?fxHome.next:null)}
+
 /* ---------- knobs ---------- */
-const COLS=()=>[U.TH.accent,U.TH.ok,U.TH.inkHex,U.TH.amber];
+const knobTip=k=>k.label+': drag up or down. Hold Shift for a fine turn.'+
+  (k.noSpring?'':' Hold Alt and the knob springs back to where it was the moment you let go.')+
+  (dfltOf(k)===undefined?'':' Double-click it to go back to its default.');
 function knobHTML(i,k){
-  return '<div class="knob" data-i="'+i+'" style="--k:'+COLS()[i]+'" tabindex="0" role="slider" aria-label="'+k.label+'">'+
+  return '<div class="knob" data-i="'+i+'" tabindex="0" role="slider" aria-label="'+k.label+'" title="'+knobTip(k)+'">'+
     '<svg viewBox="0 0 84 84" aria-hidden="true"><circle class="kt" cx="42" cy="42" r="32"/><circle class="ka" cx="42" cy="42" r="32"/><line class="kp" x1="42" y1="42" x2="42" y2="14"/></svg>'+
     '<span class="kl">'+k.label+'</span><span class="kv"></span></div>';
 }
 const range=k=>k.options?[0,k.options.length-1]:[k.min,k.max];
+const knobText=k=>{const v=k.get();return k.options?(k.options[Math.round(v)]||''):(k.fmt?k.fmt(v):String(v))};
+/* A knob's default is the value the current mood asks for, wherever the mood has an opinion, and the app's own
+   default otherwise — so a double-click undoes your fiddling rather than dropping the track somewhere it has
+   never been. Mood, Key and Sound have no honest default and simply do not offer one. */
+function dfltOf(k){
+  if(k.dflt===undefined)return undefined;
+  const v=typeof k.dflt==='function'?k.dflt():k.dflt;
+  if(v===undefined||v===null)return undefined;
+  return (typeof v==='number'&&!isFinite(v))?undefined:v;
+}
 function knobDraw(i){
   const k=knobs[i],el=$('opKnobs').children[i];if(!k||!el)return;
   const [lo,hi]=range(k),v=k.get(),f=hi>lo?(v-lo)/(hi-lo):0,C=2*Math.PI*32,sweep=0.75*C;
   const arc=el.querySelector('.ka');arc.style.strokeDasharray=(f*sweep)+' '+C;arc.style.strokeDashoffset=String(-C*0.125);
   const tr=el.querySelector('.kt');tr.style.strokeDasharray=sweep+' '+C;tr.style.strokeDashoffset=String(-C*0.125);
   el.querySelector('.kp').setAttribute('transform','rotate('+(-135+f*270)+' 42 42)');
-  el.querySelector('.kv').textContent=k.options?k.options[Math.round(v)]:(k.fmt?k.fmt(v):String(v));
+  el.querySelector('.kv').textContent=knobText(k);
   el.setAttribute('aria-valuetext',el.querySelector('.kv').textContent);
 }
 function knobSet(i,v){const k=knobs[i],[lo,hi]=range(k);v=Math.max(lo,Math.min(hi,v));if(k.options||k.step)v=Math.round(v/(k.step||1))*(k.step||1);if(v===k.get())return;k.set(v);knobDraw(i)}
 function drawKnobs(){knobs.forEach((k,i)=>knobDraw(i))}
-{ // drag up and down, spin the wheel, or use the arrow keys
+/* Drag up and down, spin the wheel, or use the arrow keys — and three modifiers that cost no screen space:
+   Shift turns a quarter as fast, so a knob can be placed as finely as a slider; Alt makes the turn momentary,
+   springing the knob back to where it started the moment you let go, which turns any of the sixteen into a
+   performance control; a double-click puts it back to its default. The drag accumulates from move to move
+   rather than from a fixed anchor, so Shift can go down and come up in the middle of one turn. */
+{
+  const FINE=4;
   let drag=null;const K=$('opKnobs');
-  K.addEventListener('pointerdown',e=>{const el=e.target.closest('.knob');if(!el)return;e.preventDefault();el.setPointerCapture(e.pointerId);const i=+el.dataset.i;drag={i,y:e.clientY,v:knobs[i].get()};el.classList.add('turning')});
-  K.addEventListener('pointermove',e=>{if(!drag)return;const k=knobs[drag.i],[lo,hi]=range(k);const px=k.options?Math.max(40,k.options.length*14):160;knobSet(drag.i,drag.v+(drag.y-e.clientY)/px*(hi-lo))});
-  const end=e=>{if(!drag)return;const el=K.children[drag.i];if(el)el.classList.remove('turning');drag=null;U.persist()};
+  K.addEventListener('pointerdown',e=>{const el=e.target.closest('.knob');if(!el)return;e.preventDefault();el.setPointerCapture(e.pointerId);
+    const i=+el.dataset.i,k=knobs[i],spring=e.altKey&&!k.noSpring;
+    if(e.altKey&&k.noSpring)U.setStatus(k.noSpring);
+    drag={i,el,y:e.clientY,v:k.get(),from:k.get(),spring,blocked:e.altKey&&!!k.noSpring,moved:false};
+    el.classList.add('turning');if(spring)el.classList.add('hold')});
+  K.addEventListener('pointermove',e=>{if(!drag)return;const k=knobs[drag.i],[lo,hi]=range(k);
+    const px=(k.options?Math.max(40,k.options.length*14):160)*(e.shiftKey?FINE:1);
+    drag.v=Math.max(lo,Math.min(hi,drag.v+(drag.y-e.clientY)/px*(hi-lo)));drag.y=e.clientY;drag.moved=true;
+    drag.el.classList.toggle('fine',e.shiftKey);
+    knobSet(drag.i,drag.v)});
+  const end=()=>{if(!drag)return;const d=drag;drag=null;
+    d.el.classList.remove('turning','fine','hold');
+    if(d.spring&&d.moved){knobSet(d.i,d.from);const k=knobs[d.i];if(k)U.setStatus(k.label+' sprang back to '+knobText(k))}
+    // a knob that refuses the spring says so last, after its own setter has had its say
+    else if(d.blocked&&d.moved){const k=knobs[d.i];if(k&&k.noSpring)U.setStatus(k.noSpring)}
+    U.persist()};
   K.addEventListener('pointerup',end);K.addEventListener('pointercancel',end);
+  K.addEventListener('dblclick',e=>{const el=e.target.closest('.knob');if(!el)return;const i=+el.dataset.i,k=knobs[i];if(!k)return;
+    const d=dfltOf(k);
+    if(d===undefined){U.setStatus(k.label+' has no default to go back to');return}
+    knobSet(i,d);U.persist();U.setStatus(k.label+' back to its default: '+knobText(k))});
   K.addEventListener('wheel',e=>{const el=e.target.closest('.knob');if(!el)return;e.preventDefault();const i=+el.dataset.i,k=knobs[i],[lo,hi]=range(k);const st=k.options?1:(k.step||1)*Math.max(1,Math.round((hi-lo)/50));knobSet(i,k.get()+(e.deltaY<0?st:-st));U.persist()},{passive:false});
   K.addEventListener('keydown',e=>{const el=e.target.closest('.knob');if(!el)return;const i=+el.dataset.i,k=knobs[i],st=k.options?1:(k.step||1);
     if(e.key==='ArrowUp'||e.key==='ArrowRight'){knobSet(i,k.get()+st);e.preventDefault()}else if(e.key==='ArrowDown'||e.key==='ArrowLeft'){knobSet(i,k.get()-st);e.preventDefault()}});
@@ -50,6 +95,9 @@ function applyPatch(L,name){const P=PATCHES[name];if(!P)return;for(const k in P)
 function patchIndex(L){const p=E.params[L];const i=PATCH_KEYS.findIndex(k=>['wave','cutoff','reso','attack','decay','sustain','release','spread','fenv','drive','slope','fmRatio','fmIndex'].every(x=>PATCHES[k][x]===p[x]));return i}
 function setLayerParam(L,key,v){E.setParam(L,key,v);if(state.layer===L)U.renderSound();U.persist()}
 const scaleName=()=>Z.SCALES[state.scale].name;
+// what the mood asks for, which is where a double-clicked knob goes back to
+const MOOD=()=>MOODS[state.mood]||{};
+const moodSound=L=>((MOOD().sound||{})[L])||{};
 function stepScale(d){const i=(SCALE_KEYS.indexOf(state.scale)+d+SCALE_KEYS.length)%SCALE_KEYS.length;$('scale').value=SCALE_KEYS[i];fire('scale','change');refresh()}
 function recTargetFor(L){return L==='chords'?'lead':L}
 
@@ -57,12 +105,15 @@ function recTargetFor(L){return L==='chords'?'lead':L}
 const SCREENS={
   song:{
     knobs:()=>[
-      {label:'Mood',options:MOOD_KEYS.map(k=>MOODS[k].label),get:()=>MOOD_KEYS.indexOf(state.mood),set:i=>{state.mood=MOOD_KEYS[i];U.newTrack(true)}},
+      // Mood is the one knob a spring-back would lie about: its setter rerolls every unlocked seed and clears
+      // the notes you drew, so coming back to the mood you started on would hand you a different song.
+      {label:'Mood',options:MOOD_KEYS.map(k=>MOODS[k].label),get:()=>MOOD_KEYS.indexOf(state.mood),set:i=>{state.mood=MOOD_KEYS[i];U.newTrack(true)},
+        noSpring:'Mood rolls a whole new track, so it has nothing to spring back to'},
       {label:'Key',options:Z.NOTE_NAMES,get:()=>state.root,set:i=>{$('root').value=i;fire('root','change')}},
-      {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v)},
-      {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v)},
+      {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v),dflt:()=>{const b=MOOD().bpm;return b?Math.round((b[0]+b[1])/2):112}},
+      {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v),dflt:()=>MOOD().energy},
     ],
-    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">🎲 New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
+    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
     mount:()=>{borrow($('arr'),$('opSongMain'));borrow($('roll'),$('opSongMain'));U.buildRoll()},
     refresh:()=>{
       $('opKey').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+scaleName()+'</em>';$('opScale').textContent=scaleName();
@@ -76,12 +127,13 @@ const SCREENS={
   synth:{
     knobs:()=>[
       {label:'Sound',options:PATCH_KEYS.concat(['custom']),get:()=>{const i=patchIndex(synthLayer);return i<0?PATCH_KEYS.length:i},set:i=>{if(i<PATCH_KEYS.length)applyPatch(synthLayer,PATCH_KEYS[i])}},
-      {label:'Cutoff',min:0,max:100,step:1,fmt:v=>Math.round(Z.cutoffHz(v))+' Hz',get:()=>E.params[synthLayer].cutoff,set:v=>setLayerParam(synthLayer,'cutoff',v)},
+      {label:'Cutoff',min:0,max:100,step:1,fmt:v=>Math.round(Z.cutoffHz(v))+' Hz',get:()=>E.params[synthLayer].cutoff,set:v=>setLayerParam(synthLayer,'cutoff',v),dflt:()=>moodSound(synthLayer).cutoff},
       {label:'Envelope',min:0,max:100,step:1,fmt:v=>v<25?'pluck':v<55?'keys':v<80?'swell':'pad',get:()=>Math.round((E.params[synthLayer].attack+E.params[synthLayer].release)/2),
-        set:v=>{const p=E.params[synthLayer];const a=Math.round(v*0.7),r=Math.round(10+v*0.9),s=Math.round(20+v*0.75);E.setParam(synthLayer,'attack',a);E.setParam(synthLayer,'release',Math.min(100,r));E.setParam(synthLayer,'sustain',Math.min(100,s));if(state.layer===synthLayer)U.renderSound();U.persist();void p}},
-      {label:'Space',min:0,max:100,step:1,fmt:v=>v?v+' %':'dry',get:()=>E.params[synthLayer].reverb,set:v=>{E.setParam(synthLayer,'reverb',v);E.setParam(synthLayer,'delay',Math.round(v*0.6));if(state.layer===synthLayer)U.renderSound();U.persist()}},
+        set:v=>{const p=E.params[synthLayer];const a=Math.round(v*0.7),r=Math.round(10+v*0.9),s=Math.round(20+v*0.75);E.setParam(synthLayer,'attack',a);E.setParam(synthLayer,'release',Math.min(100,r));E.setParam(synthLayer,'sustain',Math.min(100,s));if(state.layer===synthLayer)U.renderSound();U.persist();void p},
+        dflt:()=>{const s=moodSound(synthLayer);return (s.attack===undefined||s.release===undefined)?undefined:Math.round((s.attack+s.release)/2)}},
+      {label:'Space',min:0,max:100,step:1,fmt:v=>v?v+' %':'dry',get:()=>E.params[synthLayer].reverb,set:v=>{E.setParam(synthLayer,'reverb',v);E.setParam(synthLayer,'delay',Math.round(v*0.6));if(state.layer===synthLayer)U.renderSound();U.persist()},dflt:()=>moodSound(synthLayer).reverb},
     ],
-    html:()=>'<div class="scr scr-synth"><div class="scr-tabs" id="opLayers">'+SYNTHS.map(L=>'<button data-l="'+L+'" style="--c:'+COLORS[L]+'"'+(L===synthLayer?' class="on"':'')+'>'+L+'</button>').join('')+'</div><canvas class="scr-wave" id="opWave" width="900" height="220"></canvas><div class="scr-foot"><span class="scr-patch" id="opPatch"></span><span class="scr-btns"><button class="opb" data-a="lock" id="opLock" title="Lock: New track keeps this layer">🔒 Lock</button><button class="opb" data-a="ldice" title="Reroll only this layer">🎲 Roll</button><button class="opb" data-a="mute" id="opMute" title="Mute this layer">Mute</button></span></div></div>',
+    html:()=>'<div class="scr scr-synth"><div class="scr-tabs" id="opLayers">'+SYNTHS.map(L=>'<button data-l="'+L+'" style="--c:'+COLORS[L]+'"'+(L===synthLayer?' class="on"':'')+'>'+L+'</button>').join('')+'</div><canvas class="scr-wave" id="opWave" width="900" height="220"></canvas><div class="scr-foot"><span class="scr-patch" id="opPatch"></span><span class="scr-btns"><button class="opb" data-a="lock" id="opLock" title="Lock: New track keeps this layer">Lock</button><button class="opb" data-a="ldice" title="Reroll only this layer">Roll</button><button class="opb" data-a="mute" id="opMute" title="Mute this layer">Mute</button></span></div></div>',
     mount:()=>{waveLoop()},
     refresh:()=>{
       const p=E.params[synthLayer],i=patchIndex(synthLayer);
@@ -92,22 +144,22 @@ const SCREENS={
   },
   drum:{
     knobs:()=>[
-      {label:'Kit',options:KIT_KEYS,get:()=>KIT_KEYS.indexOf(state.kit),set:i=>{$('kit').value=KIT_KEYS[i];fire('kit','change');U.renderMixer()}},
-      {label:'Swing',min:0,max:60,step:1,fmt:v=>v?v+' %':'straight',get:()=>state.swing,set:v=>setRange('swing',v)},
-      {label:'Pump',min:0,max:100,step:1,fmt:v=>v?v+' %':'off',get:()=>E.params.drums.pump,set:v=>{E.setParam('drums','pump',v);U.persist()}},
-      {label:'Level',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>E.params.drums.level,set:v=>{E.setParam('drums','level',v);U.renderMixer();U.persist()}},
+      {label:'Kit',options:KIT_KEYS,get:()=>KIT_KEYS.indexOf(state.kit),set:i=>{$('kit').value=KIT_KEYS[i];fire('kit','change');U.renderMixer()},dflt:()=>{const i=KIT_KEYS.indexOf(MOOD().kit);return i<0?undefined:i}},
+      {label:'Swing',min:0,max:60,step:1,fmt:v=>v?v+' %':'straight',get:()=>state.swing,set:v=>setRange('swing',v),dflt:()=>MOOD().swing},
+      {label:'Pump',min:0,max:100,step:1,fmt:v=>v?v+' %':'off',get:()=>E.params.drums.pump,set:v=>{E.setParam('drums','pump',v);U.persist()},dflt:()=>moodSound('drums').pump},
+      {label:'Level',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>E.params.drums.level,set:v=>{E.setParam('drums','level',v);U.renderMixer();U.persist()},dflt:()=>moodSound('drums').level},
     ],
-    html:()=>'<div class="scr scr-drum"><div class="scr-foot top"><span class="scr-patch" id="opKit"></span><span class="scr-btns"><button class="opb" data-a="fill" id="opFill" title="Snare roll into the next section">Fill</button><button class="opb" data-a="dlock" id="opDLock" title="Lock: New track keeps the drums">🔒 Lock</button><button class="opb" data-a="ddice" title="Reroll only the drums">🎲 Roll</button><button class="opb" data-a="dreset" title="Back to the generated pattern">↺</button></span></div><div class="scr-grid" id="opGrid"></div><div class="scr-line">Click a cell: off → hit → ghost. Drag a cell up or down for its velocity. Drop a sound on a voice to play your own.</div><div class="scr-voices" id="opVoices"></div></div>',
+    html:()=>'<div class="scr scr-drum"><div class="scr-foot top"><span class="scr-patch" id="opKit"></span><span class="scr-btns"><button class="opb" data-a="fill" id="opFill" title="Snare roll into the next section">Fill</button><button class="opb" data-a="dlock" id="opDLock" title="Lock: New track keeps the drums">Lock</button><button class="opb" data-a="ddice" title="Reroll only the drums">Roll</button><button class="opb" data-a="dreset" title="Back to the generated pattern">↺</button></span></div><div class="scr-grid" id="opGrid"></div><div class="scr-line">Click a cell: off → hit → ghost. Drag a cell up or down for its velocity. Drop a sound on a voice to play your own.</div><div class="scr-voices" id="opVoices"></div></div>',
     mount:()=>{state.layer='drums';U.renderSound();borrow($('grid'),$('opGrid'));borrow($('voices'),$('opVoices'))},
     refresh:()=>{const sec=(U.song||[])[U.viewSection];$('opKit').innerHTML='<b style="color:'+COLORS.drums+'">'+state.kit+'</b> · '+(sec?(sec.part==='v'?'A verse':'B chorus'):'')+(sec&&state.drumEdits[sec.part]?' · edited':'');
       $('opDLock').classList.toggle('on',!!state.locks.drums);const P=sec&&sec.track.drumPattern;$('opFill').classList.toggle('on',!!(P&&P.fill))},
   },
   mix:{
     knobs:()=>[
-      {label:'Volume',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>+$('master').value,set:v=>setRange('master',v)},
-      {label:'Warmth',min:0,max:100,step:1,fmt:v=>v?v+' %':'clean',get:()=>Math.round(state.warmth),set:v=>setRange('warmth',v)},
-      {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()}},
-      {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)}},
+      {label:'Volume',min:0,max:100,step:1,fmt:v=>v+' %',get:()=>+$('master').value,set:v=>setRange('master',v),dflt:80},
+      {label:'Warmth',min:0,max:100,step:1,fmt:v=>v?v+' %':'clean',get:()=>Math.round(state.warmth),set:v=>setRange('warmth',v),dflt:()=>Z.WARMTH.dflt},
+      {label:'Room',min:0,max:100,step:1,fmt:v=>v<25?'booth':v<50?'room':v<75?'hall':'cathedral',get:()=>state.reverb.size,set:v=>{state.reverb.size=v;E.setReverb(state.reverb);if(U.renderSound&&state.layer==='master')U.renderSound();U.persist()},dflt:()=>(Z.REVERB&&Z.REVERB.dflt?Z.REVERB.dflt.size:60)},
+      {label:'Tone',min:-100,max:100,step:1,fmt:v=>v<-10?'darker':v>10?'brighter':'flat',get:()=>Math.round((+$('eq-high').value-(+$('eq-low').value))/2),set:v=>{setRange('eq-high',v);setRange('eq-low',-v)},dflt:0},
     ],
     html:()=>'<div class="scr"><div class="scenes" id="opScenes"></div><div class="scr-mix" id="opMix"></div></div>',
     mount:()=>{renderFaders();renderScenes()},
@@ -135,7 +187,7 @@ $('opScreen').addEventListener('click',e=>{const b=e.target.closest('[data-scene
   renderScenes();refresh()});
 function renderFaders(){
   const box=$('opMix');if(!box)return;
-  box.innerHTML=Z.LAYERS.map(L=>{const p=E.params[L],on=E.audible(L);return '<div class="fader'+(on?'':' off')+'" data-l="'+L+'" style="--c:'+COLORS[L]+'"><div class="ftrack" title="Drag to set the level"><div class="ffill" style="height:'+p.level+'%"></div></div><b>'+L+'</b><span class="fv">'+p.level+'</span><div class="fbt"><button data-a="mute" class="'+(p.mute?'on':'')+'" title="Mute">M</button><button data-a="lock" class="'+(state.locks[L]?'on':'')+'" title="Lock: New track keeps this layer">'+(state.locks[L]?'🔒':'🔓')+'</button><button data-a="dice" title="Reroll only this layer">🎲</button></div></div>'}).join('');
+  box.innerHTML=Z.LAYERS.map(L=>{const p=E.params[L],on=E.audible(L);return '<div class="fader'+(on?'':' off')+'" data-l="'+L+'" style="--c:'+COLORS[L]+'"><div class="ftrack" title="Drag to set the level"><div class="ffill" style="height:'+p.level+'%"></div></div><b>'+L+'</b><span class="fv">'+p.level+'</span><div class="fbt"><button data-a="mute" class="'+(p.mute?'on':'')+'" title="Mute">M</button><button data-a="lock" class="'+(state.locks[L]?'on':'')+'" title="Lock: New track keeps this layer">L</button><button data-a="dice" title="Reroll only this layer">R</button></div></div>'}).join('');
 }
 { // faders: drag anywhere on the track
   let fd=null;
@@ -202,8 +254,8 @@ $('opScreen').addEventListener('click',e=>{
 let lastSig='';
 setInterval(()=>{if(state.view!=='op')return;const sig=[state.root,state.scale,state.mood,state.bpm,state.energy,state.kit,state.swing,U.viewSection,U.rec.armed,E.loopSection,JSON.stringify(E.params),JSON.stringify(state.locks),$('master').value,state.warmth,$('human').value].join('|');if(sig!==lastSig){lastSig=sig;refresh()}},250);
 
-function enter(){render()}
-function leave(){cancelAnimationFrame(raf);giveBack();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}
+function enter(){takeFx();render()}
+function leave(){cancelAnimationFrame(raf);giveBack();dropFx();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}
 function knobFrac(i,f){const k=knobs[i];if(!k||state.view!=='op')return;const [lo,hi]=range(k);knobSet(i,lo+Math.max(0,Math.min(1,f))*(hi-lo));U.persist()}
 Object.assign(U,{opEnter:enter,opLeave:leave,opRefresh:refresh,opKnobFrac:knobFrac});
 if(state.view!=='studio')enter(); // this script loads last, after the app has already chosen its view

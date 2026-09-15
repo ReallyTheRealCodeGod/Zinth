@@ -3,14 +3,14 @@
 const Z=window.Z,E=Z.engine,$=id=>document.getElementById(id),ZUI=window.ZUI=window.ZUI||{};
 // these live in the second UI script; delegate through the shared ZUI namespace
 const renderKeys=()=>ZUI.renderKeys(),renderPads=()=>ZUI.renderPads(),renderMixer=()=>ZUI.renderMixer(),renderFavs=()=>ZUI.renderFavs(),renderSound=()=>ZUI.renderSound(),renderGrid=()=>ZUI.renderGrid(),syncLabels=()=>ZUI.syncLabels();
-// one colour per layer, and a cool blue for the master strip, which belongs to no single layer
-// layer colours and the canvas palette come from the stylesheet's tokens, so both themes draw right
+// one tone per layer, and one for the master strip, which belongs to no single layer
+// the layer tones and the canvas palette come from the stylesheet's tokens, so both themes draw right
 const COLORS={lead:'',arp:'',chords:'',bass:'',drums:'',master:''};
 const TH={};
 function readColors(){
   const cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim();
   for(const k in COLORS)COLORS[k]=g('--'+k)||COLORS[k];
-  Object.assign(TH,{screen:g('--screen'),ink:g('--ink-rgb'),accent:g('--accent'),lav:g('--lav-rgb'),line:g('--line-2'),ok:g('--ok'),amber:g('--amber'),inkHex:g('--ink'),mono:g('--mono')||'monospace'});
+  Object.assign(TH,{screen:g('--screen'),ink:g('--ink-rgb'),accent:g('--accent'),zone:g('--zone-rgb'),line:g('--line-2'),inkHex:g('--ink'),mono:g('--mono')||'monospace'});
 }
 readColors();
 // the note lanes you can draw in: their edits live in state[EDITS[L]][part], the format a recording uses
@@ -442,7 +442,7 @@ function buildRoll(){
   const c=rollCache.getContext('2d');c.scale(dpr,dpr);
   const gx=74,gw=W-gx,laneH=H/5,steps=rollBars*16,sw=gw/steps;
   c.fillStyle=TH.screen;c.fillRect(0,0,W,H);
-  track.chords.forEach((ch,i)=>{c.fillStyle='rgba('+TH.lav+(i%2?',.08)':',.03)');c.fillRect(gx+ch.bar0*16*sw,0,ch.bars*16*sw,H)});
+  track.chords.forEach((ch,i)=>{c.fillStyle='rgba('+TH.zone+(i%2?',.055)':',.02)');c.fillRect(gx+ch.bar0*16*sw,0,ch.bars*16*sw,H)});
   for(let s=0;s<=steps;s+=4){c.strokeStyle='rgba('+TH.ink+(s%16===0?',.18)':',.06)');c.lineWidth=1;c.beginPath();c.moveTo(gx+s*sw+.5,0);c.lineTo(gx+s*sw+.5,H);c.stroke()}
   for(let i=1;i<5;i++){c.strokeStyle='rgba('+TH.ink+',.12)';c.beginPath();c.moveTo(0,i*laneH+.5);c.lineTo(W,i*laneH+.5);c.stroke()}
   c.fillStyle='rgba('+TH.ink+',.4)';c.font='500 10px '+TH.mono;

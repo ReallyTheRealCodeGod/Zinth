@@ -63,7 +63,55 @@ const mid=await page.evaluate(()=>{const m=window.ZUI.midiFile();return {head:St
 ok(mid.head==='MThd'&&mid.tracks===6,'MIDI file: '+mid.tracks+' tracks, '+mid.bytes+' bytes');
 await page.click('#viewSeg [data-v="op"]');
 
-// 8. no errors anywhere
+// 8. Play mode carries the punch-in strip and the chord tray, and the knob modifiers work
+ok(await page.evaluate(()=>document.getElementById('fx').parentNode.id==='opFx'),'the punch-in strip sits on the device');
+ok(await page.evaluate(()=>document.querySelectorAll('#opFx .fxb').length===7),'seven punch-in pads under the knobs');
+const shown=id=>page.evaluate(i=>{let e=document.getElementById(i);while(e&&e!==document.body){if(getComputedStyle(e).display==='none')return false;e=e.parentElement}return !!e},id);
+for(const id of ['tray','useV','useC','cb7','cbHold','cbBass'])ok(await shown(id),'the chord box control '+id+' is reachable in Play');
+// the strip must survive a screen change, since render() hands every other borrowed element back
+for(const m of ['synth','drum','mix','song']){await page.click('#opModes [data-m="'+m+'"]')}
+ok(await page.evaluate(()=>document.getElementById('fx').parentNode.id==='opFx'),'the strip survives all four screen changes');
+{
+  const knob=await page.$('#opKnobs .knob:nth-child(3)'),b=await knob.boundingBox();
+  const cx=b.x+b.width/2,cy=b.y+b.height/2;
+  const setBpm=v=>page.evaluate(n=>{const el=document.getElementById('bpm');el.value=n;el.dispatchEvent(new Event('input',{bubbles:true}))},v);
+  const bpm=()=>page.evaluate(()=>window.ZUI.state.bpm);
+  const turn=async(dy,mod)=>{if(mod)await page.keyboard.down(mod);
+    await page.mouse.move(cx,cy);await page.mouse.down();await page.mouse.move(cx,cy-dy,{steps:8});
+    const held=await bpm();await page.mouse.up();if(mod)await page.keyboard.up(mod);
+    return [held,await bpm()]};
+  await setBpm(110);const [,plain]=await turn(40,null);
+  await setBpm(110);const [,fine]=await turn(40,'Shift');
+  await setBpm(110);const [held,released]=await turn(40,'Alt');
+  ok(plain>110&&fine>110&&(plain-110)>(fine-110)*2,'Shift is a finer turn: +'+(plain-110)+' bpm plain, +'+(fine-110)+' with Shift');
+  ok(held>110&&released===110,'Alt springs the knob back: '+held+' bpm held, '+released+' released');
+}
+{
+  // Mood rerolls the track, so it must refuse the spring rather than hand back a different song
+  const knob=await page.$('#opKnobs .knob:nth-child(1)'),b=await knob.boundingBox();
+  const cx=b.x+b.width/2,cy=b.y+b.height/2;
+  const seed=()=>page.evaluate(()=>window.ZUI.state.seeds.lead);
+  const before=await seed();
+  await page.keyboard.down('Alt');await page.mouse.move(cx,cy);await page.mouse.down();
+  await page.mouse.move(cx,cy-40,{steps:6});await page.mouse.up();await page.keyboard.up('Alt');
+  const moodTip=await page.evaluate(()=>document.querySelector('#opKnobs .knob').title);
+  ok(await seed()!==before,'an Alt-drag on Mood still rerolls rather than pretending to spring back');
+  ok(!/Hold Alt/.test(moodTip),'the Mood tooltip does not promise a spring-back');
+  ok(/spring back to/.test(await page.evaluate(()=>document.getElementById('status').textContent)),'and the status line says why');
+}
+{
+  await page.click('#opModes [data-m="drum"]');
+  const dflt=await page.evaluate(()=>window.ZUI.MOODS[window.ZUI.state.mood].swing);
+  await page.evaluate(()=>{const el=document.getElementById('swing');el.value=55;el.dispatchEvent(new Event('input',{bubbles:true}))});
+  await page.dblclick('#opKnobs .knob:nth-child(2)');
+  ok(await page.evaluate(()=>window.ZUI.state.swing)===dflt,'double-click puts Swing back to the mood default ('+dflt+' %)');
+  await page.click('#opModes [data-m="song"]');
+}
+await page.click('#viewSeg [data-v="studio"]');
+ok(await page.evaluate(()=>{const f=document.getElementById('fx');return !!(f.nextElementSibling&&f.nextElementSibling.classList.contains('hint'))}),'the strip goes back to its own place in Studio');
+await page.click('#viewSeg [data-v="op"]');
+
+// 9. no errors anywhere
 ok(errors.length===0,'no page errors'+(errors.length?': '+errors.slice(0,3).join(' | '):''));
 await browser.close();
 console.log(fails.length?fails.length+' FAILURES':'all e2e checks pass');

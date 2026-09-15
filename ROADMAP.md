@@ -32,6 +32,15 @@ This file is the work queue for the background agent. Items are in priority orde
 - [x] **Web MIDI.** Input quantised to the scale and recorded, CC learn onto the four knobs, clock and start/stop out, notes out per layer with drums on channel 10, sweeps exported as CC74.
 - [x] **Workflow.** Phrase tools (vary, reverse, invert, octave), four scenes, output device picker.
 - [x] **Install and test.** Inline manifest and service worker, PowerShell static server, Playwright e2e suite.
+## Play mode (2026-09-15, by hand)
+
+- [x] **The punch-in strip on the device.** The seven momentary effects had keys but no visible control in the one mode built for performing. The device borrows the strip for as long as it is on screen and puts it under the knobs, and hands it back to its place in Studio on the way out.
+- [x] **The chord box's controls and tray under every screen.** 7ths, Hold, Bass, the tray and the two buttons that send a sketch to the verse or the chorus. Play could improvise a progression but not keep one; now it can.
+- [x] **Knob modifiers.** Shift turns a quarter as fast, Alt makes the turn momentary and springs the knob back on release, a double-click goes to the default — the mood's value where the mood has an opinion, the app's own otherwise, and nothing at all for Mood, Key and Sound.
+- [ ] **Still open in Play.** Morph between two scenes on a knob rather than jumping; make the screen show the performance (the chord name in large type as a pad fires, drum voices flashing on their hits, a playhead on the song screen); remember knob moves made while the song plays as automation, with a mark on any knob that holds one.
+
+## Professional pass, still open
+
 - [ ] **Still open from that plan.** Odd meters and polymeter (needs the generators and the theory check to become meter-aware); parameter locks per step on synth lanes; per-section automation lanes beyond sweeps and fades; a visible undo history; recording knob moves and punch-ins as a performance; a headphone-only click through a second output; stems with tails and dry-send options; sync between two browsers.
 
 ## Sound

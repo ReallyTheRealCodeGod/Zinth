@@ -15,7 +15,7 @@
       <div class="seg viewseg" id="viewSeg" role="group" aria-label="View" title="Play is the device: one screen at a time and four knobs. Studio opens every control: the arrangement inspector, the chord editor, the full Sound panel, the drum grid, the master EQ.">
         <button data-v="op" class="on">Play</button><button data-v="studio">Studio</button>
       </div>
-      <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume" style="--accent:var(--amber)"></div>
+      <div class="vol"><span>Vol</span><input type="range" id="master" min="0" max="100" value="80" aria-label="Master volume"></div>
       <div class="menu-wrap">
         <button class="btn" id="fileBtn" aria-haspopup="true" aria-expanded="false" title="Save, share and export this song">Song ▾</button>
         <div class="menu" id="fileMenu" hidden role="menu" aria-label="Song menu">
@@ -53,10 +53,11 @@
         <button data-m="drum" title="The drums: kit and step grid">Drum</button>
         <button data-m="mix" title="The mix: levels, warmth, tone">Mix</button>
       </div>
-      <span class="op-hint">turn a knob by dragging it up or down</span>
+      <span class="op-hint">drag a knob up or down · <kbd>Shift</kbd> fine · <kbd>Alt</kbd> springs back · double-click resets</span>
     </div>
     <div class="op-screen" id="opScreen"></div>
     <div class="op-knobs" id="opKnobs"></div>
+    <div class="op-fx" id="opFx"></div>
   </section>
 
   <section class="jam" aria-label="Track settings" data-studio>
@@ -71,7 +72,7 @@
       </div>
     </div>
     <div class="field jf"><label for="energy">Energy <output id="energyVal">55</output></label><input type="range" id="energy" min="0" max="100" value="55" title="How busy the track is: sparser and calmer to the left, denser and harder to the right"></div>
-    <button class="btn big dice" id="generate" title="Reroll every layer that is not locked. Lock what you love in the tiles below, roll the rest."><span class="die">🎲</span> New track</button>
+    <button class="btn big dice" id="generate" title="Reroll every layer that is not locked. Lock what you love in the tiles below, roll the rest.">New track</button>
   </section>
 
   <div class="main">
@@ -82,7 +83,7 @@
         <div class="field"><label for="human">Humanize <output id="humanVal">± 6 ms</output></label><input type="range" id="human" min="0" max="100" value="18" title="Humanize: how much like a player and how little like a machine. Every note gets its own small nudge off the grid and its own change of velocity — except the kick, which never moves, so the pulse stays put and everything else leans around it. Right down is machine-tight. The nudge is always well under half a step, so the rhythm you wrote is the rhythm you hear, and it comes from the track's seed rather than a die, so the WAV and MIDI exports are exactly what you heard."></div>
         <div class="toggle">Evolve the verse each pass <button class="switch on" id="evolve" role="switch" aria-checked="true" aria-label="Evolve the verse melody each pass"></button></div>
         <div class="toggle" title="A riser into every louder section and a crash on its first beat">Transitions: risers &amp; crashes <button class="switch on" id="transTgl" role="switch" aria-checked="true" aria-label="Transitions between sections"></button></div>
-        <div class="field"><label for="warmth">Warmth <output id="warmthVal"></output></label><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does. Right down is clean and digital. It is in the WAV export too." style="--accent:var(--rose)"></div>
+        <div class="field"><label for="warmth">Warmth <output id="warmthVal"></output></label><input type="range" id="warmth" min="0" max="100" value="22" aria-label="Master warmth" title="Warmth: drives the whole mix into a soft clip and rolls the top end off a little, the way tape or a valve does. Right down is clean and digital. It is in the WAV export too."></div>
         <div class="field"><label>MIDI <output id="midiState">off</output></label>
           <div class="stack midi" id="midiBox">
             <button class="btn sm" id="midiOn" title="Ask the browser for MIDI: your keyboard plays and records in key, your controller turns the knobs, and hardware can follow the clock">Enable MIDI</button>
@@ -155,7 +156,7 @@
       <h2>Sound</h2>
       <div class="tabs" id="tabs" role="tablist"></div>
       <div class="stack" id="sndFields">
-        <div class="field" data-synth><label for="patch">Patch</label><div class="patch"><select id="patch"></select><button class="btn icon" id="patchDice" title="Random patch">🎲</button></div></div>
+        <div class="field" data-synth><label for="patch">Patch</label><div class="patch"><select id="patch"></select><button class="btn icon" id="patchDice" title="Random patch">R</button></div></div>
         <div class="field" data-synth><label>Wave</label><div class="waves" id="waves" title="Sine, triangle, saw, square, a seven-voice stereo supersaw, or FM: a sine bent by a second sine for bells, keys and electric pianos"></div></div>
         <div class="row2" data-synth data-wave="fm">
           <div class="field"><label for="fmRatio">FM ratio</label><select id="fmRatio" class="sm" title="How fast the modulator runs against the note. Whole numbers give keys and organs, odd fractions give bells and metal. The carrier is the note, so FM never leaves the key."></select></div>
@@ -239,9 +240,9 @@
       </div>
     </div>
     <div class="cb" aria-label="Chord box">
-      <div class="cb-head" data-studio>
-        <span class="cb-title">Chords</span>
-        <p>Number keys <kbd>1</kbd>–<kbd>7</kbd> or tap. Every pad is a chord of the key, so any order works.</p>
+      <div class="cb-head">
+        <span class="cb-title" data-studio>Chords</span>
+        <p data-studio>Number keys <kbd>1</kbd>–<kbd>7</kbd> or tap. Every pad is a chord of the key, so any order works.</p>
         <div class="opts">
           <button class="opt" id="cb7" aria-pressed="false" title="Add the seventh to every chord">7ths</button>
           <button class="opt on" id="cbHold" aria-pressed="true" title="A chord keeps sounding until you play the next one">Hold</button>
@@ -269,8 +270,9 @@
     <div class="demos" id="demos" role="group" aria-label="Demo songs"></div>
     <ol class="steps">
       <li><b>Press Play.</b> That is a whole song, and every note of it is locked to one key, so nothing ever sounds off.</li>
-      <li><b>Turn the knobs, roll the dice.</b> Four knobs per screen, dragged up or down. On Song they are mood, key, tempo and energy; New track rerolls everything. Lock a layer on the Synth or Mix screen to keep it, or roll just that one.</li>
+      <li><b>Turn the knobs, roll the dice.</b> Four knobs per screen, dragged up or down. Hold <kbd>Shift</kbd> for a fine turn, hold <kbd>Alt</kbd> and the knob springs back when you let go, double-click it to put it back to its default — which is whatever the mood asks for, wherever the mood has an opinion. On Song they are mood, key, tempo and energy; New track rerolls everything. Lock a layer on the Synth or Mix screen to keep it, or roll just that one.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, and they all fit. Sketch chords into the tray and send them to the verse or the chorus.</li>
+      <li><b>Punch in.</b> The seven pads under the knobs are momentary effects: hold one and the mix sweeps, gates, crushes or washes, let go and the song is exactly where it should be. <kbd>Z</kbd> to <kbd>M</kbd> play them from the keyboard.</li>
       <li><b>Record your hook.</b> Press Rec and play over the looping section. Your notes replace the generated ones, snapped to the grid. Ctrl+Z is always there.</li>
       <li><b>Four screens, then deeper if you like.</b> Song, Synth, Drum and Mix are the whole instrument. Studio, in the top bar, opens the arrangement inspector, the chord editor and every parameter of every sound. Song ▾ beside it exports WAV, MIDI or stems.</li>
     </ol>
@@ -280,6 +282,8 @@
       <div><kbd>Shift</kbd>+<kbd>T</kbd> tap tempo</div><div><kbd>−</kbd> <kbd>+</kbd> tempo one bpm slower / faster</div>
       <div><kbd>1</kbd>–<kbd>7</kbd> chords</div><div><kbd>A</kbd>–<kbd>J</kbd> <kbd>Q</kbd>–<kbd>U</kbd> notes, two octaves</div>
       <div><kbd>Z</kbd>–<kbd>M</kbd> punch-in effects (hold)</div><div><kbd>Esc</kbd> close the chord editor · release held chords</div>
+      <div><kbd>Shift</kbd>+drag a knob: fine</div><div><kbd>Alt</kbd>+drag a knob: springs back on release</div>
+      <div>double-click a knob: back to its default</div>
       <div><kbd>←</kbd> <kbd>→</kbd> step between chord cards while editing</div>
       <div><kbd>1</kbd>–<kbd>6</kbd> in this sheet: load a demo song</div>
       <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</div>
