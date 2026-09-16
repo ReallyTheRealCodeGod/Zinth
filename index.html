@@ -367,6 +367,10 @@ input[type=range].bip::-moz-range-progress{background:transparent}
 .scenes .opb.has{border-color:var(--ink-mute);color:var(--ink)}
 .scenes .opb.store{border-color:var(--accent);color:var(--accent)}
 .scr-btns.motif .opb{font-size:11.5px}
+.scr-btns.take{align-items:center}
+.scr-btns.take .scr-line{flex:1;min-width:0}
+.opb:disabled{opacity:.4;cursor:default}
+.opb:disabled:hover{color:var(--ink-dim);border-color:var(--line-2)}
 .midi .opts{flex-wrap:wrap}
 .fader{display:flex;flex-direction:column;align-items:center;gap:6px}
 .fader.off{opacity:.45}
@@ -713,7 +717,7 @@ input[type=range].bip::-moz-range-progress{background:transparent}
       <li><b>Turn the knobs, roll the dice.</b> Four knobs per screen, dragged up or down. Hold <kbd>Shift</kbd> for a fine turn, hold <kbd>Alt</kbd> and the knob springs back when you let go, double-click it to put it back to its default — which is whatever the mood asks for, wherever the mood has an opinion. On Song they are mood, key, tempo and energy; New track rerolls everything. Lock a layer on the Synth or Mix screen to keep it, or roll just that one.</li>
       <li><b>Play along.</b> Number keys are chords, letter keys are notes, and they all fit. Sketch chords into the tray and send them to the verse or the chorus.</li>
       <li><b>Punch in.</b> The seven pads under the knobs are momentary effects: hold one and the mix sweeps, gates, crushes or washes, let go and the song is exactly where it should be. <kbd>Z</kbd> to <kbd>M</kbd> play them from the keyboard.</li>
-      <li><b>Record your hook.</b> Press Rec and play over the looping section. Your notes replace the generated ones, snapped to the grid. Ctrl+Z is always there.</li>
+      <li><b>Record your hook.</b> Press Rec and play over the looping section. Rec takes whichever section you are playing over, loops it so your take comes back round, and switches that layer on if the section had it off, so you always hear what you play. Your notes replace the generated ones, snapped to the grid, and the Song screen counts them with a Clear take beside it. Ctrl+Z is always there.</li>
       <li><b>Four screens, then deeper if you like.</b> Song, Synth, Drum and Mix are the whole instrument. Studio, in the top bar, opens the arrangement inspector, the chord editor and every parameter of every sound. Song ▾ beside it exports WAV, MIDI or stems.</li>
     </ol>
     <div class="keysheet">
@@ -3440,17 +3444,34 @@ function setRecTarget(L){
   if(rec.armed)U.rebuild();else U.persist();
   U.setStatus('Recording into the '+L+': '+recWhere(L));
 }
+/* Arming Rec puts you over one looping section with the layer you are recording into actually playing.
+   Both of those used to be true only when you pressed Rec from a standing start. Pressing it while the whole
+   song rolled left the song rolling, so a take flew past once and the notes after it landed in whatever
+   section happened to be passing — and if that section was an Intro or an Outro, which do not play the lead,
+   the take was swallowed whole: recorded, but silent and drawn as rests. From the outside that looks exactly
+   like recording being broken, which is what it was in every way that matters. */
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
   // arming Rec from a standing start counts you in: one bar of clicks at this tempo, then the song comes in
-  let counted=false;
-  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;
-    counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
-  U.rebuild();renderKeys();
-  const L=state.recTarget,sec=song()[state.sel];
+  let counted=false,looped=false,switched=false;
+  if(on){
+    // record over the section you are actually playing over, and keep it under you
+    if(E.playing&&E.section!==state.sel)state.sel=E.section;
+    U.viewSection=state.sel;
+    if(!E.loopSection){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);looped=true}
+    // a section that does not play this layer would swallow the take. Switch it on: it is one undo away,
+    // and Play mode has no inspector to reach it with.
+    const s0=state.sections[state.sel];
+    if(s0&&!s0.layers[state.recTarget]){s0.layers[state.recTarget]=1;switched=true}
+    if(!E.playing){state.loop=0;counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
+  }
+  if(switched)U.regenerate();else U.rebuild();
+  renderKeys();
+  const L=state.recTarget,sec=state.sections[state.sel];
   let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
   if(counted)msg=Z.COUNTIN.beats+' beats of count-in, then '+msg.charAt(0).toLowerCase()+msg.slice(1);
-  if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
+  if(looped)msg+=' · looping the '+(sec?sec.type:'section')+', so your take comes straight back round';
+  if(switched)msg+=' · the '+L+' was switched off for this '+(sec?sec.type:'section')+' and is on now, so you can hear what you play — Ctrl+Z undoes that';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
   if(sec&&(sec.fade==='in'||sec.fade==='out'))msg+=' · this section fades '+(sec.fade==='in'?'in over its first two bars':'out over its last two bars')+', so what you play fades with it';
@@ -3460,9 +3481,14 @@ function recordNote(start,midi,t1){
   const sec=song()[start.section];if(!sec)return;
   const L=state.recTarget,part=sec.part,step=start.step%Z.TOTAL,stored=midi-(sec.transpose||0);
   const dur=Math.max(1,Math.round((t1-start.time)/E.stepSec()));
+  const fresh=!state[U.EDITS[L]][part];
   const list=(state[U.EDITS[L]][part]||[]).filter(e=>!(e.step===step&&e.midi===stored));
   list.push({step,dur,midi:stored,vel:0.85});list.sort((a,b)=>a.step-b.step);
   state[U.EDITS[L]][part]=list;U.rebuild();renderRecInfo();
+  // say it: Play mode hides the take counter in the footer, so without this a note lands in silence
+  U.setStatus(Z.NOTE_NAMES[((midi%12)+12)%12]+' at bar '+(Math.floor(step/16)+1)+'.'+(Math.floor((step%16)/4)+1)+
+    ' · '+list.length+' note'+(list.length===1?'':'s')+' in your '+LANE_NAME[L]+
+    (fresh?' · this '+LANE_NAME[L]+' is yours now and replaces the generated one for every '+partLabel(part)+' section; ↺ beside the lane name brings it back':''));
 }
 $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
 $('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});
@@ -4308,7 +4334,7 @@ const SCREENS={
       {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v),dflt:()=>{const b=MOOD().bpm;return b?Math.round((b[0]+b[1])/2):112}},
       {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v),dflt:()=>MOOD().energy},
     ],
-    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
+    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-btns take"><span class="scr-line" id="opTake"></span><button class="opb" data-a="clearmel" id="opClear" title="Remove your own notes for this part and bring the generated ones back">Clear take</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
     mount:()=>{borrow($('arr'),$('opSongMain'));borrow($('roll'),$('opSongMain'));U.buildRoll()},
     refresh:()=>{
       $('opKey').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+scaleName()+'</em>';$('opScale').textContent=scaleName();
@@ -4316,7 +4342,12 @@ const SCREENS={
       $('opLine').textContent=MOODS[state.mood].label+' · '+state.bpm+' bpm · '+bars+' bars';
       $('opNotes').innerHTML=Z.SCALES[state.scale].steps.map((s,i)=>'<span class="note'+(i===0?' root':'')+'">'+Z.NOTE_NAMES[(state.root+s)%12]+'</span>').join('');
       $('opRec').classList.toggle('on',U.rec.armed);$('opLoop').classList.toggle('on',E.loopSection);
-      $('opMotifLane').textContent=state.recTarget;
+      // the take, which Studio shows in the footer and Play used to show nowhere at all
+      const L=state.recTarget,sc=(U.song||[])[state.sel],part=sc?sc.part:'v',own=(state[U.EDITS[L]]||{})[part];
+      $('opTake').textContent=(sc?(part==='v'?'A verse':'B chorus')+' · ':'')+'into the '+L+': '+
+        (own?own.length+' note'+(own.length===1?'':'s')+' of yours':'the generated '+L);
+      $('opClear').disabled=!own;
+      $('opMotifLane').textContent=L;
     },
   },
   synth:{
@@ -4439,7 +4470,8 @@ $('opScreen').addEventListener('click',e=>{
   if(a==='store'){storeMode=!storeMode;renderScenes();return}
   if(a.startsWith('m:')){U.transformLane(state.recTarget,a.slice(2));return}
   if(a==='dice')U.newTrack();else if(a==='rec'){const t=recTargetFor(synthLayer);if(state.recTarget!==t){const tb=$('recTarget').querySelector('[data-v="'+t+'"]');if(tb)tb.click()}$('recBtn').click()}
-  else if(a==='loop')$('loopSec').click();else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
+  else if(a==='loop')$('loopSec').click();else if(a==='clearmel')$('clearMel').click();
+  else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
   else if(a==='lock'){state.locks[synthLayer]=!state.locks[synthLayer];U.renderMixer();U.persist()}else if(a==='ldice')U.dice(synthLayer);
   else if(a==='mute'){E.setParam(synthLayer,'mute',!E.params[synthLayer].mute);U.renderMixer();U.persist()}
   else if(a==='fill')$('fillTgl').click();else if(a==='dlock'){state.locks.drums=!state.locks.drums;U.renderMixer();U.persist()}else if(a==='ddice')U.dice('drums');else if(a==='dreset')$('gridReset').click();
@@ -4447,7 +4479,8 @@ $('opScreen').addEventListener('click',e=>{
 });
 // the device follows the app: anything that changes the song or a sound shows up within a moment
 let lastSig='';
-setInterval(()=>{if(state.view!=='op')return;const sig=[state.root,state.scale,state.mood,state.bpm,state.energy,state.kit,state.swing,U.viewSection,U.rec.armed,E.loopSection,JSON.stringify(E.params),JSON.stringify(state.locks),$('master').value,state.warmth,$('human').value].join('|');if(sig!==lastSig){lastSig=sig;refresh()}},250);
+setInterval(()=>{if(state.view!=='op')return;const takes=['lead','arp','bass'].map(L=>{const e=state[U.EDITS[L]]||{};return (e.v?e.v.length:-1)+':'+(e.c?e.c.length:-1)}).join(',');
+  const sig=[state.root,state.scale,state.mood,state.bpm,state.energy,state.kit,state.swing,state.sel,state.recTarget,takes,U.viewSection,U.rec.armed,E.loopSection,JSON.stringify(E.params),JSON.stringify(state.locks),$('master').value,state.warmth,$('human').value].join('|');if(sig!==lastSig){lastSig=sig;refresh()}},250);
 
 function enter(){takeFx();render()}
 function leave(){cancelAnimationFrame(raf);giveBack();dropFx();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}

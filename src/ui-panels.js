@@ -64,17 +64,34 @@ function setRecTarget(L){
   if(rec.armed)U.rebuild();else U.persist();
   U.setStatus('Recording into the '+L+': '+recWhere(L));
 }
+/* Arming Rec puts you over one looping section with the layer you are recording into actually playing.
+   Both of those used to be true only when you pressed Rec from a standing start. Pressing it while the whole
+   song rolled left the song rolling, so a take flew past once and the notes after it landed in whatever
+   section happened to be passing — and if that section was an Intro or an Outro, which do not play the lead,
+   the take was swallowed whole: recorded, but silent and drawn as rests. From the outside that looks exactly
+   like recording being broken, which is what it was in every way that matters. */
 function setRec(on){
   rec.armed=on;$('recBtn').classList.toggle('on',on);$('recBtn').setAttribute('aria-pressed',on);
   // arming Rec from a standing start counts you in: one bar of clicks at this tempo, then the song comes in
-  let counted=false;
-  if(on&&!E.playing){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);state.loop=0;U.viewSection=state.sel;
-    counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
-  U.rebuild();renderKeys();
-  const L=state.recTarget,sec=song()[state.sel];
+  let counted=false,looped=false,switched=false;
+  if(on){
+    // record over the section you are actually playing over, and keep it under you
+    if(E.playing&&E.section!==state.sel)state.sel=E.section;
+    U.viewSection=state.sel;
+    if(!E.loopSection){E.loopSection=true;$('loopSec').classList.add('on');$('loopSec').setAttribute('aria-pressed',true);looped=true}
+    // a section that does not play this layer would swallow the take. Switch it on: it is one undo away,
+    // and Play mode has no inspector to reach it with.
+    const s0=state.sections[state.sel];
+    if(s0&&!s0.layers[state.recTarget]){s0.layers[state.recTarget]=1;switched=true}
+    if(!E.playing){state.loop=0;counted=state.countIn;E.start(state.sel,counted);setPlaying(true)}
+  }
+  if(switched)U.regenerate();else U.rebuild();
+  renderKeys();
+  const L=state.recTarget,sec=state.sections[state.sel];
   let msg='Recording into the '+L+': play the letter keys over the '+partLabel(partOfSel())+' sections, each note snaps to the grid';
   if(counted)msg=Z.COUNTIN.beats+' beats of count-in, then '+msg.charAt(0).toLowerCase()+msg.slice(1);
-  if(sec&&!sec.layers[L])msg+=' · this section does not play the '+L+', switch it on under Plays';
+  if(looped)msg+=' · looping the '+(sec?sec.type:'section')+', so your take comes straight back round';
+  if(switched)msg+=' · the '+L+' was switched off for this '+(sec?sec.type:'section')+' and is on now, so you can hear what you play — Ctrl+Z undoes that';
   else if(!E.audible(L))msg+=' · the '+L+' is muted in the mixer';
   if(sec&&(sec.sweep==='up'||sec.sweep==='down'))msg+=' · this section sweeps the mix, so the backing '+(sec.sweep==='up'?'starts dark and opens up':'closes down over its last bar');
   if(sec&&(sec.fade==='in'||sec.fade==='out'))msg+=' · this section fades '+(sec.fade==='in'?'in over its first two bars':'out over its last two bars')+', so what you play fades with it';
@@ -84,9 +101,14 @@ function recordNote(start,midi,t1){
   const sec=song()[start.section];if(!sec)return;
   const L=state.recTarget,part=sec.part,step=start.step%Z.TOTAL,stored=midi-(sec.transpose||0);
   const dur=Math.max(1,Math.round((t1-start.time)/E.stepSec()));
+  const fresh=!state[U.EDITS[L]][part];
   const list=(state[U.EDITS[L]][part]||[]).filter(e=>!(e.step===step&&e.midi===stored));
   list.push({step,dur,midi:stored,vel:0.85});list.sort((a,b)=>a.step-b.step);
   state[U.EDITS[L]][part]=list;U.rebuild();renderRecInfo();
+  // say it: Play mode hides the take counter in the footer, so without this a note lands in silence
+  U.setStatus(Z.NOTE_NAMES[((midi%12)+12)%12]+' at bar '+(Math.floor(step/16)+1)+'.'+(Math.floor((step%16)/4)+1)+
+    ' · '+list.length+' note'+(list.length===1?'':'s')+' in your '+LANE_NAME[L]+
+    (fresh?' · this '+LANE_NAME[L]+' is yours now and replaces the generated one for every '+partLabel(part)+' section; ↺ beside the lane name brings it back':''));
 }
 $('recBtn').addEventListener('click',()=>setRec(!rec.armed));
 $('recTarget').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setRecTarget(b.dataset.v)});

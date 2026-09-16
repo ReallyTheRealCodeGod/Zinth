@@ -48,6 +48,25 @@ await page.click('#play');
 const recorded=await page.evaluate(async()=>{const U=window.ZUI,E=window.Z.engine,st=U.state;U.setRec(true);await new Promise(r=>setTimeout(r,400));U.liveNoteOn(64);await new Promise(r=>setTimeout(r,120));U.liveNoteOff(64);U.setRec(false);E.stop();document.getElementById('play').click();const part=U.song[st.sel].part;return (st.leadEdits[part]||[]).length});
 ok(recorded>=1,'a live note recorded into the lead ('+recorded+' note)');
 
+// 5b. arming Rec must never leave the take somewhere it cannot be heard: over a section that does not play
+// the layer being recorded into, it loops that section and switches the layer on
+const armed=await page.evaluate(async()=>{
+  const U=window.ZUI,E=window.Z.engine,st=U.state;
+  const i=U.song.findIndex(s=>!s.layers.lead);
+  if(i<0)return {skip:true};
+  U.selectSection(i,false);st.recTarget='lead';
+  E.loopSection=false;document.getElementById('loopSec').classList.remove('on');
+  if(!E.playing)document.getElementById('play').click();
+  await new Promise(r=>setTimeout(r,300));
+  U.setRec(true);await new Promise(r=>setTimeout(r,200));
+  const r={type:U.song[st.sel].type,loop:E.loopSection,plays:st.sections[st.sel].layers.lead,
+    take:document.getElementById('opTake')?document.getElementById('opTake').textContent:''};
+  U.setRec(false);if(E.playing)document.getElementById('play').click();
+  return r});
+ok(armed.skip||armed.loop,'arming Rec loops the section you are playing over');
+ok(armed.skip||armed.plays===1,'arming Rec switches the recorded layer on for a '+armed.type+' that had it off');
+ok(armed.skip||/into the lead/.test(armed.take),'the device shows the take: "'+armed.take+'"');
+
 // 6. an export masters to the target loudness under the ceiling
 const ex=await page.evaluate(async()=>{const Z=window.Z,U=window.ZUI,E=Z.engine,st=U.state;const sr=44100,S=U.song,d=60/st.bpm/4,si=1,steps=S[si].bars*16;
   const off=new OfflineAudioContext(2,Math.ceil(sr*(steps*d+1)),sr),R=new Z.Engine();R.params=JSON.parse(JSON.stringify(E.params));R.bpm=st.bpm;R.song=S;R.kit=st.kit;R.init(off);await R.wl;

@@ -113,7 +113,7 @@ const SCREENS={
       {label:'Tempo',min:60,max:180,step:1,fmt:v=>v+' bpm',get:()=>state.bpm,set:v=>setRange('bpm',v),dflt:()=>{const b=MOOD().bpm;return b?Math.round((b[0]+b[1])/2):112}},
       {label:'Energy',min:0,max:100,step:1,fmt:v=>v<34?'calm':v<67?'moving':'driving',get:()=>state.energy,set:v=>setRange('energy',v),dflt:()=>MOOD().energy},
     ],
-    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
+    html:()=>'<div class="scr scr-song"><div class="scr-info"><div class="scr-key" id="opKey"></div><div class="scr-scale"><button class="opb" data-a="scale-" title="Previous scale">◂</button><span id="opScale"></span><button class="opb" data-a="scale+" title="Next scale">▸</button></div><div class="scr-line" id="opLine"></div><div class="notes" id="opNotes"></div><div class="scr-btns"><button class="opb big" data-a="dice" title="New track: rerolls every layer that is not locked">New track</button><button class="opb rec" data-a="rec" id="opRec" title="Record the keys into the selected section">● Rec</button><button class="opb" data-a="loop" id="opLoop" title="Loop the selected section (L)">Loop</button></div><div class="scr-btns take"><span class="scr-line" id="opTake"></span><button class="opb" data-a="clearmel" id="opClear" title="Remove your own notes for this part and bring the generated ones back">Clear take</button></div><div class="scr-line">Phrase tools · <b id="opMotifLane"></b></div><div class="scr-btns motif"><button class="opb" data-a="m:vary" title="Nudge a few notes to neighbouring scale tones">Vary</button><button class="opb" data-a="m:reverse" title="Play the phrase backwards">Reverse</button><button class="opb" data-a="m:invert" title="Turn the phrase upside down, snapped to the scale">Invert</button><button class="opb" data-a="m:up" title="An octave up">Oct +</button><button class="opb" data-a="m:down" title="An octave down">Oct −</button></div></div><div class="scr-main" id="opSongMain"></div></div>',
     mount:()=>{borrow($('arr'),$('opSongMain'));borrow($('roll'),$('opSongMain'));U.buildRoll()},
     refresh:()=>{
       $('opKey').innerHTML=Z.NOTE_NAMES[state.root]+' <em>'+scaleName()+'</em>';$('opScale').textContent=scaleName();
@@ -121,7 +121,12 @@ const SCREENS={
       $('opLine').textContent=MOODS[state.mood].label+' · '+state.bpm+' bpm · '+bars+' bars';
       $('opNotes').innerHTML=Z.SCALES[state.scale].steps.map((s,i)=>'<span class="note'+(i===0?' root':'')+'">'+Z.NOTE_NAMES[(state.root+s)%12]+'</span>').join('');
       $('opRec').classList.toggle('on',U.rec.armed);$('opLoop').classList.toggle('on',E.loopSection);
-      $('opMotifLane').textContent=state.recTarget;
+      // the take, which Studio shows in the footer and Play used to show nowhere at all
+      const L=state.recTarget,sc=(U.song||[])[state.sel],part=sc?sc.part:'v',own=(state[U.EDITS[L]]||{})[part];
+      $('opTake').textContent=(sc?(part==='v'?'A verse':'B chorus')+' · ':'')+'into the '+L+': '+
+        (own?own.length+' note'+(own.length===1?'':'s')+' of yours':'the generated '+L);
+      $('opClear').disabled=!own;
+      $('opMotifLane').textContent=L;
     },
   },
   synth:{
@@ -244,7 +249,8 @@ $('opScreen').addEventListener('click',e=>{
   if(a==='store'){storeMode=!storeMode;renderScenes();return}
   if(a.startsWith('m:')){U.transformLane(state.recTarget,a.slice(2));return}
   if(a==='dice')U.newTrack();else if(a==='rec'){const t=recTargetFor(synthLayer);if(state.recTarget!==t){const tb=$('recTarget').querySelector('[data-v="'+t+'"]');if(tb)tb.click()}$('recBtn').click()}
-  else if(a==='loop')$('loopSec').click();else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
+  else if(a==='loop')$('loopSec').click();else if(a==='clearmel')$('clearMel').click();
+  else if(a==='scale-')stepScale(-1);else if(a==='scale+')stepScale(1);
   else if(a==='lock'){state.locks[synthLayer]=!state.locks[synthLayer];U.renderMixer();U.persist()}else if(a==='ldice')U.dice(synthLayer);
   else if(a==='mute'){E.setParam(synthLayer,'mute',!E.params[synthLayer].mute);U.renderMixer();U.persist()}
   else if(a==='fill')$('fillTgl').click();else if(a==='dlock'){state.locks.drums=!state.locks.drums;U.renderMixer();U.persist()}else if(a==='ddice')U.dice('drums');else if(a==='dreset')$('gridReset').click();
@@ -252,7 +258,8 @@ $('opScreen').addEventListener('click',e=>{
 });
 // the device follows the app: anything that changes the song or a sound shows up within a moment
 let lastSig='';
-setInterval(()=>{if(state.view!=='op')return;const sig=[state.root,state.scale,state.mood,state.bpm,state.energy,state.kit,state.swing,U.viewSection,U.rec.armed,E.loopSection,JSON.stringify(E.params),JSON.stringify(state.locks),$('master').value,state.warmth,$('human').value].join('|');if(sig!==lastSig){lastSig=sig;refresh()}},250);
+setInterval(()=>{if(state.view!=='op')return;const takes=['lead','arp','bass'].map(L=>{const e=state[U.EDITS[L]]||{};return (e.v?e.v.length:-1)+':'+(e.c?e.c.length:-1)}).join(',');
+  const sig=[state.root,state.scale,state.mood,state.bpm,state.energy,state.kit,state.swing,state.sel,state.recTarget,takes,U.viewSection,U.rec.armed,E.loopSection,JSON.stringify(E.params),JSON.stringify(state.locks),$('master').value,state.warmth,$('human').value].join('|');if(sig!==lastSig){lastSig=sig;refresh()}},250);
 
 function enter(){takeFx();render()}
 function leave(){cancelAnimationFrame(raf);giveBack();dropFx();$('opScreen').innerHTML='';$('opKnobs').innerHTML=''}
